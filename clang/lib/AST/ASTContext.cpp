@@ -11131,4 +11131,25 @@ clang::operator<<(const DiagnosticBuilder &DB,
   if (Section.Decl)
     return DB << Section.Decl;
   return DB << "a prior #pragma section";
+void ASTContext::pushClassUndergoingNSDMIParsing(CXXRecordDecl *D) {
+  ClassesUndergoingNSDMIParsingStack.push_back(D);
+}
+void ASTContext::popClassUndergoingNSDMIParsing() {
+  ClassesUndergoingNSDMIParsingStack.pop_back();
+}
+
+bool ASTContext::isClassUndergoingNSDMIParsing(CXXRecordDecl *D) {
+  if (!D)
+    return ClassesUndergoingNSDMIParsingStack.size() != 0;
+  return false;
+}
+bool ASTContext::isClassTypeUndergoingNSDMIParsing(const Type *ClassTy) {
+  for (unsigned I = ClassesUndergoingNSDMIParsingStack.size(); I--; ) {
+    const Type *Ty = getRecordType(
+      ClassesUndergoingNSDMIParsingStack[I]).getTypePtr();
+    if (Ty == ClassTy) {
+      return true;
+    }
+  }
+  return false;
 }

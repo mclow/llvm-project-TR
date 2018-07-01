@@ -12,6 +12,7 @@
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/ASTMutationListener.h"
+#include "clang/AST/ASTLambda.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/DeclVisitor.h"
 #include "clang/AST/DependentDiagnostic.h"
@@ -22,6 +23,7 @@
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Sema/Initialization.h"
+#include "clang/Sema/ScopeInfo.h"
 #include "clang/Sema/Lookup.h"
 #include "clang/Sema/SemaInternal.h"
 #include "clang/Sema/Template.h"
@@ -4685,6 +4687,9 @@ void Sema::InstantiateFunctionDefinition(SourceLocation PointOfInstantiation,
       return;
 
     StmtResult Body;
+    sema::LambdaScopeInfo *const CurLambdaLSI =
+        isGenericLambdaCallOperatorSpecialization(Function) ? getCurLambda()
+                                                            : 0;
     if (PatternDecl->hasSkippedBody()) {
       ActOnSkippedFunctionBody(Function);
       Body = nullptr;
@@ -4702,9 +4707,18 @@ void Sema::InstantiateFunctionDefinition(SourceLocation PointOfInstantiation,
         }
       }
 
-      // Instantiate the function body.
+      const bool CapturesThis = CurLambdaLSI && CurLambdaLSI->isCXXThisCaptured();
+      DeclContext *const DeclCtxOfThisCapturingLambda = CapturesThis ?
+                  getFunctionLevelDeclContext() : 0;
+      if (CXXRecordDecl *const ClassDeclOfAutoNSDMI =
+              dyn_cast_or_null<CXXRecordDecl>(DeclCtxOfThisCapturingLambda)) {
+          Sema::CXXThisScopeRAII ThisScope(*this, ClassDeclOfAutoNSDMI,
+                                           /*TypeQuals=*/(unsigned)0);
       Body = SubstStmt(Pattern, TemplateArgs);
-
+      } else   {
+          // Instantiate the function body without synthesizing a CXXThisOverride.
+          Body = SubstStmt(Pattern, TemplateArgs);
+      }
       if (Body.isInvalid())
         Function->setInvalidDecl();
     }

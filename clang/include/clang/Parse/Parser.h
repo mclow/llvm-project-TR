@@ -1193,6 +1193,7 @@ private:
 
     virtual void ParseLexedMethodDeclarations();
     virtual void ParseLexedMemberInitializers();
+    virtual void ParseLexedAutoMemberInitializers();
     virtual void ParseLexedMethodDefs();
     virtual void ParseLexedAttributes();
     virtual void ParseLexedPragmas();
@@ -1207,6 +1208,7 @@ private:
 
     void ParseLexedMethodDeclarations() override;
     void ParseLexedMemberInitializers() override;
+    void ParseLexedAutoMemberInitializers() override;
     void ParseLexedMethodDefs() override;
     void ParseLexedAttributes() override;
     void ParseLexedPragmas() override;
@@ -1360,6 +1362,18 @@ private:
     CachedTokens Toks;
   };
 
+  /// LateParsedAutoMemberInitializer - An initializer for a non-static class data
+  /// member whose parsing must to be delayed until the class is completely
+  /// defined and was defined using placeholder types such as
+  /// 'auto'or decltpye(auto)  (experimental).
+  struct LateParsedAutoMemberInitializer : public LateParsedMemberInitializer {
+    LateParsedAutoMemberInitializer(Parser *P, Decl *FD)
+      : LateParsedMemberInitializer(P, FD), InitExpr(0) { }
+    Expr *InitExpr;
+    SourceLocation EqualLoc;
+    virtual void ParseLexedAutoMemberInitializers();
+    virtual void ParseLexedMemberInitializers();
+  };
   /// LateParsedDeclarationsContainer - During parsing of a top (non-nested)
   /// C++ class, its method declarations that contain parts that won't be
   /// parsed until after the definition is completed (C++ [class.mem]p2),
@@ -1515,7 +1529,10 @@ private:
   void ParseLexedMethodDefs(ParsingClass &Class);
   void ParseLexedMethodDef(LexedMethod &LM);
   void ParseLexedMemberInitializers(ParsingClass &Class);
+  void ParseLexedAutoMemberInitializers(ParsingClass &Class);
   void ParseLexedMemberInitializer(LateParsedMemberInitializer &MI);
+  void ParseLexedAutoMemberInitializer(LateParsedAutoMemberInitializer &MI);
+  void ParseDeducedAutoMemberInitializer(LateParsedAutoMemberInitializer &MI);
   void ParseLexedObjCMethodDefs(LexedMethod &LM, bool parseMethod);
   void ParseLexedPragmas(ParsingClass &Class);
   void ParseLexedPragma(LateParsedPragma &LP);

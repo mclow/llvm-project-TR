@@ -2547,6 +2547,7 @@ DEF_TRAVERSE_STMT(DesignatedInitUpdateExpr, {})
 DEF_TRAVERSE_STMT(ExtVectorElementExpr, {})
 DEF_TRAVERSE_STMT(GNUNullExpr, {})
 DEF_TRAVERSE_STMT(ImplicitValueInitExpr, {})
+DEF_TRAVERSE_STMT(ListOfLiteralExpr, {})
 DEF_TRAVERSE_STMT(NoInitExpr, {})
 DEF_TRAVERSE_STMT(ArrayInitLoopExpr, {
   // FIXME: The source expression of the OVE should be listed as

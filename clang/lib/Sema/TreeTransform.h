@@ -10119,6 +10119,12 @@ TreeTransform<Derived>::TransformNoInitExpr(
 
 template<typename Derived>
 ExprResult
+TreeTransform<Derived>::TransformListOfLiteralExpr(ListOfLiteralExpr *E) {
+  return E;
+}
+
+template<typename Derived>
+ExprResult
 TreeTransform<Derived>::TransformArrayInitLoopExpr(ArrayInitLoopExpr *E) {
   llvm_unreachable("Unexpected ArrayInitLoopExpr outside of initializer");
   return ExprError();

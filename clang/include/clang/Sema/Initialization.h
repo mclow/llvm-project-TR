@@ -674,7 +674,7 @@ public:
     if (!Init) return CreateDefault(Loc);
     if (!DirectInit)
       return CreateCopy(Loc, Init->getBeginLoc());
-    if (isa<InitListExpr>(Init))
+    if (isa<InitListExpr>(Init) || isa<ListOfLiteralExpr>(Init))
       return CreateDirectList(Loc, Init->getBeginLoc(), Init->getEndLoc());
     return CreateDirect(Loc, Init->getBeginLoc(), Init->getEndLoc());
   }
@@ -829,6 +829,9 @@ public:
 
     /// Perform list-initialization without a constructor.
     SK_ListInitialization,
+
+    /// Perform list-initialization without a constructor.
+    SK_ListLiteralInitialization,
 
     /// Unwrap the single-element initializer list for a reference.
     SK_UnwrapInitList,
@@ -1273,6 +1276,10 @@ public:
 
   /// Add a list-initialization step.
   void AddListInitializationStep(QualType T);
+
+  /// Add a list-initialization step.
+  void AddListLiteralInitializationStep(QualType T);
+
 
   /// Add a constructor-initialization step.
   ///

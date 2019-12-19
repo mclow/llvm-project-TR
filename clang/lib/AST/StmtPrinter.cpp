@@ -1576,6 +1576,11 @@ void StmtPrinter::VisitDesignatedInitUpdateExpr(
   OS << "}";
 }
 
+//TODO CORENTIN
+void StmtPrinter::VisitListOfLiteralExpr(ListOfLiteralExpr* E) {
+  //VisitExpr(E);
+}
+
 void StmtPrinter::VisitNoInitExpr(NoInitExpr *Node) {
   OS << "/*no init*/";
 }

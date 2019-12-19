@@ -13,6 +13,7 @@
 #include "clang/Parse/ParseDiagnostic.h"
 #include "clang/Parse/Parser.h"
 #include "clang/Parse/RAIIObjectsForParser.h"
+#include "clang/Lex/LiteralSupport.h"
 #include "clang/Sema/Designator.h"
 #include "clang/Sema/Scope.h"
 #include "llvm/ADT/SmallString.h"
@@ -408,6 +409,78 @@ ExprResult Parser::ParseInitializerWithPotentialDesignator() {
 }
 
 
+/// ParseArrayofLiteralNumeric - Attempt to parse an initializer list as a sequence of comma-separated
+/// numeric values
+ExprResult Parser::ParseListOfLiteralsInitializer() {
+  // If the initializer only contains literal, parse is as an an array literal
+  // for performance reasons
+  bool IsArrayLiteral = true;
+  TentativeParsingAction TPA(*this);
+
+  SourceLocation LBraceLoc = ConsumeBrace();
+
+  SmallString<128> SpellingBuffer;
+  SmallVector<uint64_t, 10> Values;
+
+  QualType SameTy;
+
+  while(true) {
+    if(Tok.isNot(tok::numeric_constant)) {
+      IsArrayLiteral = false;
+      break;
+    }
+
+    if(Tok.getLength() + 1 > SpellingBuffer.size()) {
+      SpellingBuffer.resize(Tok.getLength() + 1);
+    }
+    // Get the spelling of the token, which eliminates trigraphs, etc.
+    //TODO: Do we need that ?
+    bool Invalid = false;
+    StringRef TokSpelling = PP.getSpelling(Tok, SpellingBuffer, &Invalid);
+
+    llvm::APInt Value;
+    QualType Ty;
+    NumericLiteralParser NumericParser(TokSpelling, Tok.getLocation(),PP);
+    if(!Actions.CreateIntegerLiteralValue(Value, Ty, Tok, NumericParser)) {
+      IsArrayLiteral = false;
+      break;
+    }
+
+    if(SameTy.isNull()) {
+      SameTy = Ty;
+    }
+    else if(SameTy != Ty) {
+      IsArrayLiteral = false;
+      break;
+    }
+
+    assert(Value.getNumWords() == 1 && "Literal TO BIG");
+    Values.push_back(Value.getZExtValue());
+
+    ConsumeToken();
+
+    if(Tok.is(tok::r_brace)) {
+      break;
+    }
+
+    if(Tok.isNot(tok::comma)) {
+      IsArrayLiteral = false;
+      break;
+    }
+
+    ConsumeToken();
+
+  }
+  // Stepping a lot of initialization issues by not allowing less than two elements
+  if(!IsArrayLiteral || Values.size() < 2) {
+    TPA.Revert();
+    return ExprError();
+  }
+  TPA.Commit();
+  return Actions.ActOnListOfLiteral(LBraceLoc, Values, SameTy, ConsumeBrace());
+}
+
+
 /// ParseBraceInitializer - Called when parsing an initializer that has a
 /// leading open brace.
 ///
@@ -422,6 +495,17 @@ ExprResult Parser::ParseInitializerWithPotentialDesignator() {
 ///
 ExprResult Parser::ParseBraceInitializer() {
   InMessageExpressionRAIIObject InMessage(*this, false);
+
+  bool InitExprsOk = true;
+
+  // Try to parse the initializer as a list of numeric literal
+  // To improve compile time of large arrays
+  if(NextToken().is(tok::numeric_constant)) {
+    ExprResult E = ParseListOfLiteralsInitializer();
+    if(!E.isInvalid()) {
+      return E;
+    }
+  }
 
   BalancedDelimiterTracker T(*this, tok::l_brace);
   T.consumeOpen();
@@ -443,7 +527,6 @@ ExprResult Parser::ParseBraceInitializer() {
   EnterExpressionEvaluationContext EnterContext(
       Actions, EnterExpressionEvaluationContext::InitList);
 
-  bool InitExprsOk = true;
 
   while (1) {
     // Handle Microsoft __if_exists/if_not_exists if necessary.

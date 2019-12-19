@@ -934,6 +934,20 @@ void ASTStmtWriter::VisitDesignatedInitUpdateExpr(DesignatedInitUpdateExpr *E) {
   Record.AddStmt(E->getBase());
   Record.AddStmt(E->getUpdater());
   Code = serialization::EXPR_DESIGNATED_INIT_UPDATE;
+
+}
+
+void ASTStmtWriter::VisitListOfLiteralExpr(ListOfLiteralExpr* E) {
+  VisitExpr(E);
+  const auto S = E->sizeOfElementsAsUint64();
+  Record.writeUInt64(S);
+  Record.AddSourceLocation(E->getLBraceLoc());
+  Record.AddSourceLocation(E->getRBraceLoc());
+  Record.AddTypeRef(E->getInitsType());
+  Record.writeUInt64(E->getNumInits());
+  const auto Elems = E->getElementsAsUint64();
+  Record.append(Elems, Elems + S);
+  Code = serialization::EXPR_INIT_LITERALS_LIST;
 }
 
 void ASTStmtWriter::VisitNoInitExpr(NoInitExpr *E) {

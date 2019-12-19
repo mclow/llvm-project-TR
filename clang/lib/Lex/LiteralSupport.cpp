@@ -979,7 +979,7 @@ static bool alwaysFitsInto64Bits(unsigned Radix, unsigned NumDigits) {
 /// GetIntegerValue - Convert this numeric literal value to an APInt that
 /// matches Val's input width.  If there is an overflow, set Val to the low bits
 /// of the result and return true.  Otherwise, return false.
-bool NumericLiteralParser::GetIntegerValue(llvm::APInt &Val) {
+bool NumericLiteralParser::GetIntegerValue(llvm::APInt &Val) const {
   // Fast path: Compute a conservative bound on the maximum number of
   // bits per digit in this radix. If we can't possibly overflow a
   // uint64 based on that bound then do the simple conversion to

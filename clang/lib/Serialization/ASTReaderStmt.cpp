@@ -1027,6 +1027,21 @@ void ASTStmtReader::VisitDesignatedInitUpdateExpr(DesignatedInitUpdateExpr *E) {
   E->setUpdater(Record.readSubExpr());
 }
 
+void ASTStmtReader::VisitListOfLiteralExpr(ListOfLiteralExpr* E) {
+  VisitExpr(E);
+  const auto x = Record.readUInt64() ;
+  const auto S = E->sizeOfElementsAsUint64();
+  assert(x == S && "Corrupted record");
+
+  E->setLBraceLoc(readSourceLocation());
+  E->setRBraceLoc(readSourceLocation());
+  E->setInitsType(Record.getContext(), Record.readType());
+  E->setNumInits(Record.readUInt64());
+
+  const auto array = Record.readIntArray(S);
+  std::uninitialized_copy_n(array.begin(), S, E->getElementsAsUint64());
+}
+
 void ASTStmtReader::VisitNoInitExpr(NoInitExpr *E) {
   VisitExpr(E);
 }
@@ -2741,6 +2756,11 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
 
     case EXPR_INIT_LIST:
       S = new (Context) InitListExpr(Empty);
+      break;
+
+    case EXPR_INIT_LITERALS_LIST:
+      S = ListOfLiteralExpr::CreateEmpty(Context,
+                                         Record[ASTStmtReader::NumExprFields] * sizeof (uint64_t));
       break;
 
     case EXPR_DESIGNATED_INIT:

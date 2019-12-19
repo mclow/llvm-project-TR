@@ -3404,6 +3404,134 @@ bool Sema::CheckLoopHintExpr(Expr *E, SourceLocation Loc) {
   return false;
 }
 
+
+bool Sema::CreateIntegerLiteralValue(llvm::APInt & ResultVal, QualType & Ty, const Token &Tok, const NumericLiteralParser & Literal) {
+  if(!Literal.isIntegerLiteral()) {
+    return false;
+  }
+
+  // 'long long' is a C99 or C++11 feature.
+  if (!getLangOpts().C99 && Literal.isLongLong) {
+    if (getLangOpts().CPlusPlus)
+      Diag(Tok.getLocation(),
+           getLangOpts().CPlusPlus11 ?
+                                     diag::warn_cxx98_compat_longlong : diag::ext_cxx11_longlong);
+    else
+      Diag(Tok.getLocation(), diag::ext_c99_longlong);
+  }
+
+  // Get the value in the widest-possible width.
+  unsigned MaxWidth = Context.getTargetInfo().getIntMaxTWidth();
+  ResultVal = llvm::APInt(MaxWidth, 0);
+
+  if (Literal.GetIntegerValue(ResultVal)) {
+    // If this value didn't fit into uintmax_t, error and force to ull.
+    Diag(Tok.getLocation(), diag::err_integer_literal_too_large)
+        << /* Unsigned */ 1;
+    Ty = Context.UnsignedLongLongTy;
+    assert(Context.getTypeSize(Ty) == ResultVal.getBitWidth() &&
+           "long long is not intmax_t?");
+  } else {
+    // If this value fits into a ULL, try to figure out what else it fits into
+    // according to the rules of C99 6.4.4.1p5.
+
+    // Octal, Hexadecimal, and integers with a U suffix are allowed to
+    // be an unsigned int.
+    bool AllowUnsigned = Literal.isUnsigned || Literal.getRadix() != 10;
+
+    // Check from smallest to largest, picking the smallest type we can.
+    unsigned Width = 0;
+
+    // Microsoft specific integer suffixes are explicitly sized.
+    if (Literal.MicrosoftInteger) {
+      if (Literal.MicrosoftInteger == 8 && !Literal.isUnsigned) {
+        Width = 8;
+        Ty = Context.CharTy;
+      } else {
+        Width = Literal.MicrosoftInteger;
+        Ty = Context.getIntTypeForBitwidth(Width,
+                                           /*Signed=*/!Literal.isUnsigned);
+      }
+    }
+
+    if (Ty.isNull() && !Literal.isLong && !Literal.isLongLong) {
+      // Are int/unsigned possibilities?
+      unsigned IntSize = Context.getTargetInfo().getIntWidth();
+
+      // Does it fit in a unsigned int?
+      if (ResultVal.isIntN(IntSize)) {
+        // Does it fit in a signed int?
+        if (!Literal.isUnsigned && ResultVal[IntSize-1] == 0)
+          Ty = Context.IntTy;
+        else if (AllowUnsigned)
+          Ty = Context.UnsignedIntTy;
+        Width = IntSize;
+      }
+    }
+
+    // Are long/unsigned long possibilities?
+    if (Ty.isNull() && !Literal.isLongLong) {
+      unsigned LongSize = Context.getTargetInfo().getLongWidth();
+
+      // Does it fit in a unsigned long?
+      if (ResultVal.isIntN(LongSize)) {
+        // Does it fit in a signed long?
+        if (!Literal.isUnsigned && ResultVal[LongSize-1] == 0)
+          Ty = Context.LongTy;
+        else if (AllowUnsigned)
+          Ty = Context.UnsignedLongTy;
+        // Check according to the rules of C90 6.1.3.2p5. C++03 [lex.icon]p2
+        // is compatible.
+        else if (!getLangOpts().C99 && !getLangOpts().CPlusPlus11) {
+          const unsigned LongLongSize =
+              Context.getTargetInfo().getLongLongWidth();
+          Diag(Tok.getLocation(),
+               getLangOpts().CPlusPlus
+                   ? Literal.isLong
+                         ? diag::warn_old_implicitly_unsigned_long_cxx
+                         : /*C++98 UB*/ diag::
+                               ext_old_implicitly_unsigned_long_cxx
+                   : diag::warn_old_implicitly_unsigned_long)
+              << (LongLongSize > LongSize ? /*will have type 'long long'*/ 0
+                                          : /*will be ill-formed*/ 1);
+          Ty = Context.UnsignedLongTy;
+        }
+        Width = LongSize;
+      }
+    }
+
+    // Check long long if needed.
+    if (Ty.isNull()) {
+      unsigned LongLongSize = Context.getTargetInfo().getLongLongWidth();
+
+      // Does it fit in a unsigned long long?
+      if (ResultVal.isIntN(LongLongSize)) {
+        // Does it fit in a signed long long?
+        // To be compatible with MSVC, hex integer literals ending with the
+        // LL or i64 suffix are always signed in Microsoft mode.
+        if (!Literal.isUnsigned && (ResultVal[LongLongSize-1] == 0 ||
+                                    (getLangOpts().MSVCCompat && Literal.isLongLong)))
+          Ty = Context.LongLongTy;
+        else if (AllowUnsigned)
+          Ty = Context.UnsignedLongLongTy;
+        Width = LongLongSize;
+      }
+    }
+
+    // If we still couldn't decide a type, we probably have something that
+    // does not fit in a signed long long, but has no U suffix.
+    if (Ty.isNull()) {
+      Diag(Tok.getLocation(), diag::ext_integer_literal_too_large_for_signed);
+      Ty = Context.UnsignedLongLongTy;
+      Width = Context.getTargetInfo().getLongLongWidth();
+    }
+
+    if (ResultVal.getBitWidth() != Width)
+      ResultVal = ResultVal.trunc(Width);
+  }
+  return true;
+}
+
 ExprResult Sema::ActOnNumericConstant(const Token &Tok, Scope *UDLScope) {
   // Fast path for a single digit (which is quite common).  A single digit
   // cannot have a trigraph, escaped newline, radix prefix, or suffix.
@@ -3608,126 +3736,8 @@ ExprResult Sema::ActOnNumericConstant(const Token &Tok, Scope *UDLScope) {
     return ExprError();
   } else {
     QualType Ty;
-
-    // 'long long' is a C99 or C++11 feature.
-    if (!getLangOpts().C99 && Literal.isLongLong) {
-      if (getLangOpts().CPlusPlus)
-        Diag(Tok.getLocation(),
-             getLangOpts().CPlusPlus11 ?
-             diag::warn_cxx98_compat_longlong : diag::ext_cxx11_longlong);
-      else
-        Diag(Tok.getLocation(), diag::ext_c99_longlong);
-    }
-
-    // Get the value in the widest-possible width.
-    unsigned MaxWidth = Context.getTargetInfo().getIntMaxTWidth();
-    llvm::APInt ResultVal(MaxWidth, 0);
-
-    if (Literal.GetIntegerValue(ResultVal)) {
-      // If this value didn't fit into uintmax_t, error and force to ull.
-      Diag(Tok.getLocation(), diag::err_integer_literal_too_large)
-          << /* Unsigned */ 1;
-      Ty = Context.UnsignedLongLongTy;
-      assert(Context.getTypeSize(Ty) == ResultVal.getBitWidth() &&
-             "long long is not intmax_t?");
-    } else {
-      // If this value fits into a ULL, try to figure out what else it fits into
-      // according to the rules of C99 6.4.4.1p5.
-
-      // Octal, Hexadecimal, and integers with a U suffix are allowed to
-      // be an unsigned int.
-      bool AllowUnsigned = Literal.isUnsigned || Literal.getRadix() != 10;
-
-      // Check from smallest to largest, picking the smallest type we can.
-      unsigned Width = 0;
-
-      // Microsoft specific integer suffixes are explicitly sized.
-      if (Literal.MicrosoftInteger) {
-        if (Literal.MicrosoftInteger == 8 && !Literal.isUnsigned) {
-          Width = 8;
-          Ty = Context.CharTy;
-        } else {
-          Width = Literal.MicrosoftInteger;
-          Ty = Context.getIntTypeForBitwidth(Width,
-                                             /*Signed=*/!Literal.isUnsigned);
-        }
-      }
-
-      if (Ty.isNull() && !Literal.isLong && !Literal.isLongLong) {
-        // Are int/unsigned possibilities?
-        unsigned IntSize = Context.getTargetInfo().getIntWidth();
-
-        // Does it fit in a unsigned int?
-        if (ResultVal.isIntN(IntSize)) {
-          // Does it fit in a signed int?
-          if (!Literal.isUnsigned && ResultVal[IntSize-1] == 0)
-            Ty = Context.IntTy;
-          else if (AllowUnsigned)
-            Ty = Context.UnsignedIntTy;
-          Width = IntSize;
-        }
-      }
-
-      // Are long/unsigned long possibilities?
-      if (Ty.isNull() && !Literal.isLongLong) {
-        unsigned LongSize = Context.getTargetInfo().getLongWidth();
-
-        // Does it fit in a unsigned long?
-        if (ResultVal.isIntN(LongSize)) {
-          // Does it fit in a signed long?
-          if (!Literal.isUnsigned && ResultVal[LongSize-1] == 0)
-            Ty = Context.LongTy;
-          else if (AllowUnsigned)
-            Ty = Context.UnsignedLongTy;
-          // Check according to the rules of C90 6.1.3.2p5. C++03 [lex.icon]p2
-          // is compatible.
-          else if (!getLangOpts().C99 && !getLangOpts().CPlusPlus11) {
-            const unsigned LongLongSize =
-                Context.getTargetInfo().getLongLongWidth();
-            Diag(Tok.getLocation(),
-                 getLangOpts().CPlusPlus
-                     ? Literal.isLong
-                           ? diag::warn_old_implicitly_unsigned_long_cxx
-                           : /*C++98 UB*/ diag::
-                                 ext_old_implicitly_unsigned_long_cxx
-                     : diag::warn_old_implicitly_unsigned_long)
-                << (LongLongSize > LongSize ? /*will have type 'long long'*/ 0
-                                            : /*will be ill-formed*/ 1);
-            Ty = Context.UnsignedLongTy;
-          }
-          Width = LongSize;
-        }
-      }
-
-      // Check long long if needed.
-      if (Ty.isNull()) {
-        unsigned LongLongSize = Context.getTargetInfo().getLongLongWidth();
-
-        // Does it fit in a unsigned long long?
-        if (ResultVal.isIntN(LongLongSize)) {
-          // Does it fit in a signed long long?
-          // To be compatible with MSVC, hex integer literals ending with the
-          // LL or i64 suffix are always signed in Microsoft mode.
-          if (!Literal.isUnsigned && (ResultVal[LongLongSize-1] == 0 ||
-              (getLangOpts().MSVCCompat && Literal.isLongLong)))
-            Ty = Context.LongLongTy;
-          else if (AllowUnsigned)
-            Ty = Context.UnsignedLongLongTy;
-          Width = LongLongSize;
-        }
-      }
-
-      // If we still couldn't decide a type, we probably have something that
-      // does not fit in a signed long long, but has no U suffix.
-      if (Ty.isNull()) {
-        Diag(Tok.getLocation(), diag::ext_integer_literal_too_large_for_signed);
-        Ty = Context.UnsignedLongLongTy;
-        Width = Context.getTargetInfo().getLongLongWidth();
-      }
-
-      if (ResultVal.getBitWidth() != Width)
-        ResultVal = ResultVal.trunc(Width);
-    }
+    llvm::APInt ResultVal;
+    CreateIntegerLiteralValue(ResultVal, Ty, Tok, Literal);
     Res = IntegerLiteral::Create(Context, ResultVal, Ty, Tok.getLocation());
   }
 
@@ -6255,6 +6265,15 @@ Sema::BuildInitList(SourceLocation LBraceLoc, MultiExprArg InitArgList,
   E->setType(Context.VoidTy); // FIXME: just a place holder for now.
   return E;
 }
+
+ExprResult Sema::ActOnListOfLiteral(SourceLocation LBraceLoc,
+                                    ArrayRef<uint64_t> Values,
+                                    QualType Ty,
+                                    SourceLocation RBraceLoc) {
+
+  return ListOfLiteralExpr::Create(Context, LBraceLoc, Values, Ty, RBraceLoc);
+}
+
 
 /// Do an explicit extend of the given block pointer if we're in ARC.
 void Sema::maybeExtendBlockObject(ExprResult &E) {

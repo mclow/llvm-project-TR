@@ -4388,7 +4388,28 @@ private:
 /// Since many initializer lists have the same syntactic and semantic forms,
 /// getSyntacticForm() may return NULL, indicating that the current
 /// semantic initializer list also serves as its syntactic form.
-class InitListExpr : public Expr {
+
+class InitListExpr;
+class AbstractInitListExpr : public Expr {
+public:
+  AbstractInitListExpr(StmtClass SC, QualType T, ExprValueKind VK, ExprObjectKind OK,
+               bool TD, bool VD, bool ID, bool ContainsUnexpandedParameterPack);
+  explicit AbstractInitListExpr(StmtClass SC, EmptyShell);
+
+  unsigned getNumInits() const LLVM_READONLY;
+  SourceLocation getInitBeginLoc(unsigned Index)  const LLVM_READONLY;
+  SourceRange getInitSourceRange(unsigned Index)  const LLVM_READONLY;
+  QualType getInitType(unsigned Index) const LLVM_READONLY;
+  bool isIdiomaticZeroInitializer(const LangOptions &LangOpts) const LLVM_READONLY;
+
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == InitListExprClass ||
+           T->getStmtClass() == ListOfLiteralExprClass;
+  }
+
+};
+
+class InitListExpr : public AbstractInitListExpr {
   // FIXME: Eliminate this vector in favor of ASTContext allocation
   typedef ASTVector<Stmt *> InitExprsTy;
   InitExprsTy InitExprs;
@@ -4416,7 +4437,7 @@ public:
 
   /// Build an empty initializer list.
   explicit InitListExpr(EmptyShell Empty)
-    : Expr(InitListExprClass, Empty), AltForm(nullptr, true) { }
+    : AbstractInitListExpr(InitListExprClass, Empty), AltForm(nullptr, true) { }
 
   unsigned getNumInits() const { return InitExprs.size(); }
 
@@ -4603,6 +4624,92 @@ public:
   friend class ASTStmtReader;
   friend class ASTStmtWriter;
 };
+
+
+class ListOfLiteralExpr final: public AbstractInitListExpr,
+                          private llvm::TrailingObjects<ListOfLiteralExpr, unsigned, char>{
+  SourceLocation LBraceLoc, RBraceLoc;
+  QualType InitsType;
+  unsigned InitCount = 0;
+  unsigned NumBytePerElement = 0;
+  friend TrailingObjects;
+
+  explicit ListOfLiteralExpr(ASTContext &Context,
+                             SourceLocation LBraceLoc,
+                             ArrayRef<uint64_t> Values,
+                             QualType Ty,
+                             SourceLocation RBraceLoc);
+
+  explicit ListOfLiteralExpr(const ASTContext &Context);
+
+public:
+  static ListOfLiteralExpr* Create(ASTContext &Context,
+                             SourceLocation LBraceLoc,
+                             ArrayRef<uint64_t> Values,
+                             QualType Ty,
+                             SourceLocation RBraceLoc);
+
+  static ListOfLiteralExpr* CreateEmpty(const ASTContext &Ctx, unsigned Bytes);
+
+
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == ListOfLiteralExprClass;
+  }
+
+
+  unsigned getNumInits() const;
+  void setNumInits(unsigned);
+
+  QualType getInitsType() const;
+  void setInitsType(const ASTContext & Context, QualType);
+
+  llvm::APInt getInit(unsigned) const;
+  void setInit(unsigned Index, uint64_t Value);
+
+  // Fast path to fill an APValue
+  void getMultipleInit(APValue*, unsigned Size, unsigned Bits) const;
+
+  SourceLocation getBeginLoc() const { return LBraceLoc; }
+  SourceLocation getEndLoc() const { return LBraceLoc; }
+
+  SourceLocation getLBraceLoc() const { return LBraceLoc; }
+  void setLBraceLoc(SourceLocation Loc) { LBraceLoc = Loc; }
+  SourceLocation getRBraceLoc() const { return RBraceLoc; }
+  void setRBraceLoc(SourceLocation Loc) { RBraceLoc = Loc; }
+
+
+  uint64_t *getElementsAsUint64() { return reinterpret_cast<uint64_t*>(getTrailingObjects<char>()); }
+  const uint64_t *getElementsAsUint64() const { return reinterpret_cast<const uint64_t*>(getTrailingObjects<char>()); }
+  unsigned sizeOfElementsAsUint64() const {
+    return numTrailingObjects(OverloadToken<char>()) / sizeof (uint64_t);
+  }
+
+  // Iterators
+  child_range children() {
+    return child_range(child_iterator(), child_iterator());
+  }
+  const_child_range children() const {
+    return const_child_range(const_child_iterator(), const_child_iterator());
+  }
+private:
+  template <typename T>
+  llvm::APInt DoGetInit(unsigned) const;
+  template <typename T>
+  void DoGetMultipleInit(APValue* Array, unsigned Size, unsigned Bits) const;
+  template <typename T>
+  void DoSetInit(unsigned, uint64_t);
+
+  unsigned numTrailingObjects(OverloadToken<unsigned>) const {
+    return 1;
+  }
+
+  unsigned numTrailingObjects(OverloadToken<char>) const {
+    return *getTrailingObjects<unsigned>();
+  }
+
+  static unsigned numBytesForType(const ASTContext & Context, const QualType & Ty);
+};
+
 
 /// Represents a C99 designated initializer expression.
 ///

@@ -100,7 +100,7 @@ public:
   /// matches Val's input width.  If there is an overflow (i.e., if the unsigned
   /// value read is larger than the APInt's bits will hold), set Val to the low
   /// bits of the result and return true.  Otherwise, return false.
-  bool GetIntegerValue(llvm::APInt &Val);
+  bool GetIntegerValue(llvm::APInt &Val) const;
 
   /// GetFloatValue - Convert this numeric literal to a floating value, using
   /// the specified APFloat fltSemantics (specifying float, double, etc).

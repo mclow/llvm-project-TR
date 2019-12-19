@@ -1867,6 +1867,7 @@ namespace serialization {
       EXPR_COAWAIT,
       EXPR_COYIELD,
       EXPR_DEPENDENT_COAWAIT,
+      EXPR_INIT_LITERALS_LIST
     };
 
     /// The kinds of designators that can occur in a

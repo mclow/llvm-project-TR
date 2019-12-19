@@ -3619,6 +3619,13 @@ void InitializationSequence::AddListInitializationStep(QualType T) {
   Steps.push_back(S);
 }
 
+void InitializationSequence::AddListLiteralInitializationStep(QualType T) {
+  Step S;
+  S.Kind = SK_ListLiteralInitialization;
+  S.Type = T;
+  Steps.push_back(S);
+}
+
 void InitializationSequence::AddConstructorInitializationStep(
     DeclAccessPair FoundDecl, CXXConstructorDecl *Constructor, QualType T,
     bool HadMultipleCandidates, bool FromInitList, bool AsInitList) {
@@ -4455,6 +4462,34 @@ static void TryListInitialization(Sema &S,
 
   // Add the list initialization step with the built init list.
   Sequence.AddListInitializationStep(DestType);
+}
+
+static void TryListOfLiteralsInitialization(Sema &S,
+                                  const InitializedEntity &Entity,
+                                  const InitializationKind &Kind,
+                                  ListOfLiteralExpr *InitList,
+                                  InitializationSequence &Sequence,
+                                  bool TreatUnavailableAsInvalid,
+                                  bool VerifyOnly = false) {
+
+  QualType DestType = Entity.getType();
+  if(!VerifyOnly) {
+    InitList->setType(S.Context.getConstantArrayType(
+        InitList->getInitsType(),
+        llvm::APInt(32, InitList->getNumInits()),
+        nullptr,
+        ArrayType::Normal, 0));
+  }
+
+  if (const ArrayType *DestAT = S.Context.getAsArrayType(DestType)) {
+    const ConstantArrayType* SizedDestAT = dyn_cast_or_null<ConstantArrayType>(DestAT);
+    if((SizedDestAT && SizedDestAT->getSize() == InitList->getNumInits()) || dyn_cast_or_null<IncompleteArrayType>(DestAT)) {
+       Sequence.AddListLiteralInitializationStep(DestType);
+       return;
+    }
+  }
+  Sequence.SetFailed(InitializationSequence::FK_ListInitializationFailed);
+
 }
 
 /// Try a reference initialization that involves calling a conversion
@@ -5635,9 +5670,39 @@ void InitializationSequence::InitializeFrom(Sema &S,
           S.ConversionToObjCStringLiteralCheck(DestType, Initializer))
         Args[0] = Initializer;
     }
-    if (!isa<InitListExpr>(Initializer))
+    if (!isa<AbstractInitListExpr>(Initializer))
       SourceType = Initializer->getType();
   }
+
+  if(ListOfLiteralExpr* ListExpr = dyn_cast_or_null<ListOfLiteralExpr>(Initializer)) {
+     // TODO CORENTIN: HANDLE MORE CASES
+     if (const ArrayType *DestAT = Context.getAsArrayType(DestType)) {
+
+       //Nasty
+       if(DestAT->getElementType()->isIntegerType()) {
+         TryListOfLiteralsInitialization(S, Entity, Kind, ListExpr, *this,
+                               TreatUnavailableAsInvalid);
+         return;
+       }
+     }
+     //Convert back to InitListExpr
+     InitListExpr InitExpr(S.Context, ListExpr->getLBraceLoc(), {}, ListExpr->getRBraceLoc());
+     InitExpr.resizeInits(Context, ListExpr->getNumInits());
+     for (unsigned i = 0, e = ListExpr->getNumInits(); i != e; ++i) {
+       Expr *Init = new (Context) IntegerLiteral(
+           Context, ListExpr->getInit(i), ListExpr->getInitsType(), ListExpr->getLBraceLoc());
+       InitExpr.updateInit(Context, i, Init);
+     }
+     InitExpr.setType(Context.VoidTy);
+     Expr *E = &InitExpr;
+     InitializeFrom(S, Entity, Kind, E, TopLevelOfInitList,
+                    TreatUnavailableAsInvalid);
+     if (!Failed())
+       AddListInitializationStep(Entity.getType());
+     return;
+  }
+
+
 
   //     - If the initializer is a (non-parenthesized) braced-init-list, the
   //       object is list-initialized (8.5.4).
@@ -7896,6 +7961,7 @@ ExprResult InitializationSequence::Perform(Sema &S,
   case SK_ConversionSequence:
   case SK_ConversionSequenceNoNarrowing:
   case SK_ListInitialization:
+  case SK_ListLiteralInitialization:
   case SK_UnwrapInitList:
   case SK_RewrapInitList:
   case SK_CAssignment:
@@ -8205,6 +8271,21 @@ ExprResult InitializationSequence::Perform(Sema &S,
       if (checkAbstractType(Step->Type))
         return ExprError();
 
+      // We got a list of literal - we need to convert it to InitListExpr to perform list initialization
+      // THIS IS SUPPER INEFFICIENT
+      // TODO CORENTIN
+      if(ListOfLiteralExpr* ListExpr = dyn_cast<ListOfLiteralExpr>(CurInit.get())) {
+        auto InitExpr = new (S.Context) InitListExpr(S.Context, ListExpr->getLBraceLoc(), {}, ListExpr->getRBraceLoc());
+        InitExpr->resizeInits(S.Context, ListExpr->getNumInits());
+        for (unsigned i = 0, e = ListExpr->getNumInits(); i != e; ++i) {
+          Expr *Init = new (S.Context) IntegerLiteral(
+              S.Context, ListExpr->getInit(i), ListExpr->getInitsType(), ListExpr->getLBraceLoc());
+          InitExpr->updateInit(S.Context, i, Init);
+        }
+        InitExpr->setType(S.Context.VoidTy);
+        CurInit = InitExpr;
+      }
+
       InitListExpr *InitList = cast<InitListExpr>(CurInit.get());
       // If we're not initializing the top-level entity, we need to create an
       // InitializeTemporary entity for our target type.
@@ -8237,6 +8318,19 @@ ExprResult InitializationSequence::Perform(Sema &S,
       CurInit = shouldBindAsTemporary(InitEntity)
           ? S.MaybeBindToTemporary(StructuredInitList)
           : StructuredInitList;
+      break;
+    }
+    case SK_ListLiteralInitialization: {
+      if (checkAbstractType(Step->Type))
+        return ExprError();
+      ListOfLiteralExpr *InitList = cast<ListOfLiteralExpr>(CurInit.get());
+      if (const IncompleteArrayType *IncompleteDest = S.Context.getAsIncompleteArrayType(Step->Type)) {
+            *ResultType = S.Context.getConstantArrayType(
+                IncompleteDest->getElementType(),
+                llvm::APInt(32, InitList->getNumInits()),
+                nullptr,
+                ArrayType::Normal, 0);
+      }
       break;
     }
 
@@ -9736,9 +9830,9 @@ QualType Sema::DeduceTemplateSpecializationFromInitializer(
   Guides.suppressDiagnostics();
 
   // Figure out if this is list-initialization.
-  InitListExpr *ListInit =
+  AbstractInitListExpr *AListInit =
       (Inits.size() == 1 && Kind.getKind() != InitializationKind::IK_Direct)
-          ? dyn_cast<InitListExpr>(Inits[0])
+          ? dyn_cast<AbstractInitListExpr>(Inits[0])
           : nullptr;
 
   // C++1z [over.match.class.deduct]p1:
@@ -9755,7 +9849,7 @@ QualType Sema::DeduceTemplateSpecializationFromInitializer(
   OverloadCandidateSet::iterator Best;
 
   bool HasAnyDeductionGuide = false;
-  bool AllowExplicit = !Kind.isCopyInit() || ListInit;
+  bool AllowExplicit = !Kind.isCopyInit() || AListInit;
 
   auto tryToResolveOverload =
       [&](bool OnlyListConstructors) -> OverloadingResult {
@@ -9831,12 +9925,12 @@ QualType Sema::DeduceTemplateSpecializationFromInitializer(
 
   // C++11 [over.match.list]p1, per DR1467: for list-initialization, first
   // try initializer-list constructors.
-  if (ListInit) {
+  if (AListInit) {
     bool TryListConstructors = true;
 
     // Try list constructors unless the list is empty and the class has one or
     // more default constructors, in which case those constructors win.
-    if (!ListInit->getNumInits()) {
+    if (!AListInit->getNumInits()) {
       for (NamedDecl *D : Guides) {
         auto *FD = dyn_cast<FunctionDecl>(D->getUnderlyingDecl());
         if (FD && FD->getMinRequiredArguments() == 0) {
@@ -9844,7 +9938,8 @@ QualType Sema::DeduceTemplateSpecializationFromInitializer(
           break;
         }
       }
-    } else if (ListInit->getNumInits() == 1) {
+    } else if (AListInit->getNumInits() == 1) {
+      auto* ListInit = dyn_cast<InitListExpr>(AListInit);
       // C++ [over.match.class.deduct]:
       //   As an exception, the first phase in [over.match.list] (considering
       //   initializer-list constructors) is omitted if the initializer list
@@ -9862,7 +9957,9 @@ QualType Sema::DeduceTemplateSpecializationFromInitializer(
       Result = tryToResolveOverload(/*OnlyListConstructor*/true);
     // Then unwrap the initializer list and try again considering all
     // constructors.
-    Inits = MultiExprArg(ListInit->getInits(), ListInit->getNumInits());
+    auto* ListInit = dyn_cast<InitListExpr>(AListInit);
+    if(ListInit)
+      Inits = MultiExprArg(ListInit->getInits(), AListInit->getNumInits());
   }
 
   // If list-initialization fails, or if we're doing any other kind of
@@ -9909,7 +10006,7 @@ QualType Sema::DeduceTemplateSpecializationFromInitializer(
     // C++ [over.match.list]p1:
     //   In copy-list-initialization, if an explicit constructor is chosen, the
     //   initialization is ill-formed.
-    if (Kind.isCopyInit() && ListInit &&
+    if (Kind.isCopyInit() && AListInit &&
         cast<CXXDeductionGuideDecl>(Best->Function)->isExplicit()) {
       bool IsDeductionGuide = !Best->Function->isImplicit();
       Diag(Kind.getLocation(), diag::err_deduced_class_template_explicit)

@@ -9478,6 +9478,7 @@ namespace {
     }
     bool VisitInitListExpr(const InitListExpr *E,
                            QualType AllocType = QualType());
+    bool VisitListOfLiteralExpr(const ListOfLiteralExpr *E);
     bool VisitArrayInitLoopExpr(const ArrayInitLoopExpr *E);
     bool VisitCXXConstructExpr(const CXXConstructExpr *E);
     bool VisitCXXConstructExpr(const CXXConstructExpr *E,
@@ -9594,6 +9595,19 @@ bool ArrayExprEvaluator::VisitInitListExpr(const InitListExpr *E,
   assert(FillerExpr && "no array filler for incomplete init list");
   return EvaluateInPlace(Result.getArrayFiller(), Info, Subobject,
                          FillerExpr) && Success;
+}
+
+
+bool ArrayExprEvaluator::VisitListOfLiteralExpr(const ListOfLiteralExpr *E) {
+  const ConstantArrayType *CAT = Info.Ctx.getAsConstantArrayType(E->getType());
+  assert(CAT && "ListOfLiteralExpr isn't an array ?!");
+  QualType EType = CAT->getElementType();
+  assert(EType->isIntegerType() && "unexpected literal type");
+  unsigned Elts = CAT->getSize().getZExtValue();
+  Result = APValue(APValue::UninitArray(),
+                   std::min(E->getNumInits(), Elts), Elts);
+  E->getMultipleInit(&Result.getArrayInitializedElt(0), Result.getArrayInitializedElts(), Info.Ctx.getTypeSize(EType));
+  return true;
 }
 
 bool ArrayExprEvaluator::VisitArrayInitLoopExpr(const ArrayInitLoopExpr *E) {

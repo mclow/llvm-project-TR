@@ -2228,9 +2228,53 @@ APValue SourceLocExpr::EvaluateInContext(const ASTContext &Ctx,
   llvm_unreachable("unhandled case");
 }
 
+AbstractInitListExpr::AbstractInitListExpr(StmtClass SC, QualType T, ExprValueKind VK, ExprObjectKind OK,
+                     bool TD, bool VD, bool ID, bool ContainsUnexpandedParameterPack)
+    : Expr(SC, T, VK, OK, TD, VD, ID, ContainsUnexpandedParameterPack) {
+}
+
+AbstractInitListExpr::AbstractInitListExpr(StmtClass SC, EmptyShell S) : Expr(SC, S) {}
+
+
+unsigned AbstractInitListExpr::getNumInits() const {
+  if(auto P = dyn_cast_or_null<ListOfLiteralExpr>(this)) {
+    return P->getNumInits();
+  }
+  return dyn_cast<InitListExpr>(this)->getNumInits();
+}
+
+
+QualType AbstractInitListExpr::getInitType(unsigned Index) const {
+  if(auto P = dyn_cast_or_null<ListOfLiteralExpr>(this)) {
+    return P->getType();
+  }
+  return dyn_cast<InitListExpr>(this)->getInit(Index)->getType();
+}
+
+SourceLocation AbstractInitListExpr::getInitBeginLoc(unsigned Index)  const {
+  if(auto P = dyn_cast_or_null<ListOfLiteralExpr>(this)) {
+    return {};
+  }
+  return dyn_cast<InitListExpr>(this)->getInit(Index)->getBeginLoc();
+}
+
+SourceRange AbstractInitListExpr::getInitSourceRange(unsigned Index)  const {
+  if(auto P = dyn_cast_or_null<ListOfLiteralExpr>(this)) {
+    return {};
+  }
+  return dyn_cast<InitListExpr>(this)->getInit(Index)->getSourceRange();
+}
+
+bool AbstractInitListExpr::isIdiomaticZeroInitializer(const LangOptions &LangOpts) const {
+  if(auto P = dyn_cast_or_null<ListOfLiteralExpr>(this)) {
+    return false;
+  }
+  return dyn_cast<InitListExpr>(this)->isIdiomaticZeroInitializer(LangOpts);
+}
+
 InitListExpr::InitListExpr(const ASTContext &C, SourceLocation lbraceloc,
                            ArrayRef<Expr*> initExprs, SourceLocation rbraceloc)
-  : Expr(InitListExprClass, QualType(), VK_RValue, OK_Ordinary, false, false,
+  : AbstractInitListExpr(InitListExprClass, QualType(), VK_RValue, OK_Ordinary, false, false,
          false, false),
     InitExprs(C, initExprs.size()),
     LBraceLoc(lbraceloc), RBraceLoc(rbraceloc), AltForm(nullptr, true)
@@ -2363,6 +2407,156 @@ SourceLocation InitListExpr::getEndLoc() const {
     }
   }
   return End;
+}
+
+ListOfLiteralExpr::ListOfLiteralExpr(ASTContext &Context,
+                           SourceLocation LBraceLoc,
+                           ArrayRef<uint64_t> Values,
+                           QualType Ty,
+                           SourceLocation RBraceLoc)
+    : AbstractInitListExpr(
+          ListOfLiteralExprClass,
+          Context.VoidTy,
+          VK_RValue,
+          OK_Ordinary,
+          false, false, false, false)
+      , LBraceLoc(LBraceLoc), RBraceLoc(RBraceLoc)
+      , InitsType(Ty)
+      , InitCount(Values.size())
+      , NumBytePerElement(numBytesForType(Context, Ty)) {
+
+
+  assert(CHAR_BIT == 8 && Context.getTargetInfo().getCharWidth() && "ListOfLiteralExpr requires 8 bits char");
+  //TODO NOT VERY EFFICIENT
+  for(unsigned I = 0; I < Values.size(); I++) {
+    setInit(I, Values[I]);
+  }
+}
+
+ListOfLiteralExpr::ListOfLiteralExpr(const ASTContext &Context)
+    : AbstractInitListExpr(ListOfLiteralExprClass, EmptyShell{}), InitCount(0) {
+}
+
+ListOfLiteralExpr* ListOfLiteralExpr::Create(ASTContext &Context,
+                          SourceLocation LBraceLoc,
+                          ArrayRef<uint64_t> Values,
+                          QualType Ty,
+                          SourceLocation RBraceLoc) {
+
+  unsigned Bytes = numBytesForType(Context, Ty) * Values.size();
+  Bytes += (sizeof (uint64_t) - ( Bytes % sizeof (uint64_t)));
+
+  void *Mem = Context.Allocate(totalSizeToAlloc<unsigned, char>(
+                                   1,
+                                   Bytes),
+                               alignof(ListOfLiteralExpr));
+  auto * E = new (Mem)
+      ListOfLiteralExpr(Context, LBraceLoc, Values, Ty, RBraceLoc);
+  *E->getTrailingObjects<unsigned>() = Bytes;
+  return E;
+}
+
+
+ListOfLiteralExpr* ListOfLiteralExpr::CreateEmpty(const ASTContext &Context, unsigned Bytes) {
+  void *Mem = Context.Allocate(totalSizeToAlloc<unsigned, char>(1, Bytes), alignof(ListOfLiteralExpr));
+  auto * E = new (Mem) ListOfLiteralExpr(Context);
+  *E->getTrailingObjects<unsigned>() = Bytes;
+  return E;
+
+}
+
+//TODO CORENTIN
+unsigned ListOfLiteralExpr::getNumInits() const {
+  return InitCount;
+}
+
+void ListOfLiteralExpr::setNumInits(unsigned Count) {
+  InitCount = Count;
+}
+
+QualType ListOfLiteralExpr::getInitsType() const {
+  return InitsType;
+}
+
+void ListOfLiteralExpr::setInitsType(const ASTContext & Ctx, QualType Ty) {
+  NumBytePerElement = numBytesForType(Ctx, Ty);
+  InitsType = Ty;
+}
+
+template <typename T>
+llvm::APInt ListOfLiteralExpr::DoGetInit(unsigned Index) const {
+  return llvm::APInt(NumBytePerElement * CHAR_BIT,
+                     reinterpret_cast<const T*>(getTrailingObjects<char>())[Index],
+                     InitsType->isSignedIntegerType());
+}
+
+llvm::APInt ListOfLiteralExpr::getInit(unsigned Index) const {
+  if(NumBytePerElement == sizeof (unsigned int))
+    return DoGetInit<unsigned int>(Index);
+
+  if(NumBytePerElement == sizeof (unsigned char))
+    return DoGetInit<unsigned char>(Index);
+
+  if(NumBytePerElement == sizeof (unsigned long long))
+    return DoGetInit<unsigned long long>(Index);
+
+  if(NumBytePerElement == sizeof (unsigned long))
+    return DoGetInit<unsigned long>(Index);
+
+  if(NumBytePerElement == sizeof (unsigned short))
+    return DoGetInit<unsigned short>(Index);
+  llvm_unreachable("We should have handled all possible type size");
+}
+
+template <typename T>
+void ListOfLiteralExpr::DoGetMultipleInit(APValue* Array, unsigned Size, unsigned Bits) const {
+  const bool isSigned = InitsType->isSignedIntegerType();
+  const auto Inits = reinterpret_cast<const T*>(getTrailingObjects<char>());
+  llvm::APSInt Int(Bits, isSigned);
+  APValue V(Int);
+  for(unsigned i = 0; i < Size; i++) {
+    V.getInt() = Inits[i];
+    Array[i] = V;
+  }
+}
+
+void ListOfLiteralExpr::getMultipleInit(APValue* Array, unsigned Size, unsigned Bits) const {
+  if(NumBytePerElement == sizeof (unsigned int))
+    return DoGetMultipleInit<unsigned int>(Array, Size, Bits);
+  if(NumBytePerElement == sizeof (unsigned char))
+    return DoGetMultipleInit<unsigned char>(Array, Size, Bits);
+  if(NumBytePerElement == sizeof (unsigned long long))
+    return DoGetMultipleInit<unsigned long long>(Array, Size, Bits);
+  if(NumBytePerElement == sizeof (unsigned long))
+    return DoGetMultipleInit<unsigned long>(Array, Size, Bits);
+  if(NumBytePerElement == sizeof (unsigned short))
+    return DoGetMultipleInit<unsigned short>(Array, Size, Bits);
+}
+
+template <typename T>
+void ListOfLiteralExpr::DoSetInit(unsigned Index, uint64_t Value) {
+  reinterpret_cast<T*>(getTrailingObjects<char>())[Index] = Value;
+}
+
+void ListOfLiteralExpr::setInit(unsigned Index, uint64_t Value) {
+  if(NumBytePerElement == sizeof (unsigned int))
+    return DoSetInit<unsigned int>(Index, Value);
+
+  if(NumBytePerElement == sizeof (unsigned char))
+    return DoSetInit<unsigned char>(Index, Value);
+
+  if(NumBytePerElement == sizeof (unsigned long long))
+    return DoSetInit<unsigned long long>(Index, Value);
+
+  if(NumBytePerElement == sizeof (unsigned long))
+    return DoSetInit<unsigned long>(Index, Value);
+
+  if(NumBytePerElement == sizeof (unsigned short))
+    return DoSetInit<unsigned short>(Index, Value);
+}
+
+unsigned ListOfLiteralExpr::numBytesForType(const ASTContext & Context, const QualType & Ty) {
+  return Context.getTypeSize(Ty) / CHAR_BIT;
 }
 
 /// getFunctionType - Return the underlying function type for this block.
@@ -3404,6 +3598,7 @@ bool Expr::HasSideEffects(const ASTContext &Ctx,
   case FloatingLiteralClass:
   case ImaginaryLiteralClass:
   case StringLiteralClass:
+  case ListOfLiteralExprClass:
   case CharacterLiteralClass:
   case OffsetOfExprClass:
   case ImplicitValueInitExprClass:

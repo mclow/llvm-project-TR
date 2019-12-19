@@ -87,7 +87,7 @@ public:
   void EmitMoveFromReturnSlot(const Expr *E, RValue Src);
 
   void EmitArrayInit(Address DestPtr, llvm::ArrayType *AType,
-                     QualType ArrayQTy, InitListExpr *E);
+                     QualType ArrayQTy, AbstractInitListExpr *E);
 
   AggValueSlot::NeedsGCBarriers_t needsGC(QualType T) {
     if (CGF.getLangOpts().getGC() && TypeRequiresGCollection(T))
@@ -164,6 +164,7 @@ public:
   void VisitAbstractConditionalOperator(const AbstractConditionalOperator *CO);
   void VisitChooseExpr(const ChooseExpr *CE);
   void VisitInitListExpr(InitListExpr *E);
+  void VisitListOfLiteralExpr(ListOfLiteralExpr *E);
   void VisitArrayInitLoopExpr(const ArrayInitLoopExpr *E,
                               llvm::Value *outerBegin = nullptr);
   void VisitImplicitValueInitExpr(ImplicitValueInitExpr *E);
@@ -467,7 +468,7 @@ static bool isTrivialFiller(Expr *E) {
 
 /// Emit initialization of an array from an initializer list.
 void AggExprEmitter::EmitArrayInit(Address DestPtr, llvm::ArrayType *AType,
-                                   QualType ArrayQTy, InitListExpr *E) {
+                                   QualType ArrayQTy, AbstractInitListExpr *E) {
   uint64_t NumInitElements = E->getNumInits();
 
   uint64_t NumArrayElements = AType->getNumElements();
@@ -490,8 +491,8 @@ void AggExprEmitter::EmitArrayInit(Address DestPtr, llvm::ArrayType *AType,
   // Consider initializing the array by copying from a global. For this to be
   // more efficient than per-element initialization, the size of the elements
   // with explicit initializers should be large enough.
-  if (NumInitElements * elementSize.getQuantity() > 16 &&
-      elementType.isTriviallyCopyableType(CGF.getContext())) {
+  if (isa<ListOfLiteralExpr>(E) || (NumInitElements * elementSize.getQuantity() > 16 &&
+                                    elementType.isTriviallyCopyableType(CGF.getContext()))) {
     CodeGen::CodeGenModule &CGM = CGF.CGM;
     ConstantEmitter Emitter(CGF);
     LangAS AS = ArrayQTy.getAddressSpace();
@@ -558,11 +559,11 @@ void AggExprEmitter::EmitArrayInit(Address DestPtr, llvm::ArrayType *AType,
 
     LValue elementLV =
       CGF.MakeAddrLValue(Address(element, elementAlign), elementType);
-    EmitInitializationToLValue(E->getInit(i), elementLV);
+    EmitInitializationToLValue(cast<InitListExpr>(E)->getInit(i), elementLV);
   }
 
   // Check whether there's a non-trivial array-fill expression.
-  Expr *filler = E->getArrayFiller();
+  Expr *filler = cast<InitListExpr>(E)->getArrayFiller();
   bool hasTrivialFiller = isTrivialFiller(filler);
 
   // Any remaining elements need to be zero-initialized, possibly
@@ -1629,6 +1630,12 @@ void AggExprEmitter::VisitInitListExpr(InitListExpr *E) {
   // Destroy the placeholder if we made one.
   if (cleanupDominator)
     cleanupDominator->eraseFromParent();
+}
+
+void AggExprEmitter::VisitListOfLiteralExpr(ListOfLiteralExpr *E) {
+  AggValueSlot Dest = EnsureSlot(E->getType());
+  auto AType = cast<llvm::ArrayType>(Dest.getAddress().getElementType());
+  EmitArrayInit(Dest.getAddress(), AType, E->getType(), E);
 }
 
 void AggExprEmitter::VisitArrayInitLoopExpr(const ArrayInitLoopExpr *E,

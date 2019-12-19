@@ -140,6 +140,7 @@ namespace clang {
   class ModuleLoader;
   class MultiLevelTemplateArgumentList;
   class NamedDecl;
+  class NumericLiteralParser;
   class ObjCCategoryDecl;
   class ObjCCategoryImplDecl;
   class ObjCCompatibleAliasDecl;
@@ -4638,6 +4639,7 @@ public:
   bool CheckLoopHintExpr(Expr *E, SourceLocation Loc);
 
   ExprResult ActOnNumericConstant(const Token &Tok, Scope *UDLScope = nullptr);
+  bool CreateIntegerLiteralValue(llvm::APInt & ResultVal, QualType & Ty, const Token &Tok, const NumericLiteralParser & Literal);
   ExprResult ActOnCharacterConstant(const Token &Tok,
                                     Scope *UDLScope = nullptr);
   ExprResult ActOnParenExpr(SourceLocation L, SourceLocation R, Expr *E);
@@ -4845,6 +4847,12 @@ public:
                                       TypeSourceInfo *TInfo,
                                       SourceLocation RParenLoc,
                                       Expr *LiteralExpr);
+
+  ExprResult ActOnListOfLiteral(SourceLocation LBraceLoc,
+                                 ArrayRef<uint64_t> StringToks,
+                                 QualType Ty,
+                                 SourceLocation RBraceLoc);
+
 
   ExprResult ActOnInitList(SourceLocation LBraceLoc,
                            MultiExprArg InitArgList,

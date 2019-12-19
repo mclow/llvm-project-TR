@@ -1281,6 +1281,11 @@ void StmtProfiler::VisitArrayInitIndexExpr(const ArrayInitIndexExpr *S) {
   VisitExpr(S);
 }
 
+//TODO CORENTIN
+void StmtProfiler::VisitListOfLiteralExpr(const ListOfLiteralExpr* E) {
+  VisitExpr(E);
+}
+
 void StmtProfiler::VisitNoInitExpr(const NoInitExpr *S) {
   llvm_unreachable("Unexpected NoInitExpr in syntactic form of initializer");
 }

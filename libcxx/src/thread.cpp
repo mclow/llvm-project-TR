@@ -111,6 +111,22 @@ thread::hardware_concurrency() _NOEXCEPT
 #endif  // defined(CTL_HW) && defined(HW_NCPU)
 }
 
+__thread_attributes & __thread_attributes::name(std::span<const char> __name) {
+    char* __n = new __libcpp_threadname_char_t[__name.size() + 1];
+    strcpy(__n, __name.data());
+    __n[__name.size()] = 0;
+    this->__name = __n;
+    return *this;
+}
+__thread_attributes & __thread_attributes::name(std::span<const char8_t> __name) {
+    //todo: conversion
+    char* __n = new __libcpp_threadname_char_t[__name.size() + 1];
+    strcpy(__n, (const char*)__name.data());
+    __n[__name.size()] = 0;
+    this->__name = __n;
+    return *this;
+}
+
 namespace this_thread
 {
 

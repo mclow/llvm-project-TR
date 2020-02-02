@@ -340,6 +340,8 @@ add_compile_flags_if_supported(-Wunused-parameter)
 add_compile_flags_if_supported(-Wunused-variable)
 add_compile_flags_if_supported(-Wwrite-strings)
 add_compile_flags_if_supported(-Wundef)
+add_compile_flags_if_supported(-std=c++2a)
+
 
 if (LIBCXXABI_ENABLE_WERROR)
   add_compile_flags_if_supported(-Werror)

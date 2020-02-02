@@ -1951,6 +1951,7 @@
 {'type': 'FUNC', 'name': 'pthread_mutexattr_destroy@GLIBC_2.2.5'}
 {'type': 'FUNC', 'name': 'pthread_mutexattr_init@GLIBC_2.2.5'}
 {'type': 'FUNC', 'name': 'pthread_mutexattr_settype@GLIBC_2.2.5'}
+{'type': 'FUNC', 'name': 'pthread_setname_np@GLIBC_2.12'}
 {'type': 'FUNC', 'name': 'pthread_self@GLIBC_2.2.5'}
 {'type': 'FUNC', 'name': 'read@GLIBC_2.2.5'}
 {'type': 'FUNC', 'name': 'realloc@GLIBC_2.2.5'}

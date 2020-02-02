@@ -522,7 +522,7 @@ function(cxx_add_basic_build_flags target)
   # Require C++14 for all targets. C++14 is needed to ensure constant
   # initialization for certain globals (ex global memory resources).
   set_target_properties(${target} PROPERTIES
-    CXX_STANDARD 14
+    CXX_STANDARD 20
     CXX_STANDARD_REQUIRED YES
     CXX_EXTENSIONS NO)
 

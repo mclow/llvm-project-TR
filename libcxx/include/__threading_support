@@ -211,6 +211,14 @@ bool __libcpp_thread_id_equal(__libcpp_thread_id __t1, __libcpp_thread_id __t2);
 _LIBCPP_THREAD_ABI_VISIBILITY
 bool __libcpp_thread_id_less(__libcpp_thread_id __t1, __libcpp_thread_id __t2);
 
+
+// Thread attributes
+#ifdef _LIBCPP_HAS_THREAD_API_WIN32
+using __libcpp_threadname_char_t = wchar_t;
+#else
+using __libcpp_threadname_char_t = char;
+#endif
+
 // Thread
 _LIBCPP_THREAD_ABI_VISIBILITY
 bool __libcpp_thread_isnull(const __libcpp_thread_t *__t);
@@ -218,6 +226,12 @@ bool __libcpp_thread_isnull(const __libcpp_thread_t *__t);
 _LIBCPP_THREAD_ABI_VISIBILITY
 int __libcpp_thread_create(__libcpp_thread_t *__t, void *(*__func)(void *),
                            void *__arg);
+
+_LIBCPP_THREAD_ABI_VISIBILITY
+int __libcpp_thread_create(__libcpp_thread_t *__t, void *(*__func)(void *),
+                           void *__arg,
+                           size_t __stack_size,
+                           const __libcpp_threadname_char_t* __name);
 
 _LIBCPP_THREAD_ABI_VISIBILITY
 __libcpp_thread_id __libcpp_thread_get_current_id();
@@ -374,6 +388,33 @@ int __libcpp_thread_create(__libcpp_thread_t *__t, void *(*__func)(void *),
                            void *__arg)
 {
   return pthread_create(__t, nullptr, __func, __arg);
+}
+
+
+int __libcpp_thread_create(__libcpp_thread_t *__t, void *(*__func)(void *),
+                           void *__arg,
+                           size_t __stack_size,
+                           const __libcpp_threadname_char_t* __name)
+{
+  int res = 0;
+  if(__stack_size != 0) {
+    pthread_attr_t attr;
+    res = pthread_attr_init(&attr);
+    if (res != 0) {
+      return res;
+    }
+    res = pthread_attr_setstacksize(&attr, __stack_size);
+    res = pthread_create(__t, &attr, __func, __arg);
+    res = pthread_attr_destroy(&attr);
+  }
+  else {
+    res = pthread_create(__t, 0, __func, __arg);
+  }
+  if (res == 0) {
+    // Ignore errors
+    pthread_setname_np(*__t, __name);
+  }
+  return res;
 }
 
 __libcpp_thread_id __libcpp_thread_get_current_id()

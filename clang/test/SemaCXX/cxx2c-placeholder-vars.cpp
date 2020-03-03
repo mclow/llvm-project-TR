@@ -39,8 +39,8 @@ void bindings() {
 
 void lambda() {
     (void)[_ = 0, _ = 1] { // expected-warning {{placeholder variables are a Clang extension}} \
-                           // expected-note 2{{placeholder declared here}} \\
-                           // expected-warning {{placeholder variable has no side effect}}
+                           // expected-note 4{{placeholder declared here}} \\
+                           // expected-warning 2{{placeholder variable has no side effect}}
         (void)_++; // expected-error {{referring to placeholder '_' is not allowed}}
     };
 }

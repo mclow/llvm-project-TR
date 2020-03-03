@@ -1149,6 +1149,10 @@ void Sema::ActOnLambdaExpressionAfterIntroducer(LambdaIntroducer &Intro,
         continue;
     }
 
+    if(Var && Var->isInitCapture() && C->Id->isPlaceholder()) {
+      Var->setIsPlaceholderVar(true);
+    }
+
     // C++11 [expr.prim.lambda]p10:
     //   [...] each such lookup shall find a variable with automatic storage
     //   duration declared in the reaching scope of the local lambda expression.
@@ -1175,11 +1179,15 @@ void Sema::ActOnLambdaExpressionAfterIntroducer(LambdaIntroducer &Intro,
             << C->Id << It->second->getBeginLoc()
             << FixItHint::CreateRemoval(
                    SourceRange(getLocForEndOfToken(PrevCaptureLoc), C->Loc));
-      } else
+        Var->setInvalidDecl();
+      } else if(Var && Var->isPlaceholderVar()) {
+        Diag(C->Loc, diag::warn_placeholder_definition);
+      } else {
         // Previous capture captured something different (one or both was
         // an init-capture): no fixit.
         Diag(C->Loc, diag::err_capture_more_than_once) << C->Id;
-      continue;
+        continue;
+      }
     }
 
     // Ignore invalid decls; they'll just confuse the code later.

@@ -276,6 +276,7 @@ void Parser::LateParsedMemberInitializer::ParseLexedMemberInitializers() {
 
 void Parser::LateParsedPragma::ParseLexedPragmas() {
   Self->ParseLexedPragma(*this);
+}
 
 void Parser::LateParsedAutoMemberInitializer::ParseLexedMemberInitializers() {
   Self->ParseDeducedAutoMemberInitializer(*this);
@@ -665,8 +666,7 @@ void Parser::ParseLexedAutoMemberInitializers(ParsingClass &Class) {
   if (!Class.LateParsedDeclarations.empty()) {
     // Set CXXThisOverride for when there is no member function
     // that contains this declaration.
-    Sema::CXXThisScopeRAII ThisScope(Actions, Class.TagOrTemplate,
-      /*TypeQuals=*/(unsigned)0);
+    Sema::CXXThisScopeRAII ThisScope(Actions, Class.TagOrTemplate, Qualifiers(), false);
     // Get the CXXRecordDEcl from the Tag Or Template.
     CXXRecordDecl *Record = 0;
     if (ClassTemplateDecl *Template =
@@ -789,7 +789,7 @@ Parser::ParseLexedAutoMemberInitializer(LateParsedAutoMemberInitializer &MI) {
   // Append the current token at the end of the new token stream so that it
   // doesn't get lost.
   MI.Toks.push_back(Tok);
-  PP.EnterTokenStream(MI.Toks, true);
+  PP.EnterTokenStream(MI.Toks, true, true);
 
   // Consume the previously pushed token.
   ConsumeAnyToken(/*ConsumeCodeCompletionTok=*/true);

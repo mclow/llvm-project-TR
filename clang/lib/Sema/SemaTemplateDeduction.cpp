@@ -4899,14 +4899,14 @@ void Sema::DeduceAutoMemberTypeFromInitExpr(Expr *Init, FieldDecl *FDecl) {
     if (CXXDirectInit->getNumExprs() == 0) {
       // It isn't possible to write this directly, but it is possible to
       // end up in this situation with "auto x(some_pack...);"
-      Diag(CXXDirectInit->getLocStart(),
+      Diag(CXXDirectInit->getBeginLoc(),
         diag::err_auto_var_init_no_expression)
         << FDecl->getDeclName() << FDecl->getType()
         << FDecl->getSourceRange();
       FDecl->setInvalidDecl();
       return;
     } else if (CXXDirectInit->getNumExprs() > 1) {
-        Diag(CXXDirectInit->getExpr(1)->getLocStart(),
+        Diag(CXXDirectInit->getExpr(1)->getBeginLoc(),
         diag::err_auto_var_init_multiple_expressions)
         << FDecl->getDeclName() << FDecl->getType()
         << FDecl->getSourceRange();

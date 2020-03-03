@@ -1436,4 +1436,8 @@ def warn_max_tokens_total : Warning<
 
 def note_max_tokens_total_override : Note<"total token limit set here">;
 
+//TODO fixme
+def err_auto_var_requires_init_parse : Error<
+  "declaration of variable %0 with deduced type %1 requires an initializer">;
+
 } // end of Parser diagnostics

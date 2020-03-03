@@ -4712,8 +4712,7 @@ void Sema::InstantiateFunctionDefinition(SourceLocation PointOfInstantiation,
                   getFunctionLevelDeclContext() : 0;
       if (CXXRecordDecl *const ClassDeclOfAutoNSDMI =
               dyn_cast_or_null<CXXRecordDecl>(DeclCtxOfThisCapturingLambda)) {
-          Sema::CXXThisScopeRAII ThisScope(*this, ClassDeclOfAutoNSDMI,
-                                           /*TypeQuals=*/(unsigned)0);
+          Sema::CXXThisScopeRAII ThisScope(*this, ClassDeclOfAutoNSDMI, Qualifiers(), false);
       Body = SubstStmt(Pattern, TemplateArgs);
       } else   {
           // Instantiate the function body without synthesizing a CXXThisOverride.

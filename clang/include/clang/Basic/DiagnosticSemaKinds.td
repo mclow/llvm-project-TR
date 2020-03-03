@@ -227,6 +227,13 @@ def ext_imaginary_constant : Extension<
 def ext_integer_complex : Extension<
   "complex integer types are a GNU extension">, InGroup<GNUComplexInteger>;
 
+def warn_deprecated_underscore_id_global : Warning<
+  "declaring variables called '_' at global or namespace scope is deprecated">;
+
+def warn_deprecated_underscore_id_decl : Warning<
+  "declaring aliases, namespaces and types called '_' is deprecated">;
+
+
 def err_invalid_saturation_spec : Error<"'_Sat' specifier is only valid on "
   "'_Fract' or '_Accum', not '%0'">;
 def err_invalid_sign_spec : Error<"'%0' cannot be signed or unsigned">;
@@ -6355,6 +6362,11 @@ def err_atomic_specifier_bad_type
             "%1 %select{|||||||which is not trivially copyable|}0">;
 
 // Expressions.
+def warn_deprecated_underscore_id : Warning<
+  "using '_' in an expression is deprecated">;
+def select_unary_expr_or_type_trait_kind : TextSubstitution<
+  "%select{sizeof|alignof|vec_step|__builtin_omp_required_simd_align|"
+  "__alignof}0">;
 def ext_sizeof_alignof_function_type : Extension<
   "invalid application of '%0' to a function type">, InGroup<PointerArith>;
 def ext_sizeof_alignof_void_type : Extension<

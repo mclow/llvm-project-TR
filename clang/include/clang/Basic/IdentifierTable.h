@@ -395,6 +395,10 @@ public:
   /// 7.1.3, C++ [lib.global.names]).
   ReservedIdentifierStatus isReserved(const LangOptions &LangOpts) const;
 
+  bool isPlaceholder() const {
+    return getLength() == 1 && getNameStart()[0] == '_';
+  }
+
   /// Provide less than operator for lexicographical sorting.
   bool operator<(const IdentifierInfo &RHS) const {
     return getName() < RHS.getName();

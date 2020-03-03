@@ -841,38 +841,41 @@ Sema::ActOnDecompositionDeclarator(Scope *S, Declarator &D,
   for (auto &B : D.getDecompositionDeclarator().bindings()) {
     // Check for name conflicts.
     DeclarationNameInfo NameInfo(B.Name, B.NameLoc);
+    IdentifierInfo *VarName = B.Name;
     LookupResult Previous(*this, NameInfo, LookupOrdinaryName,
                           ForVisibleRedeclaration);
     LookupName(Previous, S,
                /*CreateBuiltins*/DC->getRedeclContext()->isTranslationUnit());
 
-    // It's not permitted to shadow a template parameter name.
-    if (Previous.isSingleResult() &&
-        Previous.getFoundDecl()->isTemplateParameter()) {
-      DiagnoseTemplateParameterShadow(D.getIdentifierLoc(),
-                                      Previous.getFoundDecl());
-      Previous.clear();
+
+    if(DC->isFunctionOrMethod() && Previous.isSingleResult() && VarName->isPlaceholder()) {
+      const bool sameDC = Previous.getFoundDecl()->getDeclContext()->getRedeclContext()->Equals(DC->getRedeclContext());
+      if(sameDC && isDeclInScope(Previous.getFoundDecl(), CurContext, S, false)) {
+        Previous.clear();
+        VarName  = nullptr;
+      }
+    }
+    else {
+      // It's not permitted to shadow a template parameter name.
+      if (Previous.isSingleResult() &&
+          Previous.getFoundDecl()->isTemplateParameter()) {
+        DiagnoseTemplateParameterShadow(D.getIdentifierLoc(),
+                                        Previous.getFoundDecl());
+        Previous.clear();
+      }
+
+      bool ConsiderLinkage = DC->isFunctionOrMethod() &&
+                            DS.getStorageClassSpec() == DeclSpec::SCS_extern;
+      FilterLookupForScope(Previous, DC, S, ConsiderLinkage,
+                          /*AllowInlineNamespace*/false);
+      if (!Previous.empty()) {
+        auto *Old = Previous.getRepresentativeDecl();
+        Diag(B.NameLoc, diag::err_redefinition) << B.Name;
+        Diag(Old->getLocation(), diag::note_previous_definition);
+      }
     }
 
-    auto *BD = BindingDecl::Create(Context, DC, B.NameLoc, B.Name);
-
-    // Find the shadowed declaration before filtering for scope.
-    NamedDecl *ShadowedDecl = D.getCXXScopeSpec().isEmpty()
-                                  ? getShadowedDeclaration(BD, Previous)
-                                  : nullptr;
-
-    bool ConsiderLinkage = DC->isFunctionOrMethod() &&
-                           DS.getStorageClassSpec() == DeclSpec::SCS_extern;
-    FilterLookupForScope(Previous, DC, S, ConsiderLinkage,
-                         /*AllowInlineNamespace*/false);
-
-    if (!Previous.empty()) {
-      auto *Old = Previous.getRepresentativeDecl();
-      Diag(B.NameLoc, diag::err_redefinition) << B.Name;
-      Diag(Old->getLocation(), diag::note_previous_definition);
-    } else if (ShadowedDecl && !D.isRedeclaration()) {
-      CheckShadow(BD, ShadowedDecl, Previous);
-    }
+    auto *BD = BindingDecl::Create(Context, DC, B.NameLoc, VarName);
     PushOnScopeChains(BD, S, true);
     Bindings.push_back(BD);
     ParsingInitForAutoVars.insert(BD);
@@ -10967,6 +10970,10 @@ Decl *Sema::ActOnStartNamespaceDef(
       // We've seen this namespace for the first time.
       AddToKnown = !IsInline;
     }
+
+    if(II->isPlaceholder()) {
+      Diag(IdentLoc, diag::warn_deprecated_underscore_id_decl);
+    }
   } else {
     // Anonymous namespaces.
 
@@ -12764,6 +12771,11 @@ Decl *Sema::ActOnAliasDeclaration(Scope *S, AccessSpecifier AS,
   TypeSourceInfo *TInfo = nullptr;
   GetTypeFromParser(Type.get(), &TInfo);
 
+  IdentifierInfo* II = Name.Identifier;
+  if(!II || II->isPlaceholder()) {
+    Diag(UsingLoc, diag::warn_deprecated_underscore_id_decl);
+  }
+
   if (DiagnoseClassNameShadow(CurContext, NameInfo))
     return nullptr;
 
@@ -12913,6 +12925,11 @@ Decl *Sema::ActOnNamespaceAliasDef(Scope *S, SourceLocation NamespaceLoc,
 
   if (R.isAmbiguous())
     return nullptr;
+
+  if(!Alias || Alias->isPlaceholder()) {
+    Diag(AliasLoc, diag::warn_deprecated_underscore_id_decl);
+  }
+
 
   if (R.empty()) {
     if (!TryNamespaceTypoCorrection(*this, R, S, SS, IdentLoc, Ident)) {

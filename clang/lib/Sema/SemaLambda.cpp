@@ -1161,9 +1161,15 @@ void Sema::ActOnLambdaExpressionAfterIntroducer(LambdaIntroducer &Intro,
     // C++11 [expr.prim.lambda]p8:
     //   An identifier or this shall not appear more than once in a
     //   lambda-capture.
+    if(Var && Var->isInitCapture() && C->Id->isPlaceholder()) {
+      Var->setIsPlaceholderVar(true);
+    }
     if (auto [It, Inserted] = CaptureNames.insert(std::pair{C->Id, Var});
         !Inserted) {
-      if (C->InitKind == LambdaCaptureInitKind::NoInit &&
+      if(Var->isPlaceholderVar()) {
+        Diag(C->Loc, diag::warn_placeholder_definition);
+      }
+      else if (C->InitKind == LambdaCaptureInitKind::NoInit &&
           !Var->isInitCapture()) {
         Diag(C->Loc, diag::err_capture_more_than_once)
             << C->Id << It->second->getBeginLoc()
@@ -1867,7 +1873,10 @@ bool Sema::DiagnoseUnusedLambdaCapture(SourceRange CaptureRange,
   if (From.isVLATypeCapture())
     return false;
 
-  auto diag = Diag(From.getLocation(), diag::warn_unused_lambda_capture);
+  bool IsPlaceholder = From.isInitCapture() && From.getVariable()->isPlaceholderVar();
+
+  auto diag = Diag(From.getLocation(), IsPlaceholder ? diag::warn_placeholder_variable_has_no_side_effect:
+                                                       diag::warn_unused_lambda_capture);
   if (From.isThisCapture())
     diag << "'this'";
   else

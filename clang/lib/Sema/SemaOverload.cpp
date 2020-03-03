@@ -13992,14 +13992,18 @@ ExprResult Sema::BuildSynthesizedThreeWayComparison(
 ExprResult
 Sema::CreateOverloadedArraySubscriptExpr(SourceLocation LLoc,
                                          SourceLocation RLoc,
-                                         Expr *Base, Expr *Idx) {
-  Expr *Args[2] = { Base, Idx };
+                                         Expr *Base, MultiExprArg ArgExpr) {
+  SmallVector<Expr*, 12> Args;
+  Args.push_back(Base);
+  for(auto e : ArgExpr) {
+    Args.push_back(e);
+  }
   DeclarationName OpName =
       Context.DeclarationNames.getCXXOperatorName(OO_Subscript);
 
   // If either side is type-dependent, create an appropriate dependent
   // expression.
-  if (Args[0]->isTypeDependent() || Args[1]->isTypeDependent()) {
+  if (Expr::hasAnyTypeDependentArguments(Args)) {
 
     CXXRecordDecl *NamingClass = nullptr; // lookup ignores member operators
     // CHECKME: no 'operator' keyword?
@@ -14016,12 +14020,11 @@ Sema::CreateOverloadedArraySubscriptExpr(SourceLocation LLoc,
                                        CurFPFeatureOverrides());
   }
 
-  // Handle placeholders on both operands.
-  if (checkPlaceholderForOverload(*this, Args[0]))
+  // Handle placeholders
+  UnbridgedCastsSet UnbridgedCasts;
+  if (checkArgPlaceholdersForOverload(*this, Args, UnbridgedCasts)) {
     return ExprError();
-  if (checkPlaceholderForOverload(*this, Args[1]))
-    return ExprError();
-
+  }
   // Build an empty overload set.
   OverloadCandidateSet CandidateSet(LLoc, OverloadCandidateSet::CSK_Operator);
 
@@ -14031,7 +14034,8 @@ Sema::CreateOverloadedArraySubscriptExpr(SourceLocation LLoc,
   AddMemberOperatorCandidates(OO_Subscript, LLoc, Args, CandidateSet);
 
   // Add builtin operator candidates.
-  AddBuiltinOperatorCandidates(OO_Subscript, LLoc, Args, CandidateSet);
+  if(Args.size() == 2)
+    AddBuiltinOperatorCandidates(OO_Subscript, LLoc, Args, CandidateSet);
 
   bool HadMultipleCandidates = (CandidateSet.size() > 1);
 
@@ -14058,16 +14062,18 @@ Sema::CreateOverloadedArraySubscriptExpr(SourceLocation LLoc,
         Args[0] = Arg0.get();
 
         // Convert the arguments.
-        ExprResult InputInit
-          = PerformCopyInitialization(InitializedEntity::InitializeParameter(
-                                                      Context,
-                                                      FnDecl->getParamDecl(0)),
-                                      SourceLocation(),
-                                      Args[1]);
-        if (InputInit.isInvalid())
-          return ExprError();
+        for(std::size_t i = 1; i < Args.size(); i++) {
+          ExprResult InputInit
+            = PerformCopyInitialization(InitializedEntity::InitializeParameter(
+                                                        Context,
+                                                        FnDecl->getParamDecl(i-1)),
+                                        SourceLocation(),
+                                        Args[i]);
+          if (InputInit.isInvalid())
+            return ExprError();
 
-        Args[1] = InputInit.getAs<Expr>();
+          Args[i] = InputInit.getAs<Expr>();
+        }
 
         // Build the actual expression node.
         DeclarationNameInfo OpLocInfo(OpName, LLoc);
@@ -14119,6 +14125,7 @@ Sema::CreateOverloadedArraySubscriptExpr(SourceLocation LLoc,
       }
     }
 
+    //TODO: better diagnostic
     case OR_No_Viable_Function: {
       PartialDiagnostic PD = CandidateSet.empty()
           ? (PDiag(diag::err_ovl_no_oper)

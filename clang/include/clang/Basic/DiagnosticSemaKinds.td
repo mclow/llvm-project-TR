@@ -8918,6 +8918,11 @@ def err_operator_overload_must_be : Error<
   "overloaded %0 must be a %select{unary|binary|unary or binary}2 operator "
   "(has %1 parameter%s1)">;
 
+def err_operator_subscript_at_least_one : Error<
+  "overloaded %0 must have at least 1 argument"
+  "(has %1 parameter%s1)">;
+
+
 def err_operator_overload_must_be_member : Error<
   "overloaded %0 must be a non-static member function">;
 def err_operator_overload_post_incdec_must_be_int : Error<

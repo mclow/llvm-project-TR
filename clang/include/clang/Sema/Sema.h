@@ -3882,7 +3882,7 @@ public:
 
   ExprResult CreateOverloadedArraySubscriptExpr(SourceLocation LLoc,
                                                 SourceLocation RLoc,
-                                                Expr *Base,Expr *Idx);
+                                                Expr *Base, MultiExprArg Args);
 
   ExprResult BuildCallToMemberFunction(Scope *S, Expr *MemExpr,
                                        SourceLocation LParenLoc,
@@ -5298,7 +5298,7 @@ public:
                                  tok::TokenKind Kind, Expr *Input);
 
   ExprResult ActOnArraySubscriptExpr(Scope *S, Expr *Base, SourceLocation LLoc,
-                                     Expr *Idx, SourceLocation RLoc);
+                                     MultiExprArg ArgExprs, SourceLocation RLoc);
   ExprResult CreateBuiltinArraySubscriptExpr(Expr *Base, SourceLocation LLoc,
                                              Expr *Idx, SourceLocation RLoc);
 

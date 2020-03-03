@@ -1902,6 +1902,7 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
       Loc = T.getOpenLocation();
       ExprResult Idx, Length, Stride;
       SourceLocation ColonLocFirst, ColonLocSecond;
+      ExprVector ArgExprs;
       PreferredType.enterSubscript(Actions, Tok.getLocation(), LHS.get());
       if (getLangOpts().CPlusPlus11 && Tok.is(tok::l_brace)) {
         Diag(Tok, diag::warn_cxx98_compat_generalized_initializer_lists);
@@ -1931,29 +1932,62 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
             Stride = ParseExpression();
           }
         }
-      } else
-        Idx = ParseExpression();
+      } else {
+        CommaLocsTy CommaLocs;
+        auto RunSignatureHelp = [&]() -> QualType {
+          QualType PreferredType = Actions.ProduceCallSignatureHelp(
+              getCurScope(), LHS.get(), ArgExprs, T.getOpenLocation());
+          CalledSignatureHelp = true;
+          return PreferredType;
+        };
+        if (Tok.isNot(tok::r_square)) {
+          if (ParseExpressionList(ArgExprs, CommaLocs, [&] {
+                PreferredType.enterFunctionArgument(Tok.getLocation(),
+                                                    RunSignatureHelp);
+              })) {
+            (void)Actions.CorrectDelayedTyposInExpr(LHS);
+            // If we got an error when parsing expression list, we don't call
+            // the CodeCompleteCall handler inside the parser. So call it here
+            // to make sure we get overload suggestions even when we are in the
+            // middle of a parameter.
+            if (PP.isCodeCompletionReached() && !CalledSignatureHelp)
+              RunSignatureHelp();
+            LHS = ExprError();
+          } else if (LHS.isInvalid()) {
+            for (auto &E : ArgExprs)
+              Actions.CorrectDelayedTyposInExpr(E);
+          }
+          assert(ArgExprs.size() == CommaLocs.size()+1 && "Unexpected number of commas!");
+        }
+      }
 
       SourceLocation RLoc = Tok.getLocation();
-
       LHS = Actions.CorrectDelayedTyposInExpr(LHS);
       Idx = Actions.CorrectDelayedTyposInExpr(Idx);
+      // OpenMP stuff
       Length = Actions.CorrectDelayedTyposInExpr(Length);
       if (!LHS.isInvalid() && !Idx.isInvalid() && !Length.isInvalid() &&
-          !Stride.isInvalid() && Tok.is(tok::r_square)) {
-        if (ColonLocFirst.isValid() || ColonLocSecond.isValid()) {
+          !Stride.isInvalid() && Tok.is(tok::r_square) && (ColonLocFirst.isValid() || ColonLocSecond.isValid())) {
           LHS = Actions.ActOnOMPArraySectionExpr(
               LHS.get(), Loc, Idx.get(), ColonLocFirst, ColonLocSecond,
               Length.get(), Stride.get(), RLoc);
-        } else {
-          LHS = Actions.ActOnArraySubscriptExpr(getCurScope(), LHS.get(), Loc,
-                                                Idx.get(), RLoc);
-        }
       } else {
-        LHS = ExprError();
-        Idx = ExprError();
+          if (LHS.isInvalid()) {
+            SkipUntil(tok::r_brace, StopAtSemi);
+            LHS = ExprError();
+          } else if (Tok.isNot(tok::r_square)) {
+            bool HadDelayedTypo = false;
+            for (auto &E : ArgExprs)
+              if (Actions.CorrectDelayedTyposInExpr(E).get() != E)
+                HadDelayedTypo = true;
+            if (HadDelayedTypo)
+              SkipUntil(tok::r_square, StopAtSemi);
+            LHS = ExprError();
+          } else {
+              LHS = Actions.ActOnArraySubscriptExpr(getCurScope(), LHS.get(), Loc,
+                                                    ArgExprs, Tok.getLocation());
+          }
       }
-
       // Match the ']'.
       T.consumeClose();
       break;

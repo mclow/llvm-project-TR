@@ -6526,6 +6526,10 @@ def err_arithmetic_nonfragile_interface : Error<
   "arithmetic on pointer to interface %0, which is not a constant size for "
   "this architecture and platform">;
 
+
+def error_subscript_not_enough_args : Error<
+  "Array subscript expression requires at least one argument">;
+
 def warn_deprecated_comma_subscript : Warning<
   "top-level comma expression in array subscript is deprecated">,
   InGroup<DeprecatedCommaSubscript>;

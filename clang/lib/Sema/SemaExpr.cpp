@@ -4669,7 +4669,7 @@ Sema::ActOnArraySubscriptExpr(Scope *S, Expr *base, SourceLocation lbLoc,
                               MultiExprArg ArgExprs, SourceLocation rbLoc) {
 
   if(ArgExprs.empty()) {
-    return ExprError();
+    return ExprError(Diag(rbLoc, diag::error_subscript_not_enough_args));
   }
 
   if (base && !base->getType().isNull() &&

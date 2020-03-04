@@ -15773,9 +15773,10 @@ bool Sema::CheckOverloadedOperatorDeclaration(FunctionDecl *FnDecl) {
     return Diag(FnDecl->getLocation(), diag::err_operator_overload_must_be)
       << FnDecl->getDeclName() << NumParams << ErrorKind;
   }
-  if(Op == OO_Subscript && NumParams < 1) {
+
+  if(Op == OO_Subscript && NumParams  < 2) {
     return Diag(FnDecl->getLocation(), diag::err_operator_subscript_at_least_one)
-      << FnDecl->getDeclName() << NumParams;
+      << FnDecl->getDeclName() << NumParams - 1;
   }
 
 

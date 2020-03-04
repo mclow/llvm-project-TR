@@ -1953,9 +1953,14 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
             if (PP.isCodeCompletionReached() && !CalledSignatureHelp)
               RunSignatureHelp();
             LHS = ExprError();
-          } else if (LHS.isInvalid()) {
+          }
+          bool HadDelayedTypo = true;
+          if (LHS.isInvalid() || Tok.isNot(tok::r_square)) {
+            LHS = ExprError();
             for (auto &E : ArgExprs)
-              Actions.CorrectDelayedTyposInExpr(E);
+              if(Actions.CorrectDelayedTyposInExpr(E).get() != E)
+                  HadDelayedTypo = true;
+            SkipUntil(tok::r_brace, StopAtSemi);
           }
           assert(ArgExprs.size() == CommaLocs.size()+1 && "Unexpected number of commas!");
         }
@@ -1967,28 +1972,20 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
       // OpenMP stuff
       Length = Actions.CorrectDelayedTyposInExpr(Length);
       if (!LHS.isInvalid() && !Idx.isInvalid() && !Length.isInvalid() &&
-          !Stride.isInvalid() && Tok.is(tok::r_square) && (ColonLocFirst.isValid() || ColonLocSecond.isValid())) {
-          LHS = Actions.ActOnOMPArraySectionExpr(
-              LHS.get(), Loc, Idx.get(), ColonLocFirst, ColonLocSecond,
-              Length.get(), Stride.get(), RLoc);
-      } else {
-          if (LHS.isInvalid()) {
-            SkipUntil(tok::r_brace, StopAtSemi);
-            LHS = ExprError();
-          } else if (Tok.isNot(tok::r_square)) {
-            bool HadDelayedTypo = false;
-            for (auto &E : ArgExprs)
-              if (Actions.CorrectDelayedTyposInExpr(E).get() != E)
-                HadDelayedTypo = true;
-            if (HadDelayedTypo)
-              SkipUntil(tok::r_square, StopAtSemi);
-            LHS = ExprError();
-          } else {
-              LHS = Actions.ActOnArraySubscriptExpr(getCurScope(), LHS.get(), Loc,
-                                                    ArgExprs, Tok.getLocation());
-          }
+          !Stride.isInvalid() && Tok.is(tok::r_square)) {
+              if (ColonLocFirst.isValid() || ColonLocSecond.isValid()) {
+                LHS = Actions.ActOnOMPArraySectionExpr(
+                    LHS.get(), Loc, Idx.get(), ColonLocFirst, ColonLocSecond,
+                    Length.get(), Stride.get(), RLoc);
+              }
+              else {
+                  if(ArgExprs.empty() && !Idx.isUnset()) {
+                      ArgExprs.push_back(Idx.get());
+                  }
+                  LHS = Actions.ActOnArraySubscriptExpr(getCurScope(), LHS.get(), Loc,
+                                                        ArgExprs, Tok.getLocation());
+              }
       }
-      // Match the ']'.
       T.consumeClose();
       break;
     }

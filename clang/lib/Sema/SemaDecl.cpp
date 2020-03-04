@@ -1791,6 +1791,11 @@ static bool ShouldDiagnoseUnusedDecl(const NamedDecl *D) {
   if (isa<LabelDecl>(D))
     return true;
 
+  if(D->getDeclName()
+    && D->getDeclName().getAsIdentifierInfo()
+    && D->getDeclName().getAsIdentifierInfo()->isPlaceholder())
+    return false;
+
   // Except for labels, we only care about unused decls that are local to
   // functions.
   bool WithinFunction = D->getDeclContext()->isFunctionOrMethod();
@@ -6194,7 +6199,7 @@ Sema::ActOnTypedefDeclarator(Scope* S, Declarator& D, DeclContext* DC,
   }
 
   IdentifierInfo* Name = D.getName().Identifier;
-  if(!Name || Name->isPlaceholder()) {
+  if(Name && Name->isPlaceholder()) {
     Diag(D.getBeginLoc(), diag::warn_deprecated_underscore_id_decl);
   }
 
@@ -15575,7 +15580,7 @@ Decl *Sema::ActOnTag(Scope *S, unsigned TagSpec, TagUseKind TUK,
   assert(TemplateParameterLists.size() == 0 || TUK != TUK_Reference);
 
 
-  if(!Name || Name->isPlaceholder()) {
+  if(Name && Name->isPlaceholder()) {
     Diag(NameLoc, diag::warn_deprecated_underscore_id_decl);
   }
 

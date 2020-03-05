@@ -1145,7 +1145,7 @@ bool Parser::ParseLambdaIntroducer(LambdaIntroducer &Intro,
 
     SourceLocation LocEnd = PrevTokLocation;
 
-    Intro.addCapture(Kind, Loc, Id->isPlaceholder() ? nullptr : Id, EllipsisLoc, InitKind, Init,
+    Intro.addCapture(Kind, Loc, Id, EllipsisLoc, InitKind, Init,
                      InitCaptureType, SourceRange(LocStart, LocEnd));
   }
 

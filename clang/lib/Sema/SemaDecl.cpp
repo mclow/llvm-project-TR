@@ -1245,6 +1245,7 @@ ExprResult Sema::ActOnNameClassifiedAsNonType(Scope *S, const CXXScopeSpec &SS,
   Result.resolveKind();
 
   bool ADL = UseArgumentDependentLookup(SS, Result, NextToken.is(tok::l_paren));
+  CheckUseOfPlaceholderVariables(Result.getLookupNameInfo(), Found);
   return BuildDeclarationNameExpr(SS, Result, ADL);
 }
 
@@ -1526,7 +1527,7 @@ void Sema::PushOnScopeChains(NamedDecl *D, Scope *S, bool AddToContext) {
     }
 
     IdResolver.InsertDeclAfter(I, D);
-  } else if(D->getDeclName().getAsIdentifierInfo()) {
+  } else {
     IdResolver.AddDecl(D);
   }
   warnOnReservedIdentifier(D);
@@ -6929,7 +6930,7 @@ NamedDecl *Sema::ActOnVariableDeclarator(
   DeclarationName Name = GetNameForDeclarator(D).getName();
 
   IdentifierInfo *II = Name.getAsIdentifierInfo();
-  IdentifierInfo *VarName = II;
+  bool IsAnonymousVariable = false;
 
   if (D.isDecompositionDeclarator()) {
     // Take the name of the first declarator as our name for diagnostic
@@ -6950,13 +6951,9 @@ NamedDecl *Sema::ActOnVariableDeclarator(
     auto D = Previous.getFoundDecl();
     const bool sameDC = D->getDeclContext()->getRedeclContext()->Equals(DC->getRedeclContext());
     if(sameDC && isDeclInScope(D, CurContext, S, false)) {
-      VarName = nullptr;
+      IsAnonymousVariable = true;
     }
   }
-  else if(DC->isFileContext() && !getCurrentModule() && II->isPlaceholder()) {
-    Diag(D.getIdentifierLoc(), diag::warn_deprecated_underscore_id_global);
-  }
-
 
   DeclSpec::SCS SCSpec = D.getDeclSpec().getStorageClassSpec();
   StorageClass SC = StorageClassSpecToVarDeclStorageClass(D.getDeclSpec());
@@ -7173,9 +7170,11 @@ NamedDecl *Sema::ActOnVariableDeclarator(
       NewVD = DecompositionDecl::Create(Context, DC, D.getBeginLoc(),
                                         D.getIdentifierLoc(), R, TInfo, SC,
                                         Bindings);
-    } else
+    } else {
       NewVD = VarDecl::Create(Context, DC, D.getBeginLoc(),
-                              D.getIdentifierLoc(), VarName, R, TInfo, SC);
+                              D.getIdentifierLoc(), II, R, TInfo, SC);
+    }
+    NewVD->setIsAnonymous(IsAnonymousVariable);
 
     // If this is supposed to be a variable template, create it as such.
     if (IsVariableTemplate) {
@@ -7513,7 +7512,7 @@ NamedDecl *Sema::ActOnVariableDeclarator(
       NewVD->setInvalidDecl();
     }
 
-    if (!IsVariableTemplateSpecialization && VarName)
+    if (!IsVariableTemplateSpecialization && !IsAnonymousVariable)
       D.setRedeclaration(CheckVariableDeclaration(NewVD, Previous));
 
     if (NewTemplate) {
@@ -7544,7 +7543,7 @@ NamedDecl *Sema::ActOnVariableDeclarator(
   }
 
   // Diagnose shadowed variables iff this isn't a redeclaration.
-  if (VarName && ShadowedDecl && !D.isRedeclaration())
+  if (!IsAnonymousVariable && ShadowedDecl && !D.isRedeclaration())
     CheckShadow(NewVD, ShadowedDecl, Previous);
 
   ProcessPragmaWeak(S, NewVD);

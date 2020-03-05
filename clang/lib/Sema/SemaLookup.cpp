@@ -1294,6 +1294,8 @@ bool Sema::CppLookupName(LookupResult &R, Scope *S) {
     // Check whether the IdResolver has anything in this scope.
     for (; I != IEnd && S->isDeclScope(*I); ++I) {
       if (NamedDecl *ND = R.getAcceptableDecl(*I)) {
+        if(R.isDeclarationIgnored(*I))
+          continue;
         if (NameKind == LookupRedeclarationWithLinkage &&
             !(*I)->isTemplateParameter()) {
           // If it's a template parameter, we still find it, so we can diagnose
@@ -1448,6 +1450,8 @@ bool Sema::CppLookupName(LookupResult &R, Scope *S) {
     bool Found = false;
     for (; I != IEnd && S->isDeclScope(*I); ++I) {
       if (NamedDecl *ND = R.getAcceptableDecl(*I)) {
+        if(R.isDeclarationIgnored(*I))
+          continue;
         // We found something.  Look for anything else in our scope
         // with this same name and in an acceptable identifier
         // namespace, so that we can construct an overload set if we
@@ -1939,6 +1943,8 @@ bool Sema::LookupName(LookupResult &R, Scope *S, bool AllowBuiltinCreation) {
                                    IEnd = IdResolver.end();
          I != IEnd; ++I)
       if (NamedDecl *D = R.getAcceptableDecl(*I)) {
+        if(R.isDeclarationIgnored(*I))
+          continue;
         if (NameKind == LookupRedeclarationWithLinkage) {
           // Determine whether this (or a previous) declaration is
           // out-of-scope.

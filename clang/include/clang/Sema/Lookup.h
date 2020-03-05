@@ -172,6 +172,7 @@ public:
       : SemaPtr(Other.SemaPtr), NameInfo(Other.NameInfo),
         LookupKind(Other.LookupKind), IDNS(Other.IDNS), Redecl(Other.Redecl),
         ExternalRedecl(Other.ExternalRedecl), HideTags(Other.HideTags),
+        IgnoreAnonymousVariables(Other.IgnoreAnonymousVariables),
         AllowHidden(Other.AllowHidden),
         TemplateNameLookup(Other.TemplateNameLookup) {}
 
@@ -192,6 +193,7 @@ public:
         Redecl(std::move(Other.Redecl)),
         ExternalRedecl(std::move(Other.ExternalRedecl)),
         HideTags(std::move(Other.HideTags)),
+        IgnoreAnonymousVariables(std::move(Other.IgnoreAnonymousVariables)),
         Diagnose(std::move(Other.Diagnose)),
         AllowHidden(std::move(Other.AllowHidden)),
         Shadowed(std::move(Other.Shadowed)),
@@ -215,6 +217,7 @@ public:
     Redecl = std::move(Other.Redecl);
     ExternalRedecl = std::move(Other.ExternalRedecl);
     HideTags = std::move(Other.HideTags);
+    IgnoreAnonymousVariables = std::move(Other.IgnoreAnonymousVariables);
     Diagnose = std::move(Other.Diagnose);
     AllowHidden = std::move(Other.AllowHidden);
     Shadowed = std::move(Other.Shadowed);
@@ -289,6 +292,14 @@ public:
     HideTags = Hide;
   }
 
+  void setIgnoreAnonymousVariables(bool Ignore) {
+    IgnoreAnonymousVariables = Ignore;
+  }
+
+  bool isDeclarationIgnored(NamedDecl *ND) const{
+    return IgnoreAnonymousVariables && ND->isAnonymous();
+  }
+
   /// Sets whether this is a template-name lookup. For template-name lookups,
   /// injected-class-names are treated as naming a template rather than a
   /// template specialization.
@@ -360,6 +371,9 @@ public:
   /// if there is one.
   NamedDecl *getAcceptableDecl(NamedDecl *D) const {
     if (!D->isInIdentifierNamespace(IDNS))
+      return nullptr;
+
+    if(isDeclarationIgnored(D))
       return nullptr;
 
     if (isVisible(getSema(), D) || isHiddenDeclarationVisible(D))
@@ -741,6 +755,8 @@ private:
   /// True if tag declarations should be hidden if non-tags
   ///   are present
   bool HideTags = true;
+
+  bool IgnoreAnonymousVariables = true;
 
   bool Diagnose = false;
 

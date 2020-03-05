@@ -848,11 +848,12 @@ Sema::ActOnDecompositionDeclarator(Scope *S, Declarator &D,
                /*CreateBuiltins*/DC->getRedeclContext()->isTranslationUnit());
 
 
+    bool IsPlaceholder = false;
     if(DC->isFunctionOrMethod() && Previous.isSingleResult() && VarName->isPlaceholder()) {
       const bool sameDC = Previous.getFoundDecl()->getDeclContext()->getRedeclContext()->Equals(DC->getRedeclContext());
       if(sameDC && isDeclInScope(Previous.getFoundDecl(), CurContext, S, false)) {
         Previous.clear();
-        VarName  = nullptr;
+        IsPlaceholder = true;
       }
     }
     else {
@@ -876,6 +877,7 @@ Sema::ActOnDecompositionDeclarator(Scope *S, Declarator &D,
     }
 
     auto *BD = BindingDecl::Create(Context, DC, B.NameLoc, VarName);
+    BD->setIsAnonymous(IsPlaceholder);
     PushOnScopeChains(BD, S, true);
     Bindings.push_back(BD);
     ParsingInitForAutoVars.insert(BD);

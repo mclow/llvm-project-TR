@@ -309,6 +309,8 @@ private:
   /// definition.
   unsigned TopLevelDeclInObjCContainer : 1;
 
+  unsigned VarIsAnonymous : 1;
+
   /// Whether statistic collection is enabled.
   static bool StatisticsEnabled;
 
@@ -381,8 +383,8 @@ protected:
       : NextInContextAndBits(nullptr, getModuleOwnershipKindForChildOf(DC)),
         DeclCtx(DC), Loc(L), DeclKind(DK), InvalidDecl(false), HasAttrs(false),
         Implicit(false), Used(false), Referenced(false),
-        TopLevelDeclInObjCContainer(false), Access(AS_none), FromASTFile(0),
-        IdentifierNamespace(getIdentifierNamespaceForKind(DK)),
+        TopLevelDeclInObjCContainer(false), VarIsAnonymous(false), Access(AS_none),
+        FromASTFile(0), IdentifierNamespace(getIdentifierNamespaceForKind(DK)),
         CacheValidAndLinkage(0) {
     if (StatisticsEnabled) add(DK);
   }
@@ -390,6 +392,7 @@ protected:
   Decl(Kind DK, EmptyShell Empty)
       : DeclKind(DK), InvalidDecl(false), HasAttrs(false), Implicit(false),
         Used(false), Referenced(false), TopLevelDeclInObjCContainer(false),
+        VarIsAnonymous(false),
         Access(AS_none), FromASTFile(0),
         IdentifierNamespace(getIdentifierNamespaceForKind(DK)),
         CacheValidAndLinkage(0) {
@@ -411,6 +414,14 @@ protected:
 
   bool hasCachedLinkage() const {
     return CacheValidAndLinkage;
+  }
+
+  bool isAnonymous() const {
+    return VarIsAnonymous;
+  }
+
+  void setIsAnonymous(bool A) {
+    VarIsAnonymous = A;
   }
 
 public:

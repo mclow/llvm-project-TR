@@ -1792,11 +1792,6 @@ static bool ShouldDiagnoseUnusedDecl(const NamedDecl *D) {
   if (isa<LabelDecl>(D))
     return true;
 
-  if(D->getDeclName()
-    && D->getDeclName().getAsIdentifierInfo()
-    && D->getDeclName().getAsIdentifierInfo()->isPlaceholder())
-    return false;
-
   // Except for labels, we only care about unused decls that are local to
   // functions.
   bool WithinFunction = D->getDeclContext()->isFunctionOrMethod();
@@ -1867,6 +1862,9 @@ static bool ShouldDiagnoseUnusedDecl(const NamedDecl *D) {
       }
     }
 
+    if(!VD->getIdentifier() || VD->getIdentifier()->isPlaceholder() )
+      return !VD->hasInit();
+
     // TODO: __attribute__((unused)) templates?
   }
 
@@ -1915,7 +1913,10 @@ void Sema::DiagnoseUnusedDecl(const NamedDecl *D) {
   GenerateFixForUnusedDecl(D, Context, Hint);
 
   unsigned DiagID;
-  if (isa<VarDecl>(D) && cast<VarDecl>(D)->isExceptionVariable())
+  if(!D->getIdentifier() || D->getIdentifier()->isPlaceholder() ) {
+    DiagID = diag::warn_anonymous_variable_has_no_side_effect;
+  }
+  else if (isa<VarDecl>(D) && cast<VarDecl>(D)->isExceptionVariable())
     DiagID = diag::warn_unused_exception_param;
   else if (isa<LabelDecl>(D))
     DiagID = diag::warn_unused_label;

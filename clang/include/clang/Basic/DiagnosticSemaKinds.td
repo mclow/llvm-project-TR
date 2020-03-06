@@ -6363,6 +6363,8 @@ def warn_using_underscore_confusing : Warning<
   "Refering to a variable named '_' while anonymous variables are in scope">;
 def note_reference_underscore : Note<
   "'_' refers to the variable declared here">;
+def warn_anonymous_variable_has_no_side_effect : Warning<
+  "Anonymous variable has no side effect">;
 
 def select_unary_expr_or_type_trait_kind : TextSubstitution<
   "%select{sizeof|alignof|vec_step|__builtin_omp_required_simd_align|"

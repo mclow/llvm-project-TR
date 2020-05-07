@@ -784,6 +784,11 @@ private:
 };
 } // namespace
 
+/// \brief Harmonize the two template arguments in the presence of packs at
+/// different positions
+
+
+
 /// \brief Deduce the template arguments by comparing the list of parameter
 /// types to the list of argument types, as in the parameter-type-lists of
 /// function types (C++ [temp.deduct.type]p10).
@@ -864,13 +869,15 @@ DeduceTemplateArguments(Sema &S,
       ++ArgIdx;
       continue;
     }
-
+#define ALLOW_NONTERMINAL_PARAM_PACKS
+#ifndef ALLOW_NONTERMINAL_PARAM_PACKS
     // C++0x [temp.deduct.type]p5:
     //   The non-deduced contexts are:
     //     - A function parameter pack that does not occur at the end of the
     //       parameter-declaration-clause.
     if (ParamIdx + 1 < NumParams)
       return Sema::TDK_Success;
+#endif
 
     // C++0x [temp.deduct.type]p10:
     //   If the parameter-declaration corresponding to Pi is a function
@@ -3486,6 +3493,7 @@ Sema::TemplateDeductionResult Sema::DeduceTemplateArguments(
       continue;
     }
 
+#ifndef ALLOW_NONTERMINAL_PARAM_PACKS
     // C++0x [temp.deduct.call]p1:
     //   For a function parameter pack that occurs at the end of the
     //   parameter-declaration-list, the type A of each remaining argument of
@@ -3505,7 +3513,21 @@ Sema::TemplateDeductionResult Sema::DeduceTemplateArguments(
     bool HasAnyArguments = false;
     for (; ArgIdx < Args.size(); ++ArgIdx) {
       HasAnyArguments = true;
+#else
+	QualType ParamPattern = ParamExpansion->getPattern();
+	PackDeductionScope PackScope(*this, TemplateParams, Deduced, Info,
+		ParamPattern);
+	// The size of the pack is the number of arguments that are passed in 
+	// addition to the required ones.
+	// TODO: check that there are no default arguments after the pack
+	unsigned PackSize = Args.size() - Function->getMinRequiredArguments();
 
+	bool HasAnyArguments = false;
+	for (unsigned PackIdx = 0; 
+		 PackIdx < PackSize && ArgIdx < Args.size(); 
+		 ++PackIdx, ++ArgIdx) {
+		HasAnyArguments = true;
+#endif
       QualType OrigParamType = ParamPattern;
       ParamType = OrigParamType;
       Expr *Arg = Args[ArgIdx];
@@ -3555,8 +3577,13 @@ Sema::TemplateDeductionResult Sema::DeduceTemplateArguments(
     if (auto Result = PackScope.finish(HasAnyArguments))
       return Result;
 
+#ifndef ALLOW_NONTERMINAL_PARAM_PACKS
     // After we've matching against a parameter pack, we're done.
     break;
+#else
+	// We keep looping after a parameter pack to deduce the rest of the template
+	// arguments that may follow it.
+#endif
   }
 
   return FinishTemplateArgumentDeduction(FunctionTemplate, Deduced,
@@ -4229,6 +4256,123 @@ AddImplicitObjectParameterType(ASTContext &Context,
   ArgTypes.push_back(ArgTy);
 }
 
+namespace {
+class TemplateSpecializationWithUPP
+{
+	SmallVector<unsigned, 2> UnexpandedPackIndices;
+	SmallVector<unsigned, 2> TemplateSpecializationIndices;
+	std::vector<TemplateSpecializationWithUPP> TemplateSpecializationTypes;
+
+	const TemplateSpecializationType *ThisType;
+public:
+	TemplateSpecializationWithUPP(const TemplateSpecializationType *TST) :
+		ThisType(TST) {
+		TemplateName Template = TST->getTemplateName();
+
+		ArrayRef<TemplateArgument> TemplateArgs = TST->template_arguments();
+
+		for (unsigned I = 0; I < TemplateArgs.size(); ++I) {
+			TemplateArgument TemplateArg = TemplateArgs[I];
+			if (TemplateArg.containsUnexpandedParameterPack()) {
+				if (const TemplateSpecializationType *Specialization =
+					TemplateArg.getAsType()->
+					getAs<TemplateSpecializationType>()) {
+					TemplateSpecializationIndices.push_back(I);
+					TemplateSpecializationTypes.emplace_back(Specialization);
+				}
+				else {
+					UnexpandedPackIndices.push_back(I);
+				}
+			}
+		}
+	}
+
+	QualType substitute(ASTContext &Ctx, QualType PackSubst) {
+		ArrayRef<TemplateArgument> TemplateArgs =
+			ThisType->template_arguments();
+		SmallVector<TemplateArgument, 4> NewTNTemplateArgs(TemplateArgs.begin(),
+			TemplateArgs.end());
+
+		// Replace the Template Names
+		unsigned SubstituteCnt = 0;
+		for (auto&& ReplacedType : TemplateSpecializationTypes) {
+			unsigned TSIndex = TemplateSpecializationIndices[SubstituteCnt];
+			NewTNTemplateArgs[TSIndex] = ReplacedType.substitute(Ctx, PackSubst);
+			++SubstituteCnt;
+		}
+
+		// Replace every occurrence of the pack name with the new invented type
+		for (unsigned I : UnexpandedPackIndices)
+			NewTNTemplateArgs[I] = PackSubst;
+
+		return Ctx.getTemplateSpecializationType(ThisType->getTemplateName(),
+			NewTNTemplateArgs);
+	}
+};
+}
+
+
+static bool 
+SubstFunctionParameterPackForPartialOrdering(ASTContext &Context,
+										const FunctionProtoType* Proto1,
+										const FunctionProtoType* Proto2,
+										SmallVectorImpl<QualType>& Args,
+										int NumParams)
+
+{
+	//FIXME: Still ignoring pointers and references for Template Name 
+	// specializations
+	// eg
+	// template <class... Ts>
+	// void foo (std::vector<Ts>&... ts);
+	//                          ^
+	int NumArgs = Args.size();
+	int ParamPackIdx1 = 0;
+	bool Variadic1 = Proto1->isTemplateVariadic(&ParamPackIdx1);
+	bool Variadic2 = Proto2->isTemplateVariadic();
+
+	// Substitute the parameter packs
+
+	if (Variadic1) {
+		// The size of the pack is the difference of number of parameters of 
+		// the two functions. The minimum size is 1 if FN2 is also template
+		// variadic.
+		int PackSize = NumParams - NumArgs + static_cast<int>(Variadic2);
+
+		// Find the Pattern to be substituted
+		const PackExpansionType *Expansion = dyn_cast<PackExpansionType>
+			(Args[ParamPackIdx1]);
+		QualType Pattern = Expansion->getPattern();
+
+		//Remove the TPP
+		Args.erase(Args.begin() + ParamPackIdx1);
+
+		while (PackSize--) {
+			TemplateTypeParmDecl *TemplParam =
+				TemplateTypeParmDecl::Create(Context, nullptr,
+					SourceLocation(),
+					SourceLocation(), 0, PackSize,
+					nullptr, false, false);
+
+			QualType Arg = QualType(TemplParam->getTypeForDecl(), 0);
+
+			// The parameter pack pattern is a Template Name that contains the 
+			// unexpanded template parameter pack. This could be nested
+			// template <class... Ts>
+			// void foo (std::vector<std::vector<Ts>>...)
+			if (const TemplateSpecializationType *Specialization =
+				Pattern->getAs<TemplateSpecializationType>()) {
+				TemplateSpecializationWithUPP TSResolver(Specialization);
+				Arg = TSResolver.substitute(Context, Arg);
+			}
+
+			Args.insert(Args.begin() + ParamPackIdx1, Arg);
+		}
+	}
+
+	return true;
+}
+
 /// \brief Determine whether the function template \p FT1 is at least as
 /// specialized as \p FT2.
 static bool isAtLeastAsSpecializedAs(Sema &S,
@@ -4291,6 +4435,13 @@ static bool isAtLeastAsSpecializedAs(Sema &S,
                  Proto1->param_type_end());
     Args2.insert(Args2.end(), Proto2->param_type_begin(),
                  Proto2->param_type_end());
+
+	// Substitute parameter packs of the transformed template with 
+	// invented types
+	SubstFunctionParameterPackForPartialOrdering(S.Context, Proto1, Proto2,
+		Args1, Args2.size());
+
+	Deduced.resize(TemplateParams->size());
 
     // C++ [temp.func.order]p5:
     //   The presence of unused ellipsis and default arguments has no effect on
@@ -4377,21 +4528,22 @@ static bool isAtLeastAsSpecializedAs(Sema &S,
 }
 
 /// \brief Determine whether this a function template whose parameter-type-list
-/// ends with a function parameter pack.
+/// contains exactly one parameter pack
 static bool isVariadicFunctionTemplate(FunctionTemplateDecl *FunTmpl) {
   FunctionDecl *Function = FunTmpl->getTemplatedDecl();
   unsigned NumParams = Function->getNumParams();
   if (NumParams == 0)
     return false;
 
-  ParmVarDecl *Last = Function->getParamDecl(NumParams - 1);
-  if (!Last->isParameterPack())
-    return false;
+  bool HasParamPack = false;
 
-  // Make sure that no previous parameter is a parameter pack.
-  while (--NumParams > 0) {
-    if (Function->getParamDecl(NumParams - 1)->isParameterPack())
-      return false;
+  // Make sure that there is only one parameter pack
+  for (; NumParams; --NumParams) {
+	  if (Function->getParamDecl(NumParams - 1)->isParameterPack()) {
+		  if (HasParamPack)
+			  return false;
+		  HasParamPack = true;
+	}
   }
 
   return true;
@@ -4440,6 +4592,18 @@ Sema::getMoreSpecializedTemplate(FunctionTemplateDecl *FT1,
   bool Variadic2 = isVariadicFunctionTemplate(FT2);
   if (Variadic1 != Variadic2)
     return Variadic1? FT2 : FT1;
+
+  // If both are variadic function templates, pick the one with more required
+  // arguments
+  if (Variadic1 && Variadic2) {
+	  unsigned MinArgs1 = FT1->getTemplatedDecl()->getMinRequiredArguments();
+	  unsigned MinArgs2 = FT2->getTemplatedDecl()->getMinRequiredArguments();
+
+	  if (MinArgs1 == MinArgs2)
+		  return nullptr;
+
+	  return MinArgs1 > MinArgs2 ? FT1 : FT2;
+  }
 
   return nullptr;
 }

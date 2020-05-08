@@ -1896,6 +1896,7 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
         (void)Actions.CorrectDelayedTyposInExpr(LHS);
         return ExprError();
       }
+      CommaLocsTy CommaLocs;
 
       BalancedDelimiterTracker T(*this, tok::l_square);
       T.consumeOpen();
@@ -1933,7 +1934,6 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
           }
         }
       } else {
-        CommaLocsTy CommaLocs;
         auto RunSignatureHelp = [&]() -> QualType {
           QualType PreferredType = Actions.ProduceCallSignatureHelp(
               getCurScope(), LHS.get(), ArgExprs, T.getOpenLocation());

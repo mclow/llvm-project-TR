@@ -4752,13 +4752,11 @@ Sema::ActOnArraySubscriptExpr(Scope *S, Expr *base, SourceLocation lbLoc,
     return ExprError();
 
   // Build an unanalyzed expression if either operand is type-dependent.
-  /*if (getLangOpts().CPlusPlus &&
+  if (getLangOpts().CPlusPlus && ArgExprs.size() == 1 &&
     (base->isTypeDependent() || Expr::hasAnyTypeDependentArguments(ArgExprs))) {
-      // TODO
-      return ExprError();
-      //return new (Context) ArraySubscriptExpr(base, ArgExprs, Context.DependentTy,
-      //                                       VK_LValue, OK_Ordinary, rbLoc);
-  }*/
+      return new (Context) ArraySubscriptExpr(base, ArgExprs.front(), Context.DependentTy,
+                                              VK_LValue, OK_Ordinary, rbLoc);
+  }
 
   // MSDN, property (C++)
   // https://msdn.microsoft.com/en-us/library/yhfk0thd(v=vs.120).aspx

@@ -4067,7 +4067,7 @@ bool Sema::CheckUnaryExprOrTypeTraitOperand(Expr *E,
   assert(!ExprTy->isReferenceType());
   if (ExprTy->getContainedAutoType() && ExprTy->isUndeducedType()) {
     // FIXME: this needs its own diagnostic message
-    Diag(E->getExprLoc(), diag::err_sizeof_alignof_incomplete_type)
+    Diag(E->getExprLoc(), diag::err_sizeof_alignof_incomplete_or_sizeless_type)
       << ExprKind << ExprTy << E->getSourceRange();
     return true;
   }
@@ -4168,7 +4168,7 @@ bool Sema::CheckUnaryExprOrTypeTraitOperand(QualType ExprType,
   if (ExprType.getCanonicalType()->getContainedAutoType() &&
       ExprType.getCanonicalType()->isUndeducedType()) {
     // FIXME: this needs its own diagnostic message
-    Diag(OpLoc, diag::err_sizeof_alignof_incomplete_type)
+    Diag(OpLoc, diag::err_sizeof_alignof_incomplete_or_sizeless_type)
       << ExprKind << ExprType << ExprRange;
     return true;
   }

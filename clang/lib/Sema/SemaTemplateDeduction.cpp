@@ -4960,7 +4960,7 @@ void Sema::DeduceAutoMemberTypeFromInitExpr(Expr *Init, FieldDecl *FDecl) {
   const Type *DeducedTypePtr =
     DeducedType->getCanonicalTypeUnqualified().getTypePtr();
   if ( Context.isClassTypeUndergoingNSDMIParsing(DeducedTypePtr)) {
-      Diag(FDecl->getLocation(), diag::err_field_incomplete)
+      Diag(FDecl->getLocation(), diag::err_field_incomplete_or_sizeless)
       << DeducedType;
     FDecl->setInvalidDecl();
     FDecl->getParent()->setInvalidDecl();

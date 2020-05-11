@@ -11875,7 +11875,7 @@ void Sema::AddInitializerToDecl(Decl *RealDecl, Expr *Init, bool DirectInit) {
     //
     const Type *DeducedTypePtr = VDecl->getType().getCanonicalType().getTypePtr();
     if (Context.isClassTypeUndergoingNSDMIParsing(DeducedTypePtr)) {
-        Diag(VDecl->getLocation(), diag::err_field_incomplete) << VDecl;
+        Diag(VDecl->getLocation(), diag::err_field_incomplete_or_sizeless) << VDecl;
         VDecl->setInvalidDecl();
         return;
     }

@@ -829,6 +829,14 @@ public:
         __p->~_Tp();
     }
 #endif
+
+    template <class _Up>
+    inline _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_AFTER_CXX17
+    friend bool operator==(const allocator<_Tp>&, const allocator<_Up>&) _NOEXCEPT {return true;}
+
+    template <class _Up>
+    inline _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_AFTER_CXX17
+    friend bool operator!=(const allocator<_Tp>&, const allocator<_Up>&) _NOEXCEPT {return false;}
 };
 
 template <class _Tp>
@@ -906,15 +914,15 @@ public:
         __p->~_Tp();
     }
 #endif
+
+    template <class _Up>
+    inline _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_AFTER_CXX17
+    friend bool operator==(const allocator<const _Tp>&, const allocator<_Up>&) _NOEXCEPT {return true;}
+
+    template <class _Up>
+    inline _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_AFTER_CXX17
+    friend bool operator!=(const allocator<const _Tp>&, const allocator<_Up>&) _NOEXCEPT {return false;}
 };
-
-template <class _Tp, class _Up>
-inline _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_AFTER_CXX17
-bool operator==(const allocator<_Tp>&, const allocator<_Up>&) _NOEXCEPT {return true;}
-
-template <class _Tp, class _Up>
-inline _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_AFTER_CXX17
-bool operator!=(const allocator<_Tp>&, const allocator<_Up>&) _NOEXCEPT {return false;}
 
 template <class _Alloc, class _Ptr>
 _LIBCPP_INLINE_VISIBILITY
@@ -1300,16 +1308,15 @@ public:
     swap(first(), __x.first());
     swap(second(), __x.second());
   }
+
+  inline _LIBCPP_INLINE_VISIBILITY
+  friend void swap(__compressed_pair& __x, __compressed_pair & __y)
+      _NOEXCEPT_(__is_nothrow_swappable<_T1>::value &&
+                 __is_nothrow_swappable<_T2>::value) {
+    __x.swap(__y);
+  }
+
 };
-
-template <class _T1, class _T2>
-inline _LIBCPP_INLINE_VISIBILITY
-void swap(__compressed_pair<_T1, _T2>& __x, __compressed_pair<_T1, _T2>& __y)
-    _NOEXCEPT_(__is_nothrow_swappable<_T1>::value &&
-               __is_nothrow_swappable<_T2>::value) {
-  __x.swap(__y);
-}
-
 // default_delete
 
 template <class _Tp>
@@ -1395,8 +1402,135 @@ struct __unique_ptr_deleter_sfinae<_Deleter&> {
 #  define _LIBCPP_UNIQUE_PTR_TRIVIAL_ABI
 #endif
 
+template <class _T1, class _D1>
+class unique_ptr;
+
+template <class _T1, class _D1>
+class __unique_ptr_base {
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator==(const unique_ptr<_T1, _D1>& __x, nullptr_t) _NOEXCEPT
+    {
+        return !__x;
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator==(nullptr_t, const unique_ptr<_T1, _D1>& __x) _NOEXCEPT
+    {
+        return !__x;
+    }
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator!=(const unique_ptr<_T1, _D1>& __x, nullptr_t) _NOEXCEPT
+    {
+        return static_cast<bool>(__x);
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator!=(nullptr_t, const unique_ptr<_T1, _D1>& __x) _NOEXCEPT
+    {
+        return static_cast<bool>(__x);
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator<(const unique_ptr<_T1, _D1>& __x, nullptr_t)
+    {
+        typedef typename unique_ptr<_T1, _D1>::pointer _P1;
+        return less<_P1>()(__x.get(), nullptr);
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator<(nullptr_t, const unique_ptr<_T1, _D1>& __x)
+    {
+        typedef typename unique_ptr<_T1, _D1>::pointer _P1;
+        return less<_P1>()(nullptr, __x.get());
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator>(const unique_ptr<_T1, _D1>& __x, nullptr_t)
+    {
+        return nullptr < __x;
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator>(nullptr_t, const unique_ptr<_T1, _D1>& __x)
+    {
+        return __x < nullptr;
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator<=(const unique_ptr<_T1, _D1>& __x, nullptr_t)
+    {
+        return !(nullptr < __x);
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator<=(nullptr_t, const unique_ptr<_T1, _D1>& __x)
+    {
+        return !(__x < nullptr);
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator>=(const unique_ptr<_T1, _D1>& __x, nullptr_t)
+    {
+        return !(__x < nullptr);
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator>=(nullptr_t, const unique_ptr<_T1, _D1>& __x)
+    {
+        return !(nullptr < __x);
+    }
+
+    template <class _T2, class _D2>
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator==(const unique_ptr<_T1, _D1>& __x, const unique_ptr<_T2, _D2>& __y) {return __x.get() == __y.get();}
+
+    template <class _T2, class _D2>
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator!=(const unique_ptr<_T1, _D1>& __x, const unique_ptr<_T2, _D2>& __y) {return !(__x == __y);}
+
+    template <class _T2, class _D2>
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator< (const unique_ptr<_T1, _D1>& __x, const unique_ptr<_T2, _D2>& __y)
+    {
+        typedef typename unique_ptr<_T1, _D1>::pointer _P1;
+        typedef typename unique_ptr<_T2, _D2>::pointer _P2;
+        typedef typename common_type<_P1, _P2>::type _Vp;
+        return less<_Vp>()(__x.get(), __y.get());
+    }
+
+    template <class _T2, class _D2>
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator> (const unique_ptr<_T1, _D1>& __x, const unique_ptr<_T2, _D2>& __y) {return __y < __x;}
+
+    template <class _T2, class _D2>
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator<=(const unique_ptr<_T1, _D1>& __x, const unique_ptr<_T2, _D2>& __y) {return !(__y < __x);}
+
+    template <class _T2, class _D2>
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator>=(const unique_ptr<_T1, _D1>& __x, const unique_ptr<_T2, _D2>& __y) {return !(__x < __y);}
+};
+
 template <class _Tp, class _Dp = default_delete<_Tp> >
-class _LIBCPP_UNIQUE_PTR_TRIVIAL_ABI _LIBCPP_TEMPLATE_VIS unique_ptr {
+class _LIBCPP_UNIQUE_PTR_TRIVIAL_ABI _LIBCPP_TEMPLATE_VIS unique_ptr : __unique_ptr_base<_Tp, _Dp> {
 public:
   typedef _Tp element_type;
   typedef _Dp deleter_type;
@@ -1604,7 +1738,7 @@ public:
 
 
 template <class _Tp, class _Dp>
-class _LIBCPP_UNIQUE_PTR_TRIVIAL_ABI _LIBCPP_TEMPLATE_VIS unique_ptr<_Tp[], _Dp> {
+class _LIBCPP_UNIQUE_PTR_TRIVIAL_ABI _LIBCPP_TEMPLATE_VIS unique_ptr<_Tp[], _Dp> : __unique_ptr_base<_Tp[], _Dp> {
 public:
   typedef _Tp element_type;
   typedef _Dp deleter_type;
@@ -1836,147 +1970,14 @@ public:
 
 };
 
-template <class _Tp, class _Dp>
+
+template <class _T1, typename _D1>
 inline _LIBCPP_INLINE_VISIBILITY
 typename enable_if<
-    __is_swappable<_Dp>::value,
+    __is_swappable<_D1>::value,
     void
 >::type
-swap(unique_ptr<_Tp, _Dp>& __x, unique_ptr<_Tp, _Dp>& __y) _NOEXCEPT {__x.swap(__y);}
-
-template <class _T1, class _D1, class _T2, class _D2>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator==(const unique_ptr<_T1, _D1>& __x, const unique_ptr<_T2, _D2>& __y) {return __x.get() == __y.get();}
-
-template <class _T1, class _D1, class _T2, class _D2>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator!=(const unique_ptr<_T1, _D1>& __x, const unique_ptr<_T2, _D2>& __y) {return !(__x == __y);}
-
-template <class _T1, class _D1, class _T2, class _D2>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator< (const unique_ptr<_T1, _D1>& __x, const unique_ptr<_T2, _D2>& __y)
-{
-    typedef typename unique_ptr<_T1, _D1>::pointer _P1;
-    typedef typename unique_ptr<_T2, _D2>::pointer _P2;
-    typedef typename common_type<_P1, _P2>::type _Vp;
-    return less<_Vp>()(__x.get(), __y.get());
-}
-
-template <class _T1, class _D1, class _T2, class _D2>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator> (const unique_ptr<_T1, _D1>& __x, const unique_ptr<_T2, _D2>& __y) {return __y < __x;}
-
-template <class _T1, class _D1, class _T2, class _D2>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator<=(const unique_ptr<_T1, _D1>& __x, const unique_ptr<_T2, _D2>& __y) {return !(__y < __x);}
-
-template <class _T1, class _D1, class _T2, class _D2>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator>=(const unique_ptr<_T1, _D1>& __x, const unique_ptr<_T2, _D2>& __y) {return !(__x < __y);}
-
-template <class _T1, class _D1>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator==(const unique_ptr<_T1, _D1>& __x, nullptr_t) _NOEXCEPT
-{
-    return !__x;
-}
-
-template <class _T1, class _D1>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator==(nullptr_t, const unique_ptr<_T1, _D1>& __x) _NOEXCEPT
-{
-    return !__x;
-}
-
-template <class _T1, class _D1>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator!=(const unique_ptr<_T1, _D1>& __x, nullptr_t) _NOEXCEPT
-{
-    return static_cast<bool>(__x);
-}
-
-template <class _T1, class _D1>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator!=(nullptr_t, const unique_ptr<_T1, _D1>& __x) _NOEXCEPT
-{
-    return static_cast<bool>(__x);
-}
-
-template <class _T1, class _D1>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator<(const unique_ptr<_T1, _D1>& __x, nullptr_t)
-{
-    typedef typename unique_ptr<_T1, _D1>::pointer _P1;
-    return less<_P1>()(__x.get(), nullptr);
-}
-
-template <class _T1, class _D1>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator<(nullptr_t, const unique_ptr<_T1, _D1>& __x)
-{
-    typedef typename unique_ptr<_T1, _D1>::pointer _P1;
-    return less<_P1>()(nullptr, __x.get());
-}
-
-template <class _T1, class _D1>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator>(const unique_ptr<_T1, _D1>& __x, nullptr_t)
-{
-    return nullptr < __x;
-}
-
-template <class _T1, class _D1>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator>(nullptr_t, const unique_ptr<_T1, _D1>& __x)
-{
-    return __x < nullptr;
-}
-
-template <class _T1, class _D1>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator<=(const unique_ptr<_T1, _D1>& __x, nullptr_t)
-{
-    return !(nullptr < __x);
-}
-
-template <class _T1, class _D1>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator<=(nullptr_t, const unique_ptr<_T1, _D1>& __x)
-{
-    return !(__x < nullptr);
-}
-
-template <class _T1, class _D1>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator>=(const unique_ptr<_T1, _D1>& __x, nullptr_t)
-{
-    return !(__x < nullptr);
-}
-
-template <class _T1, class _D1>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator>=(nullptr_t, const unique_ptr<_T1, _D1>& __x)
-{
-    return !(nullptr < __x);
-}
+swap(unique_ptr<_T1, _D1>& __x, unique_ptr<_T1, _D1>& __y) _NOEXCEPT {__x.swap(__y);}
 
 #if _LIBCPP_STD_VER > 11
 
@@ -2895,6 +2896,153 @@ private:
 
     template <class _Up> friend class _LIBCPP_TEMPLATE_VIS shared_ptr;
     template <class _Up> friend class _LIBCPP_TEMPLATE_VIS weak_ptr;
+
+
+    template <class _Up>
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator==(const shared_ptr<_Tp>& __x, const shared_ptr<_Up>& __y) _NOEXCEPT
+    {
+        return __x.get() == __y.get();
+    }
+
+    template <class _Up>
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator!=(const shared_ptr<_Tp>& __x, const shared_ptr<_Up>& __y) _NOEXCEPT
+    {
+        return !(__x == __y);
+    }
+
+    template <class _Up>
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator<(const shared_ptr<_Tp>& __x, const shared_ptr<_Up>& __y) _NOEXCEPT
+    {
+    #if _LIBCPP_STD_VER <= 11
+        typedef typename common_type<_Tp*, _Up*>::type _Vp;
+        return less<_Vp>()(__x.get(), __y.get());
+    #else
+        return less<>()(__x.get(), __y.get());
+    #endif
+
+    }
+
+    template <class _Up>
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator>(const shared_ptr<_Tp>& __x, const shared_ptr<_Up>& __y) _NOEXCEPT
+    {
+        return __y < __x;
+    }
+
+    template <class _Up>
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator<=(const shared_ptr<_Tp>& __x, const shared_ptr<_Up>& __y) _NOEXCEPT
+    {
+        return !(__y < __x);
+    }
+
+    template <class _Up>
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator>=(const shared_ptr<_Tp>& __x, const shared_ptr<_Up>& __y) _NOEXCEPT
+    {
+        return !(__x < __y);
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator==(const shared_ptr<_Tp>& __x, nullptr_t) _NOEXCEPT
+    {
+        return !__x;
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator==(nullptr_t, const shared_ptr<_Tp>& __x) _NOEXCEPT
+    {
+        return !__x;
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator!=(const shared_ptr<_Tp>& __x, nullptr_t) _NOEXCEPT
+    {
+        return static_cast<bool>(__x);
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator!=(nullptr_t, const shared_ptr<_Tp>& __x) _NOEXCEPT
+    {
+        return static_cast<bool>(__x);
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator<(const shared_ptr<_Tp>& __x, nullptr_t) _NOEXCEPT
+    {
+        return less<_Tp*>()(__x.get(), nullptr);
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator<(nullptr_t, const shared_ptr<_Tp>& __x) _NOEXCEPT
+    {
+        return less<_Tp*>()(nullptr, __x.get());
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator>(const shared_ptr<_Tp>& __x, nullptr_t) _NOEXCEPT
+    {
+        return nullptr < __x;
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator>(nullptr_t, const shared_ptr<_Tp>& __x) _NOEXCEPT
+    {
+        return __x < nullptr;
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator<=(const shared_ptr<_Tp>& __x, nullptr_t) _NOEXCEPT
+    {
+        return !(nullptr < __x);
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator<=(nullptr_t, const shared_ptr<_Tp>& __x) _NOEXCEPT
+    {
+        return !(__x < nullptr);
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator>=(const shared_ptr<_Tp>& __x, nullptr_t) _NOEXCEPT
+    {
+        return !(__x < nullptr);
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool
+    operator>=(nullptr_t, const shared_ptr<_Tp>& __x) _NOEXCEPT
+    {
+        return !(nullptr < __x);
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend void
+    swap(shared_ptr<_Tp>& __x, shared_ptr<_Tp>& __y) _NOEXCEPT
+    {
+        __x.swap(__y);
+    }
+
 };
 
 #ifndef _LIBCPP_HAS_NO_DEDUCTION_GUIDES
@@ -3345,164 +3493,6 @@ shared_ptr<_Tp> make_shared(_Args&& ...__args)
 
 template<class _Tp, class _Up>
 inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator==(const shared_ptr<_Tp>& __x, const shared_ptr<_Up>& __y) _NOEXCEPT
-{
-    return __x.get() == __y.get();
-}
-
-template<class _Tp, class _Up>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator!=(const shared_ptr<_Tp>& __x, const shared_ptr<_Up>& __y) _NOEXCEPT
-{
-    return !(__x == __y);
-}
-
-template<class _Tp, class _Up>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator<(const shared_ptr<_Tp>& __x, const shared_ptr<_Up>& __y) _NOEXCEPT
-{
-#if _LIBCPP_STD_VER <= 11
-    typedef typename common_type<_Tp*, _Up*>::type _Vp;
-    return less<_Vp>()(__x.get(), __y.get());
-#else
-    return less<>()(__x.get(), __y.get());
-#endif
-
-}
-
-template<class _Tp, class _Up>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator>(const shared_ptr<_Tp>& __x, const shared_ptr<_Up>& __y) _NOEXCEPT
-{
-    return __y < __x;
-}
-
-template<class _Tp, class _Up>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator<=(const shared_ptr<_Tp>& __x, const shared_ptr<_Up>& __y) _NOEXCEPT
-{
-    return !(__y < __x);
-}
-
-template<class _Tp, class _Up>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator>=(const shared_ptr<_Tp>& __x, const shared_ptr<_Up>& __y) _NOEXCEPT
-{
-    return !(__x < __y);
-}
-
-template<class _Tp>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator==(const shared_ptr<_Tp>& __x, nullptr_t) _NOEXCEPT
-{
-    return !__x;
-}
-
-template<class _Tp>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator==(nullptr_t, const shared_ptr<_Tp>& __x) _NOEXCEPT
-{
-    return !__x;
-}
-
-template<class _Tp>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator!=(const shared_ptr<_Tp>& __x, nullptr_t) _NOEXCEPT
-{
-    return static_cast<bool>(__x);
-}
-
-template<class _Tp>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator!=(nullptr_t, const shared_ptr<_Tp>& __x) _NOEXCEPT
-{
-    return static_cast<bool>(__x);
-}
-
-template<class _Tp>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator<(const shared_ptr<_Tp>& __x, nullptr_t) _NOEXCEPT
-{
-    return less<_Tp*>()(__x.get(), nullptr);
-}
-
-template<class _Tp>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator<(nullptr_t, const shared_ptr<_Tp>& __x) _NOEXCEPT
-{
-    return less<_Tp*>()(nullptr, __x.get());
-}
-
-template<class _Tp>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator>(const shared_ptr<_Tp>& __x, nullptr_t) _NOEXCEPT
-{
-    return nullptr < __x;
-}
-
-template<class _Tp>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator>(nullptr_t, const shared_ptr<_Tp>& __x) _NOEXCEPT
-{
-    return __x < nullptr;
-}
-
-template<class _Tp>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator<=(const shared_ptr<_Tp>& __x, nullptr_t) _NOEXCEPT
-{
-    return !(nullptr < __x);
-}
-
-template<class _Tp>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator<=(nullptr_t, const shared_ptr<_Tp>& __x) _NOEXCEPT
-{
-    return !(__x < nullptr);
-}
-
-template<class _Tp>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator>=(const shared_ptr<_Tp>& __x, nullptr_t) _NOEXCEPT
-{
-    return !(__x < nullptr);
-}
-
-template<class _Tp>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator>=(nullptr_t, const shared_ptr<_Tp>& __x) _NOEXCEPT
-{
-    return !(nullptr < __x);
-}
-
-template<class _Tp>
-inline _LIBCPP_INLINE_VISIBILITY
-void
-swap(shared_ptr<_Tp>& __x, shared_ptr<_Tp>& __y) _NOEXCEPT
-{
-    __x.swap(__y);
-}
-
-template<class _Tp, class _Up>
-inline _LIBCPP_INLINE_VISIBILITY
 shared_ptr<_Tp>
 static_pointer_cast(const shared_ptr<_Up>& __r) _NOEXCEPT
 {
@@ -3632,6 +3622,14 @@ public:
 
     template <class _Up> friend class _LIBCPP_TEMPLATE_VIS weak_ptr;
     template <class _Up> friend class _LIBCPP_TEMPLATE_VIS shared_ptr;
+
+
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend void
+    swap(weak_ptr<_Tp>& __x, weak_ptr<_Tp>& __y) _NOEXCEPT
+    {
+        __x.swap(__y);
+    }
 };
 
 #ifndef _LIBCPP_HAS_NO_DEDUCTION_GUIDES
@@ -3781,14 +3779,6 @@ weak_ptr<_Tp>::swap(weak_ptr& __r) _NOEXCEPT
 {
     _VSTD::swap(__ptr_, __r.__ptr_);
     _VSTD::swap(__cntrl_, __r.__cntrl_);
-}
-
-template<class _Tp>
-inline _LIBCPP_INLINE_VISIBILITY
-void
-swap(weak_ptr<_Tp>& __x, weak_ptr<_Tp>& __y) _NOEXCEPT
-{
-    __x.swap(__y);
 }
 
 template<class _Tp>

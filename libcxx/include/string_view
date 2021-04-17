@@ -643,178 +643,66 @@ public:
     { return find(__s) != npos; }
 #endif
 
+    // [string.view.comparison]
+    // operator ==
+    _LIBCPP_CONSTEXPR_AFTER_CXX11 _LIBCPP_INLINE_VISIBILITY friend
+    bool operator==(basic_string_view __lhs,
+                    basic_string_view __rhs) _NOEXCEPT
+    {
+        if ( __lhs.size() != __rhs.size()) return false;
+        return __lhs.compare(__rhs) == 0;
+    }
+
+    // operator !=
+    _LIBCPP_CONSTEXPR_AFTER_CXX11 _LIBCPP_INLINE_VISIBILITY friend
+    bool operator!=(basic_string_view __lhs, basic_string_view __rhs) _NOEXCEPT
+    {
+        if ( __lhs.size() != __rhs.size())
+            return true;
+        return __lhs.compare(__rhs) != 0;
+    }
+
+    // operator <
+    _LIBCPP_CONSTEXPR_AFTER_CXX11 _LIBCPP_INLINE_VISIBILITY friend
+    bool operator<(basic_string_view __lhs, basic_string_view __rhs) _NOEXCEPT
+    {
+        return __lhs.compare(__rhs) < 0;
+    }
+
+    // operator >
+    _LIBCPP_CONSTEXPR_AFTER_CXX11 _LIBCPP_INLINE_VISIBILITY friend
+    bool operator> (basic_string_view __lhs, basic_string_view __rhs) _NOEXCEPT
+    {
+        return __lhs.compare(__rhs) > 0;
+    }
+
+    // operator <=
+    _LIBCPP_CONSTEXPR_AFTER_CXX11 _LIBCPP_INLINE_VISIBILITY friend
+    bool operator<=(basic_string_view<_CharT, _Traits> __lhs, basic_string_view __rhs) _NOEXCEPT
+    {
+        return __lhs.compare(__rhs) <= 0;
+    }
+
+
+    // operator >=
+    _LIBCPP_CONSTEXPR_AFTER_CXX11 _LIBCPP_INLINE_VISIBILITY friend
+    bool operator>=(basic_string_view __lhs, basic_string_view __rhs) _NOEXCEPT
+    {
+        return __lhs.compare(__rhs) >= 0;
+    }
+
+    template <class charT, class traits>
+    friend basic_ostream<charT, traits>&
+            operator<<(basic_ostream<charT, traits>& __os, basic_string_view<charT, traits> __str);
+
+
 private:
     const   value_type* __data;
     size_type           __size;
 };
 
 
-// [string.view.comparison]
-// operator ==
-template<class _CharT, class _Traits>
-_LIBCPP_CONSTEXPR_AFTER_CXX11 _LIBCPP_INLINE_VISIBILITY
-bool operator==(basic_string_view<_CharT, _Traits> __lhs,
-                basic_string_view<_CharT, _Traits> __rhs) _NOEXCEPT
-{
-    if ( __lhs.size() != __rhs.size()) return false;
-    return __lhs.compare(__rhs) == 0;
-}
 
-template<class _CharT, class _Traits>
-_LIBCPP_CONSTEXPR_AFTER_CXX11 _LIBCPP_INLINE_VISIBILITY
-bool operator==(basic_string_view<_CharT, _Traits> __lhs,
-                typename common_type<basic_string_view<_CharT, _Traits> >::type __rhs) _NOEXCEPT
-{
-    if ( __lhs.size() != __rhs.size()) return false;
-    return __lhs.compare(__rhs) == 0;
-}
-
-template<class _CharT, class _Traits>
-_LIBCPP_CONSTEXPR_AFTER_CXX11 _LIBCPP_INLINE_VISIBILITY
-bool operator==(typename common_type<basic_string_view<_CharT, _Traits> >::type __lhs,
-                basic_string_view<_CharT, _Traits> __rhs) _NOEXCEPT
-{
-    if ( __lhs.size() != __rhs.size()) return false;
-    return __lhs.compare(__rhs) == 0;
-}
-
-
-// operator !=
-template<class _CharT, class _Traits>
-_LIBCPP_CONSTEXPR_AFTER_CXX11 _LIBCPP_INLINE_VISIBILITY
-bool operator!=(basic_string_view<_CharT, _Traits> __lhs, basic_string_view<_CharT, _Traits> __rhs) _NOEXCEPT
-{
-    if ( __lhs.size() != __rhs.size())
-        return true;
-    return __lhs.compare(__rhs) != 0;
-}
-
-template<class _CharT, class _Traits>
-_LIBCPP_CONSTEXPR_AFTER_CXX11 _LIBCPP_INLINE_VISIBILITY
-bool operator!=(basic_string_view<_CharT, _Traits> __lhs,
-                typename common_type<basic_string_view<_CharT, _Traits> >::type __rhs) _NOEXCEPT
-{
-    if ( __lhs.size() != __rhs.size())
-        return true;
-    return __lhs.compare(__rhs) != 0;
-}
-
-template<class _CharT, class _Traits>
-_LIBCPP_CONSTEXPR_AFTER_CXX11 _LIBCPP_INLINE_VISIBILITY
-bool operator!=(typename common_type<basic_string_view<_CharT, _Traits> >::type __lhs,
-                basic_string_view<_CharT, _Traits> __rhs) _NOEXCEPT
-{
-    if ( __lhs.size() != __rhs.size())
-        return true;
-    return __lhs.compare(__rhs) != 0;
-}
-
-
-// operator <
-template<class _CharT, class _Traits>
-_LIBCPP_CONSTEXPR_AFTER_CXX11 _LIBCPP_INLINE_VISIBILITY
-bool operator<(basic_string_view<_CharT, _Traits> __lhs, basic_string_view<_CharT, _Traits> __rhs) _NOEXCEPT
-{
-    return __lhs.compare(__rhs) < 0;
-}
-
-template<class _CharT, class _Traits>
-_LIBCPP_CONSTEXPR_AFTER_CXX11 _LIBCPP_INLINE_VISIBILITY
-bool operator<(basic_string_view<_CharT, _Traits> __lhs,
-                typename common_type<basic_string_view<_CharT, _Traits> >::type __rhs) _NOEXCEPT
-{
-    return __lhs.compare(__rhs) < 0;
-}
-
-template<class _CharT, class _Traits>
-_LIBCPP_CONSTEXPR_AFTER_CXX11 _LIBCPP_INLINE_VISIBILITY
-bool operator<(typename common_type<basic_string_view<_CharT, _Traits> >::type __lhs,
-                basic_string_view<_CharT, _Traits> __rhs) _NOEXCEPT
-{
-    return __lhs.compare(__rhs) < 0;
-}
-
-
-// operator >
-template<class _CharT, class _Traits>
-_LIBCPP_CONSTEXPR_AFTER_CXX11 _LIBCPP_INLINE_VISIBILITY
-bool operator> (basic_string_view<_CharT, _Traits> __lhs, basic_string_view<_CharT, _Traits> __rhs) _NOEXCEPT
-{
-    return __lhs.compare(__rhs) > 0;
-}
-
-template<class _CharT, class _Traits>
-_LIBCPP_CONSTEXPR_AFTER_CXX11 _LIBCPP_INLINE_VISIBILITY
-bool operator>(basic_string_view<_CharT, _Traits> __lhs,
-                typename common_type<basic_string_view<_CharT, _Traits> >::type __rhs) _NOEXCEPT
-{
-    return __lhs.compare(__rhs) > 0;
-}
-
-template<class _CharT, class _Traits>
-_LIBCPP_CONSTEXPR_AFTER_CXX11 _LIBCPP_INLINE_VISIBILITY
-bool operator>(typename common_type<basic_string_view<_CharT, _Traits> >::type __lhs,
-                basic_string_view<_CharT, _Traits> __rhs) _NOEXCEPT
-{
-    return __lhs.compare(__rhs) > 0;
-}
-
-
-// operator <=
-template<class _CharT, class _Traits>
-_LIBCPP_CONSTEXPR_AFTER_CXX11 _LIBCPP_INLINE_VISIBILITY
-bool operator<=(basic_string_view<_CharT, _Traits> __lhs, basic_string_view<_CharT, _Traits> __rhs) _NOEXCEPT
-{
-    return __lhs.compare(__rhs) <= 0;
-}
-
-template<class _CharT, class _Traits>
-_LIBCPP_CONSTEXPR_AFTER_CXX11 _LIBCPP_INLINE_VISIBILITY
-bool operator<=(basic_string_view<_CharT, _Traits> __lhs,
-                typename common_type<basic_string_view<_CharT, _Traits> >::type __rhs) _NOEXCEPT
-{
-    return __lhs.compare(__rhs) <= 0;
-}
-
-template<class _CharT, class _Traits>
-_LIBCPP_CONSTEXPR_AFTER_CXX11 _LIBCPP_INLINE_VISIBILITY
-bool operator<=(typename common_type<basic_string_view<_CharT, _Traits> >::type __lhs,
-                basic_string_view<_CharT, _Traits> __rhs) _NOEXCEPT
-{
-    return __lhs.compare(__rhs) <= 0;
-}
-
-
-// operator >=
-template<class _CharT, class _Traits>
-_LIBCPP_CONSTEXPR_AFTER_CXX11 _LIBCPP_INLINE_VISIBILITY
-bool operator>=(basic_string_view<_CharT, _Traits> __lhs, basic_string_view<_CharT, _Traits> __rhs) _NOEXCEPT
-{
-    return __lhs.compare(__rhs) >= 0;
-}
-
-
-template<class _CharT, class _Traits>
-_LIBCPP_CONSTEXPR_AFTER_CXX11 _LIBCPP_INLINE_VISIBILITY
-bool operator>=(basic_string_view<_CharT, _Traits> __lhs,
-                typename common_type<basic_string_view<_CharT, _Traits> >::type __rhs) _NOEXCEPT
-{
-    return __lhs.compare(__rhs) >= 0;
-}
-
-template<class _CharT, class _Traits>
-_LIBCPP_CONSTEXPR_AFTER_CXX11 _LIBCPP_INLINE_VISIBILITY
-bool operator>=(typename common_type<basic_string_view<_CharT, _Traits> >::type __lhs,
-                basic_string_view<_CharT, _Traits> __rhs) _NOEXCEPT
-{
-    return __lhs.compare(__rhs) >= 0;
-}
-
-
-template<class _CharT, class _Traits>
-basic_ostream<_CharT, _Traits>&
-operator<<(basic_ostream<_CharT, _Traits>& __os,
-           basic_string_view<_CharT, _Traits> __str);
 
 // [string.view.hash]
 template<class _CharT>

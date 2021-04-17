@@ -1436,6 +1436,81 @@ public:
     __impl.__swap(__that.__impl);
   }
 
+    template <class _Operator>
+    struct __convert_to_bool {
+      template <class _T1, class _T2>
+      _LIBCPP_INLINE_VISIBILITY constexpr bool operator()(_T1 && __t1, _T2&& __t2) const {
+        static_assert(is_convertible<decltype(_Operator{}(_VSTD::forward<_T1>(__t1), _VSTD::forward<_T2>(__t2))), bool>::value,
+            "the relational operator does not return a type which is implicitly convertible to bool");
+        return _Operator{}(_VSTD::forward<_T1>(__t1), _VSTD::forward<_T2>(__t2));
+      }
+    };
+
+    inline _LIBCPP_INLINE_VISIBILITY friend
+    constexpr bool operator==(const variant& __lhs,
+                              const variant& __rhs) {
+      using __variant_detail::__visitation::__variant;
+      if (__lhs.index() != __rhs.index()) return false;
+      if (__lhs.valueless_by_exception()) return true;
+      return __variant::__visit_value_at(__lhs.index(), __convert_to_bool<equal_to<>>{}, __lhs, __rhs);
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY friend
+    constexpr bool operator!=(const variant& __lhs,
+                              const variant& __rhs) {
+      using __variant_detail::__visitation::__variant;
+      if (__lhs.index() != __rhs.index()) return true;
+      if (__lhs.valueless_by_exception()) return false;
+      return __variant::__visit_value_at(
+          __lhs.index(), __convert_to_bool<not_equal_to<>>{}, __lhs, __rhs);
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY friend
+    constexpr bool operator<(const variant& __lhs,
+                             const variant& __rhs) {
+      using __variant_detail::__visitation::__variant;
+      if (__rhs.valueless_by_exception()) return false;
+      if (__lhs.valueless_by_exception()) return true;
+      if (__lhs.index() < __rhs.index()) return true;
+      if (__lhs.index() > __rhs.index()) return false;
+      return __variant::__visit_value_at(__lhs.index(), __convert_to_bool<less<>>{}, __lhs, __rhs);
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY friend
+    constexpr bool operator>(const variant& __lhs,
+                             const variant& __rhs) {
+      using __variant_detail::__visitation::__variant;
+      if (__lhs.valueless_by_exception()) return false;
+      if (__rhs.valueless_by_exception()) return true;
+      if (__lhs.index() > __rhs.index()) return true;
+      if (__lhs.index() < __rhs.index()) return false;
+      return __variant::__visit_value_at(__lhs.index(), __convert_to_bool<greater<>>{}, __lhs, __rhs);
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY friend
+    constexpr bool operator<=(const variant& __lhs,
+                              const variant& __rhs) {
+      using __variant_detail::__visitation::__variant;
+      if (__lhs.valueless_by_exception()) return true;
+      if (__rhs.valueless_by_exception()) return false;
+      if (__lhs.index() < __rhs.index()) return true;
+      if (__lhs.index() > __rhs.index()) return false;
+      return __variant::__visit_value_at(
+          __lhs.index(), __convert_to_bool<less_equal<>>{}, __lhs, __rhs);
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY friend
+    constexpr bool operator>=(const variant& __lhs,
+                              const variant& __rhs) {
+      using __variant_detail::__visitation::__variant;
+      if (__rhs.valueless_by_exception()) return true;
+      if (__lhs.valueless_by_exception()) return false;
+      if (__lhs.index() > __rhs.index()) return true;
+      if (__lhs.index() < __rhs.index()) return false;
+      return __variant::__visit_value_at(
+          __lhs.index(), __convert_to_bool<greater_equal<>>{}, __lhs, __rhs);
+    }
+
 private:
   __variant_detail::__impl<_Types...> __impl;
 
@@ -1583,86 +1658,7 @@ get_if(const variant<_Types...>* __v) noexcept {
   return _VSTD::get_if<__find_exactly_one_t<_Tp, _Types...>::value>(__v);
 }
 
-template <class _Operator>
-struct __convert_to_bool {
-  template <class _T1, class _T2>
-  _LIBCPP_INLINE_VISIBILITY constexpr bool operator()(_T1 && __t1, _T2&& __t2) const {
-    static_assert(is_convertible<decltype(_Operator{}(_VSTD::forward<_T1>(__t1), _VSTD::forward<_T2>(__t2))), bool>::value,
-        "the relational operator does not return a type which is implicitly convertible to bool");
-    return _Operator{}(_VSTD::forward<_T1>(__t1), _VSTD::forward<_T2>(__t2));
-  }
-};
 
-template <class... _Types>
-inline _LIBCPP_INLINE_VISIBILITY
-constexpr bool operator==(const variant<_Types...>& __lhs,
-                          const variant<_Types...>& __rhs) {
-  using __variant_detail::__visitation::__variant;
-  if (__lhs.index() != __rhs.index()) return false;
-  if (__lhs.valueless_by_exception()) return true;
-  return __variant::__visit_value_at(__lhs.index(), __convert_to_bool<equal_to<>>{}, __lhs, __rhs);
-}
-
-template <class... _Types>
-inline _LIBCPP_INLINE_VISIBILITY
-constexpr bool operator!=(const variant<_Types...>& __lhs,
-                          const variant<_Types...>& __rhs) {
-  using __variant_detail::__visitation::__variant;
-  if (__lhs.index() != __rhs.index()) return true;
-  if (__lhs.valueless_by_exception()) return false;
-  return __variant::__visit_value_at(
-      __lhs.index(), __convert_to_bool<not_equal_to<>>{}, __lhs, __rhs);
-}
-
-template <class... _Types>
-inline _LIBCPP_INLINE_VISIBILITY
-constexpr bool operator<(const variant<_Types...>& __lhs,
-                         const variant<_Types...>& __rhs) {
-  using __variant_detail::__visitation::__variant;
-  if (__rhs.valueless_by_exception()) return false;
-  if (__lhs.valueless_by_exception()) return true;
-  if (__lhs.index() < __rhs.index()) return true;
-  if (__lhs.index() > __rhs.index()) return false;
-  return __variant::__visit_value_at(__lhs.index(), __convert_to_bool<less<>>{}, __lhs, __rhs);
-}
-
-template <class... _Types>
-inline _LIBCPP_INLINE_VISIBILITY
-constexpr bool operator>(const variant<_Types...>& __lhs,
-                         const variant<_Types...>& __rhs) {
-  using __variant_detail::__visitation::__variant;
-  if (__lhs.valueless_by_exception()) return false;
-  if (__rhs.valueless_by_exception()) return true;
-  if (__lhs.index() > __rhs.index()) return true;
-  if (__lhs.index() < __rhs.index()) return false;
-  return __variant::__visit_value_at(__lhs.index(), __convert_to_bool<greater<>>{}, __lhs, __rhs);
-}
-
-template <class... _Types>
-inline _LIBCPP_INLINE_VISIBILITY
-constexpr bool operator<=(const variant<_Types...>& __lhs,
-                          const variant<_Types...>& __rhs) {
-  using __variant_detail::__visitation::__variant;
-  if (__lhs.valueless_by_exception()) return true;
-  if (__rhs.valueless_by_exception()) return false;
-  if (__lhs.index() < __rhs.index()) return true;
-  if (__lhs.index() > __rhs.index()) return false;
-  return __variant::__visit_value_at(
-      __lhs.index(), __convert_to_bool<less_equal<>>{}, __lhs, __rhs);
-}
-
-template <class... _Types>
-inline _LIBCPP_INLINE_VISIBILITY
-constexpr bool operator>=(const variant<_Types...>& __lhs,
-                          const variant<_Types...>& __rhs) {
-  using __variant_detail::__visitation::__variant;
-  if (__rhs.valueless_by_exception()) return true;
-  if (__lhs.valueless_by_exception()) return false;
-  if (__lhs.index() > __rhs.index()) return true;
-  if (__lhs.index() < __rhs.index()) return false;
-  return __variant::__visit_value_at(
-      __lhs.index(), __convert_to_bool<greater_equal<>>{}, __lhs, __rhs);
-}
 
 template <class... _Vs>
 inline _LIBCPP_INLINE_VISIBILITY

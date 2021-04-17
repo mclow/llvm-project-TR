@@ -229,6 +229,50 @@ struct _LIBCPP_TEMPLATE_VIS array
     value_type* data() _NOEXCEPT {return __elems_;}
     _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_AFTER_CXX14
     const value_type* data() const _NOEXCEPT {return __elems_;}
+
+
+    friend inline _LIBCPP_INLINE_VISIBILITY
+    _LIBCPP_CONSTEXPR_AFTER_CXX17 bool
+    operator==(const array& __x, const array& __y)
+    {
+        return _VSTD::equal(__x.begin(), __x.end(), __y.begin());
+    }
+
+    friend inline _LIBCPP_INLINE_VISIBILITY
+    _LIBCPP_CONSTEXPR_AFTER_CXX17 bool
+    operator!=(const array& __x, const array& __y)
+    {
+        return !(__x == __y);
+    }
+
+    friend inline _LIBCPP_INLINE_VISIBILITY
+    _LIBCPP_CONSTEXPR_AFTER_CXX17 bool
+    operator<(const array& __x, const array& __y)
+    {
+        return _VSTD::lexicographical_compare(__x.begin(), __x.end(),
+                                              __y.begin(), __y.end());
+    }
+
+    friend inline _LIBCPP_INLINE_VISIBILITY
+    _LIBCPP_CONSTEXPR_AFTER_CXX17 bool
+    operator>(const array& __x, const array& __y)
+    {
+        return __y < __x;
+    }
+
+    friend inline _LIBCPP_INLINE_VISIBILITY
+    _LIBCPP_CONSTEXPR_AFTER_CXX17 bool
+    operator<=(const array& __x, const array& __y)
+    {
+        return !(__y < __x);
+    }
+
+    friend inline _LIBCPP_INLINE_VISIBILITY
+    _LIBCPP_CONSTEXPR_AFTER_CXX17 bool
+    operator>=(const array& __x, const array& __y)
+    {
+        return !(__x < __y);
+    }
 };
 
 template <class _Tp>
@@ -356,6 +400,53 @@ struct _LIBCPP_TEMPLATE_VIS array<_Tp, 0>
       _LIBCPP_ASSERT(false, "cannot call array<T, 0>::back() on a zero-sized array");
       _LIBCPP_UNREACHABLE();
     }
+
+    friend inline _LIBCPP_INLINE_VISIBILITY
+    _LIBCPP_CONSTEXPR_AFTER_CXX17 bool
+    operator==(const array&, const array&)
+    {
+        return true;
+    }
+
+    friend inline _LIBCPP_INLINE_VISIBILITY
+    _LIBCPP_CONSTEXPR_AFTER_CXX17 bool
+    operator!=(const array&, const array&)
+    {
+        return false;
+    }
+
+    friend inline _LIBCPP_INLINE_VISIBILITY
+    _LIBCPP_CONSTEXPR_AFTER_CXX17 bool
+    operator<(const array&, const array&)
+    {
+        return false;
+    }
+
+    friend inline _LIBCPP_INLINE_VISIBILITY
+    _LIBCPP_CONSTEXPR_AFTER_CXX17 bool
+    operator>(const array&, const array&)
+    {
+        return false;
+    }
+
+    friend inline _LIBCPP_INLINE_VISIBILITY
+    _LIBCPP_CONSTEXPR_AFTER_CXX17 bool
+    operator<=(const array&, const array&)
+    {
+        return true;
+    }
+
+    friend inline _LIBCPP_INLINE_VISIBILITY
+    _LIBCPP_CONSTEXPR_AFTER_CXX17 bool
+    operator>=(const array&, const array&)
+    {
+        return true;
+    }
+
+    /*friend inline _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_AFTER_CXX17
+    void
+    swap(array&, array&) noexcept
+    {}*/
 };
 
 
@@ -366,55 +457,6 @@ template<class _Tp, class... _Args,
 array(_Tp, _Args...)
   -> array<_Tp, 1 + sizeof...(_Args)>;
 #endif
-
-template <class _Tp, size_t _Size>
-inline _LIBCPP_INLINE_VISIBILITY
-_LIBCPP_CONSTEXPR_AFTER_CXX17 bool
-operator==(const array<_Tp, _Size>& __x, const array<_Tp, _Size>& __y)
-{
-    return _VSTD::equal(__x.begin(), __x.end(), __y.begin());
-}
-
-template <class _Tp, size_t _Size>
-inline _LIBCPP_INLINE_VISIBILITY
-_LIBCPP_CONSTEXPR_AFTER_CXX17 bool
-operator!=(const array<_Tp, _Size>& __x, const array<_Tp, _Size>& __y)
-{
-    return !(__x == __y);
-}
-
-template <class _Tp, size_t _Size>
-inline _LIBCPP_INLINE_VISIBILITY
-_LIBCPP_CONSTEXPR_AFTER_CXX17 bool
-operator<(const array<_Tp, _Size>& __x, const array<_Tp, _Size>& __y)
-{
-    return _VSTD::lexicographical_compare(__x.begin(), __x.end(),
-                                          __y.begin(), __y.end());
-}
-
-template <class _Tp, size_t _Size>
-inline _LIBCPP_INLINE_VISIBILITY
-_LIBCPP_CONSTEXPR_AFTER_CXX17 bool
-operator>(const array<_Tp, _Size>& __x, const array<_Tp, _Size>& __y)
-{
-    return __y < __x;
-}
-
-template <class _Tp, size_t _Size>
-inline _LIBCPP_INLINE_VISIBILITY
-_LIBCPP_CONSTEXPR_AFTER_CXX17 bool
-operator<=(const array<_Tp, _Size>& __x, const array<_Tp, _Size>& __y)
-{
-    return !(__y < __x);
-}
-
-template <class _Tp, size_t _Size>
-inline _LIBCPP_INLINE_VISIBILITY
-_LIBCPP_CONSTEXPR_AFTER_CXX17 bool
-operator>=(const array<_Tp, _Size>& __x, const array<_Tp, _Size>& __y)
-{
-    return !(__x < __y);
-}
 
 template <class _Tp, size_t _Size>
 inline _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_AFTER_CXX17
@@ -429,6 +471,8 @@ swap(array<_Tp, _Size>& __x, array<_Tp, _Size>& __y)
 {
     __x.swap(__y);
 }
+
+
 
 template <class _Tp, size_t _Size>
 struct _LIBCPP_TEMPLATE_VIS tuple_size<array<_Tp, _Size> >

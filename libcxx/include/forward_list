@@ -866,6 +866,68 @@ private:
         static
         __node_pointer
         __sort(__node_pointer __f, difference_type __sz, _Compare& __comp);
+
+
+
+    friend bool operator==(const forward_list& __x,
+                    const forward_list& __y)
+    {
+        typedef forward_list<_Tp, _Alloc> _Cp;
+        typedef typename _Cp::const_iterator _Ip;
+        _Ip __ix = __x.begin();
+        _Ip __ex = __x.end();
+        _Ip __iy = __y.begin();
+        _Ip __ey = __y.end();
+        for (; __ix != __ex && __iy != __ey; ++__ix, ++__iy)
+            if (!(*__ix == *__iy))
+                return false;
+        return (__ix == __ex) == (__iy == __ey);
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool operator!=(const forward_list& __x,
+                    const forward_list& __y)
+    {
+        return !(__x == __y);
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool operator< (const forward_list& __x,
+                    const forward_list& __y)
+    {
+        return _VSTD::lexicographical_compare(__x.begin(), __x.end(),
+                                             __y.begin(), __y.end());
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool operator> (const forward_list& __x,
+                    const forward_list& __y)
+    {
+        return __y < __x;
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool operator>=(const forward_list& __x,
+                    const forward_list& __y)
+    {
+        return !(__x < __y);
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY
+    friend bool operator<=(const forward_list& __x,
+                    const forward_list& __y)
+    {
+        return !(__y < __x);
+    }
+
+    friend inline _LIBCPP_INLINE_VISIBILITY
+    void
+    swap(forward_list& __x, forward_list& __y)
+        _NOEXCEPT_(_NOEXCEPT_(__x.swap(__y)))
+    {
+        __x.swap(__y);
+    }
+
 };
 
 
@@ -1696,72 +1758,6 @@ forward_list<_Tp, _Alloc>::reverse() _NOEXCEPT
         }
         base::__before_begin()->__next_ = __p;
     }
-}
-
-template <class _Tp, class _Alloc>
-bool operator==(const forward_list<_Tp, _Alloc>& __x,
-                const forward_list<_Tp, _Alloc>& __y)
-{
-    typedef forward_list<_Tp, _Alloc> _Cp;
-    typedef typename _Cp::const_iterator _Ip;
-    _Ip __ix = __x.begin();
-    _Ip __ex = __x.end();
-    _Ip __iy = __y.begin();
-    _Ip __ey = __y.end();
-    for (; __ix != __ex && __iy != __ey; ++__ix, ++__iy)
-        if (!(*__ix == *__iy))
-            return false;
-    return (__ix == __ex) == (__iy == __ey);
-}
-
-template <class _Tp, class _Alloc>
-inline _LIBCPP_INLINE_VISIBILITY
-bool operator!=(const forward_list<_Tp, _Alloc>& __x,
-                const forward_list<_Tp, _Alloc>& __y)
-{
-    return !(__x == __y);
-}
-
-template <class _Tp, class _Alloc>
-inline _LIBCPP_INLINE_VISIBILITY
-bool operator< (const forward_list<_Tp, _Alloc>& __x,
-                const forward_list<_Tp, _Alloc>& __y)
-{
-    return _VSTD::lexicographical_compare(__x.begin(), __x.end(),
-                                         __y.begin(), __y.end());
-}
-
-template <class _Tp, class _Alloc>
-inline _LIBCPP_INLINE_VISIBILITY
-bool operator> (const forward_list<_Tp, _Alloc>& __x,
-                const forward_list<_Tp, _Alloc>& __y)
-{
-    return __y < __x;
-}
-
-template <class _Tp, class _Alloc>
-inline _LIBCPP_INLINE_VISIBILITY
-bool operator>=(const forward_list<_Tp, _Alloc>& __x,
-                const forward_list<_Tp, _Alloc>& __y)
-{
-    return !(__x < __y);
-}
-
-template <class _Tp, class _Alloc>
-inline _LIBCPP_INLINE_VISIBILITY
-bool operator<=(const forward_list<_Tp, _Alloc>& __x,
-                const forward_list<_Tp, _Alloc>& __y)
-{
-    return !(__y < __x);
-}
-
-template <class _Tp, class _Alloc>
-inline _LIBCPP_INLINE_VISIBILITY
-void
-swap(forward_list<_Tp, _Alloc>& __x, forward_list<_Tp, _Alloc>& __y)
-    _NOEXCEPT_(_NOEXCEPT_(__x.swap(__y)))
-{
-    __x.swap(__y);
 }
 
 #if _LIBCPP_STD_VER > 17

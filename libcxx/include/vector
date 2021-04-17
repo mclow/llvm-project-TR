@@ -927,6 +927,57 @@ private:
         _VSTD::forward<_Args>(__args)...);
     ++__tx.__pos_;
   }
+
+  inline _LIBCPP_INLINE_VISIBILITY friend
+  bool
+  operator==(const vector& __x, const vector& __y)
+  {
+      const size_type __sz = __x.size();
+      return __sz == __y.size() && _VSTD::equal(__x.begin(), __x.end(), __y.begin());
+  }
+
+  inline _LIBCPP_INLINE_VISIBILITY friend
+  bool
+  operator!=(const vector& __x, const vector& __y)
+  {
+      return !(__x == __y);
+  }
+
+  inline _LIBCPP_INLINE_VISIBILITY friend
+  bool
+  operator< (const vector& __x, const vector& __y)
+  {
+      return _VSTD::lexicographical_compare(__x.begin(), __x.end(), __y.begin(), __y.end());
+  }
+
+  inline _LIBCPP_INLINE_VISIBILITY friend
+  bool
+  operator> (const vector& __x, const vector& __y)
+  {
+      return __y < __x;
+  }
+
+  inline _LIBCPP_INLINE_VISIBILITY friend
+  bool
+  operator>=(const vector& __x, const vector& __y)
+  {
+      return !(__x < __y);
+  }
+
+  inline _LIBCPP_INLINE_VISIBILITY friend
+  bool
+  operator<=(const vector& __x, const vector& __y)
+  {
+      return !(__y < __x);
+  }
+
+  inline _LIBCPP_INLINE_VISIBILITY friend
+  void
+  swap(vector& __x, vector& __y)
+      _NOEXCEPT_(_NOEXCEPT_(__x.swap(__y)))
+  {
+      __x.swap(__y);
+  }
 };
 
 #ifndef _LIBCPP_HAS_NO_DEDUCTION_GUIDES
@@ -2509,6 +2560,58 @@ private:
     friend class __bit_iterator<vector, true>;
     friend struct __bit_array<vector>;
     friend struct _LIBCPP_TEMPLATE_VIS hash<vector>;
+
+
+    inline _LIBCPP_INLINE_VISIBILITY friend
+    bool
+    operator==(const vector& __x, const vector& __y)
+    {
+        const size_type __sz = __x.size();
+        return __sz == __y.size() && _VSTD::equal(__x.begin(), __x.end(), __y.begin());
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY friend
+    bool
+    operator!=(const vector& __x, const vector& __y)
+    {
+        return !(__x == __y);
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY friend
+    bool
+    operator< (const vector& __x, const vector& __y)
+    {
+        return _VSTD::lexicographical_compare(__x.begin(), __x.end(), __y.begin(), __y.end());
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY friend
+    bool
+    operator> (const vector& __x, const vector& __y)
+    {
+        return __y < __x;
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY friend
+    bool
+    operator>=(const vector& __x, const vector& __y)
+    {
+        return !(__x < __y);
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY friend
+    bool
+    operator<=(const vector& __x, const vector& __y)
+    {
+        return !(__y < __x);
+    }
+
+    inline _LIBCPP_INLINE_VISIBILITY friend
+    void
+    swap(vector& __x, vector& __y)
+        _NOEXCEPT_(_NOEXCEPT_(__x.swap(__y)))
+    {
+        __x.swap(__y);
+    }
 };
 
 template <class _Allocator>
@@ -3330,64 +3433,6 @@ struct _LIBCPP_TEMPLATE_VIS hash<vector<bool, _Allocator> >
     size_t operator()(const vector<bool, _Allocator>& __vec) const _NOEXCEPT
         {return __vec.__hash_code();}
 };
-
-template <class _Tp, class _Allocator>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator==(const vector<_Tp, _Allocator>& __x, const vector<_Tp, _Allocator>& __y)
-{
-    const typename vector<_Tp, _Allocator>::size_type __sz = __x.size();
-    return __sz == __y.size() && _VSTD::equal(__x.begin(), __x.end(), __y.begin());
-}
-
-template <class _Tp, class _Allocator>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator!=(const vector<_Tp, _Allocator>& __x, const vector<_Tp, _Allocator>& __y)
-{
-    return !(__x == __y);
-}
-
-template <class _Tp, class _Allocator>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator< (const vector<_Tp, _Allocator>& __x, const vector<_Tp, _Allocator>& __y)
-{
-    return _VSTD::lexicographical_compare(__x.begin(), __x.end(), __y.begin(), __y.end());
-}
-
-template <class _Tp, class _Allocator>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator> (const vector<_Tp, _Allocator>& __x, const vector<_Tp, _Allocator>& __y)
-{
-    return __y < __x;
-}
-
-template <class _Tp, class _Allocator>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator>=(const vector<_Tp, _Allocator>& __x, const vector<_Tp, _Allocator>& __y)
-{
-    return !(__x < __y);
-}
-
-template <class _Tp, class _Allocator>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator<=(const vector<_Tp, _Allocator>& __x, const vector<_Tp, _Allocator>& __y)
-{
-    return !(__y < __x);
-}
-
-template <class _Tp, class _Allocator>
-inline _LIBCPP_INLINE_VISIBILITY
-void
-swap(vector<_Tp, _Allocator>& __x, vector<_Tp, _Allocator>& __y)
-    _NOEXCEPT_(_NOEXCEPT_(__x.swap(__y)))
-{
-    __x.swap(__y);
-}
 
 #if _LIBCPP_STD_VER > 17
 template <class _Tp, class _Allocator, class _Up>

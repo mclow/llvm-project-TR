@@ -1479,6 +1479,7 @@ public:
   friend _LIBCPP_INLINE_VISIBILITY bool operator!=(const path& __lhs, const path& __rhs) noexcept {
     return __lhs.compare(__rhs) != 0;
   }
+
   friend _LIBCPP_INLINE_VISIBILITY bool operator<(const path& __lhs, const path& __rhs) noexcept {
     return __lhs.compare(__rhs) < 0;
   }
@@ -2825,10 +2826,21 @@ public:
 
   directory_iterator& increment(error_code& __ec) { return __increment(&__ec); }
 
-private:
+
   inline _LIBCPP_INLINE_VISIBILITY friend bool
   operator==(const directory_iterator& __lhs,
-             const directory_iterator& __rhs) noexcept;
+             const directory_iterator& __rhs) noexcept {
+    return __lhs.__imp_ == __rhs.__imp_;
+  }
+
+  inline _LIBCPP_INLINE_VISIBILITY friend bool
+  operator!=(const directory_iterator& __lhs,
+             const directory_iterator& __rhs) noexcept {
+    return !(__lhs == __rhs);
+  }
+
+
+private:
 
   // construct the dir_stream
   _LIBCPP_FUNC_VIS
@@ -2845,17 +2857,6 @@ private:
   shared_ptr<__dir_stream> __imp_;
 };
 
-inline _LIBCPP_INLINE_VISIBILITY bool
-operator==(const directory_iterator& __lhs,
-           const directory_iterator& __rhs) noexcept {
-  return __lhs.__imp_ == __rhs.__imp_;
-}
-
-inline _LIBCPP_INLINE_VISIBILITY bool
-operator!=(const directory_iterator& __lhs,
-           const directory_iterator& __rhs) noexcept {
-  return !(__lhs == __rhs);
-}
 
 // enable directory_iterator range-based for statements
 inline _LIBCPP_INLINE_VISIBILITY directory_iterator
@@ -2910,6 +2911,19 @@ public:
       __rec_ = __o.__rec_;
     }
     return *this;
+  }
+
+
+  inline _LIBCPP_INLINE_VISIBILITY friend bool
+  operator==(const recursive_directory_iterator& __lhs,
+             const recursive_directory_iterator& __rhs) noexcept {
+    return __lhs.__imp_ == __rhs.__imp_;
+  }
+
+  _LIBCPP_INLINE_VISIBILITY
+  inline friend bool operator!=(const recursive_directory_iterator& __lhs,
+                         const recursive_directory_iterator& __rhs) noexcept {
+    return !(__lhs == __rhs);
   }
 
   ~recursive_directory_iterator() = default;
@@ -2978,17 +2992,6 @@ private:
   bool __rec_;
 }; // class recursive_directory_iterator
 
-inline _LIBCPP_INLINE_VISIBILITY bool
-operator==(const recursive_directory_iterator& __lhs,
-           const recursive_directory_iterator& __rhs) noexcept {
-  return __lhs.__imp_ == __rhs.__imp_;
-}
-
-_LIBCPP_INLINE_VISIBILITY
-inline bool operator!=(const recursive_directory_iterator& __lhs,
-                       const recursive_directory_iterator& __rhs) noexcept {
-  return !(__lhs == __rhs);
-}
 // enable recursive_directory_iterator range-based for statements
 inline _LIBCPP_INLINE_VISIBILITY recursive_directory_iterator
 begin(recursive_directory_iterator __iter) noexcept {

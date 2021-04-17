@@ -1582,6 +1582,59 @@ public:
     void __move_assign(deque& __c, true_type)
         _NOEXCEPT_(is_nothrow_move_assignable<allocator_type>::value);
     void __move_assign(deque& __c, false_type);
+
+
+    friend inline _LIBCPP_INLINE_VISIBILITY
+    bool
+    operator==(const deque& __x, const deque& __y)
+    {
+        const typename deque::size_type __sz = __x.size();
+        return __sz == __y.size() && _VSTD::equal(__x.begin(), __x.end(), __y.begin());
+    }
+
+    friend inline _LIBCPP_INLINE_VISIBILITY
+    bool
+    operator!=(const deque& __x, const deque& __y)
+    {
+        return !(__x == __y);
+    }
+
+    friend inline _LIBCPP_INLINE_VISIBILITY
+    bool
+    operator< (const deque& __x, const deque& __y)
+    {
+        return _VSTD::lexicographical_compare(__x.begin(), __x.end(), __y.begin(), __y.end());
+    }
+
+    friend inline _LIBCPP_INLINE_VISIBILITY
+    bool
+    operator> (const deque& __x, const deque& __y)
+    {
+        return __y < __x;
+    }
+
+    friend inline _LIBCPP_INLINE_VISIBILITY
+    bool
+    operator>=(const deque& __x, const deque& __y)
+    {
+        return !(__x < __y);
+    }
+
+    friend inline _LIBCPP_INLINE_VISIBILITY
+    bool
+    operator<=(const deque& __x, const deque& __y)
+    {
+        return !(__y < __x);
+    }
+
+    friend inline _LIBCPP_INLINE_VISIBILITY
+    void
+    swap(deque& __x, deque& __y)
+        _NOEXCEPT_(_NOEXCEPT_(__x.swap(__y)))
+    {
+        __x.swap(__y);
+    }
+
 };
 
 #ifndef _LIBCPP_HAS_NO_DEDUCTION_GUIDES
@@ -2961,64 +3014,6 @@ void
 deque<_Tp, _Allocator>::clear() _NOEXCEPT
 {
     __base::clear();
-}
-
-template <class _Tp, class _Allocator>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator==(const deque<_Tp, _Allocator>& __x, const deque<_Tp, _Allocator>& __y)
-{
-    const typename deque<_Tp, _Allocator>::size_type __sz = __x.size();
-    return __sz == __y.size() && _VSTD::equal(__x.begin(), __x.end(), __y.begin());
-}
-
-template <class _Tp, class _Allocator>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator!=(const deque<_Tp, _Allocator>& __x, const deque<_Tp, _Allocator>& __y)
-{
-    return !(__x == __y);
-}
-
-template <class _Tp, class _Allocator>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator< (const deque<_Tp, _Allocator>& __x, const deque<_Tp, _Allocator>& __y)
-{
-    return _VSTD::lexicographical_compare(__x.begin(), __x.end(), __y.begin(), __y.end());
-}
-
-template <class _Tp, class _Allocator>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator> (const deque<_Tp, _Allocator>& __x, const deque<_Tp, _Allocator>& __y)
-{
-    return __y < __x;
-}
-
-template <class _Tp, class _Allocator>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator>=(const deque<_Tp, _Allocator>& __x, const deque<_Tp, _Allocator>& __y)
-{
-    return !(__x < __y);
-}
-
-template <class _Tp, class _Allocator>
-inline _LIBCPP_INLINE_VISIBILITY
-bool
-operator<=(const deque<_Tp, _Allocator>& __x, const deque<_Tp, _Allocator>& __y)
-{
-    return !(__y < __x);
-}
-
-template <class _Tp, class _Allocator>
-inline _LIBCPP_INLINE_VISIBILITY
-void
-swap(deque<_Tp, _Allocator>& __x, deque<_Tp, _Allocator>& __y)
-    _NOEXCEPT_(_NOEXCEPT_(__x.swap(__y)))
-{
-    __x.swap(__y);
 }
 
 #if _LIBCPP_STD_VER > 17

@@ -294,6 +294,11 @@ public:
   }
 #endif
 
+  inline _LIBCPP_INLINE_VISIBILITY friend
+  void swap(any & __lhs, any & __rhs) _NOEXCEPT {
+      __lhs.swap(__rhs);
+  }
+
 private:
     typedef __any_imp::_Action _Action;
     using _HandleFuncPtr =  void* (*)(_Action, any const *, any *, const type_info *,
@@ -570,12 +575,6 @@ void any::swap(any & __rhs) _NOEXCEPT
 }
 
 // 6.4 Non-member functions
-
-inline _LIBCPP_INLINE_VISIBILITY
-void swap(any & __lhs, any & __rhs) _NOEXCEPT
-{
-    __lhs.swap(__rhs);
-}
 
 template <class _Tp, class ..._Args>
 inline _LIBCPP_INLINE_VISIBILITY

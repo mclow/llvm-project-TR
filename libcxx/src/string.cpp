@@ -28,9 +28,9 @@ _LIBCPP_STRING_V1_EXTERN_TEMPLATE_LIST(_LIBCPP_EXTERN_TEMPLATE_DEFINE, char)
 _LIBCPP_STRING_V1_EXTERN_TEMPLATE_LIST(_LIBCPP_EXTERN_TEMPLATE_DEFINE, wchar_t)
 #endif
 
-template
-    string
-    operator+<char, char_traits<char>, allocator<char> >(char const*, string const&);
+//template
+    //string
+    //operator+<char, char_traits<char>, allocator<char> >(char const*, string const&);
 
 namespace
 {

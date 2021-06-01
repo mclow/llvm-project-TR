@@ -3710,6 +3710,11 @@ public:
     return getSema().BuildEmptyCXXFoldExpr(EllipsisLoc, Operator);
   }
 
+  ExprResult RebuildCXXIntegerSequenceExpr(SourceLocation BeginLoc, SourceLocation EndLoc,
+                                ArrayRef<Expr *> SubExprs) {
+    return getSema().BuildCXXIntegerSequenceExpr(BeginLoc, EndLoc, SubExprs);
+  }
+
   /// Build a new atomic operation expression.
   ///
   /// By default, performs semantic analysis to build the new expression.
@@ -13556,6 +13561,23 @@ TreeTransform<Derived>::TransformCXXFoldExpr(CXXFoldExpr *E) {
                                                 E->getOperator());
 
   return Result;
+}
+
+template<typename Derived>
+ExprResult
+TreeTransform<Derived>::TransformCXXIntegerSequenceExpr(CXXIntegerSequenceExpr *E) {
+    bool ArgumentChanged = false;
+    SmallVector<Expr*, 3> SubExprs;
+    if (getDerived().TransformExprs(E->getArgs(), E->getNumInitializers(), false,
+                                    SubExprs, &ArgumentChanged))
+      return ExprError();
+
+    if (!getDerived().AlwaysRebuild() &&
+        !ArgumentChanged)
+      return E;
+
+    return getDerived().RebuildCXXIntegerSequenceExpr(
+        E->getBeginLoc(), E->getEndLoc(), SubExprs);
 }
 
 template<typename Derived>

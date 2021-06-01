@@ -76,6 +76,7 @@ class CXXUnresolvedConstructExpr;
 class CXXDependentScopeMemberExpr;
 class MaterializeTemporaryExpr;
 class CXXFoldExpr;
+class CXXIntegerSequenceExpr;
 class TypeTraitExpr;
 class ConceptSpecializationExpr;
 class SYCLUniqueStableNameExpr;
@@ -162,6 +163,8 @@ ExprDependence computeDependence(CXXUnresolvedConstructExpr *E);
 ExprDependence computeDependence(CXXDependentScopeMemberExpr *E);
 ExprDependence computeDependence(MaterializeTemporaryExpr *E);
 ExprDependence computeDependence(CXXFoldExpr *E);
+ExprDependence computeDependence(CXXIntegerSequenceExpr *E);
+
 ExprDependence computeDependence(TypeTraitExpr *E);
 ExprDependence computeDependence(ConceptSpecializationExpr *E,
                                  bool ValueDependent);

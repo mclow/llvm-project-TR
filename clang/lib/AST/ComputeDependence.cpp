@@ -790,6 +790,13 @@ ExprDependence clang::computeDependence(CXXFoldExpr *E) {
   return D;
 }
 
+ExprDependence clang::computeDependence(CXXIntegerSequenceExpr *E) {
+    auto D = ExprDependence::None;
+    for (auto && A : *E)
+      D |= A->getDependence();
+    return D;
+}
+
 ExprDependence clang::computeDependence(TypeTraitExpr *E) {
   auto D = ExprDependence::None;
   for (const auto *A : E->getArgs())

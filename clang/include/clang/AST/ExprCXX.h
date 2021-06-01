@@ -4665,6 +4665,74 @@ public:
   }
 };
 
+
+class CXXIntegerSequenceExpr final
+        : public Expr{
+  friend class ASTStmtReader;
+  friend class ASTStmtWriter;
+
+  SourceLocation LSquareBracketLoc;
+  SourceLocation RSquareBracketLoc;
+  unsigned NumParams;
+  Stmt* SubExprs[3];
+
+public:
+  CXXIntegerSequenceExpr(SourceLocation LSquareBracketLoc,
+                         SourceLocation RSquareBracketLoc, ArrayRef<Expr*> Expr);
+
+  CXXIntegerSequenceExpr(EmptyShell Empty) : Expr(CXXIntegerSequenceExprClass, Empty) {}
+
+  static CXXIntegerSequenceExpr *Create(const ASTContext &Ctx, SourceLocation LSquareBracketLoc,
+                                        SourceLocation RSquareBracketLoc, ArrayRef<Expr*> Expr);
+
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == CXXIntegerSequenceExprClass;
+  }
+
+  using arg_iterator = ExprIterator;
+  using const_arg_iterator = ConstExprIterator;
+  using arg_range = llvm::iterator_range<arg_iterator>;
+  using const_arg_range = llvm::iterator_range<const_arg_iterator>;
+
+  arg_iterator begin() { return SubExprs; }
+  arg_iterator end()   { return SubExprs + NumParams; }
+
+  const_arg_iterator begin() const { return SubExprs; }
+  const_arg_iterator end()   const { return SubExprs + NumParams; }
+
+  arg_range arguments() {
+    return arg_range(begin(), end());
+  }
+
+  const_arg_range arguments() const {
+    return const_arg_range(begin(), end());
+  }
+
+  unsigned getNumInitializers() const { return NumParams; }
+
+  Expr *getInitializer(unsigned I) const { return static_cast<Expr*>(SubExprs[I]); }
+  void setInitializer(unsigned I, Expr* E) { SubExprs[I] = E; }
+
+  Expr** getArgs() { return reinterpret_cast<Expr**>(SubExprs); }
+
+  SourceLocation getBeginLoc() const LLVM_READONLY { return LSquareBracketLoc; }
+  SourceLocation getEndLoc() const LLVM_READONLY { return RSquareBracketLoc; }
+
+  //Expr
+
+  // Iterators
+  child_range children() {
+      return child_range(SubExprs, SubExprs + NumParams);
+  }
+
+  const_child_range children() const {
+      return const_child_range(SubExprs, SubExprs + NumParams);
+  }
+
+
+};
+
+
 /// Represents an expression that might suspend coroutine execution;
 /// either a co_await or co_yield expression.
 ///

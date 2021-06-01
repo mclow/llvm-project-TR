@@ -2289,6 +2289,16 @@ void StmtPrinter::VisitCXXFoldExpr(CXXFoldExpr *E) {
   OS << ")";
 }
 
+void StmtPrinter::VisitCXXIntegerSequenceExpr(CXXIntegerSequenceExpr *Node) {
+  OS << "[";
+  for (auto I = Node->begin(), E = Node->end(); I != E; ++I) {
+    if (I != Node->begin())
+      OS << ": ";
+    VisitExpr(*I);
+  }
+  OS << ")";
+}
+
 void StmtPrinter::VisitConceptSpecializationExpr(ConceptSpecializationExpr *E) {
   NestedNameSpecifierLoc NNS = E->getNestedNameSpecifierLoc();
   if (NNS)

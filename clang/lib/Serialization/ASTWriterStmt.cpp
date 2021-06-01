@@ -2079,6 +2079,16 @@ void ASTStmtWriter::VisitCXXFoldExpr(CXXFoldExpr *E) {
   Code = serialization::EXPR_CXX_FOLD;
 }
 
+void ASTStmtWriter::VisitCXXIntegerSequenceExpr(CXXIntegerSequenceExpr* E){
+    VisitExpr(E);
+    Record.AddSourceLocation(E->LSquareBracketLoc);
+    Record.AddSourceLocation(E->RSquareBracketLoc);
+    Record.push_back(E->NumParams);
+    for(unsigned i = 0; i < E->NumParams; i++)
+         Record.AddStmt(E->SubExprs[i]);
+     Code = serialization::EXPR_CXX_INTEGER_SEQUENCE;
+}
+
 void ASTStmtWriter::VisitOpaqueValueExpr(OpaqueValueExpr *E) {
   VisitExpr(E);
   Record.AddStmt(E->getSourceExpr());

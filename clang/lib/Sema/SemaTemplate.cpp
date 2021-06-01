@@ -1575,7 +1575,7 @@ NamedDecl *Sema::ActOnNonTypeTemplateParameter(Scope *S, Declarator &D,
   // C++0x [temp.param]p9:
   //   A default template-argument may be specified for any kind of
   //   template-parameter that is not a template parameter pack.
-  if (Default && IsParameterPack) {
+  if (Default && IsParameterPack  && !isa<CXXIntegerSequenceExpr>(Default)) {
     Diag(EqualLoc, diag::err_template_param_pack_default_arg);
     Default = nullptr;
   }
@@ -1585,20 +1585,39 @@ NamedDecl *Sema::ActOnNonTypeTemplateParameter(Scope *S, Declarator &D,
     // Check for unexpanded parameter packs.
     if (DiagnoseUnexpandedParameterPack(Default, UPPC_DefaultArgument))
       return Param;
-
-    TemplateArgument Converted;
-    ExprResult DefaultRes =
-        CheckTemplateArgument(Param, Param->getType(), Default, Converted);
+    ExprResult DefaultRes;
+    if(isa<CXXIntegerSequenceExpr>(Default)) {
+        DefaultRes = CheckTemplateArgumentWithArgumentSequence(Param, Param->getType(),
+                                                               dyn_cast<CXXIntegerSequenceExpr>(Default));
+    }
+    else {
+         TemplateArgument Converted;
+         DefaultRes = CheckTemplateArgument(Param, Param->getType(), Default, Converted);
+    }
     if (DefaultRes.isInvalid()) {
       Param->setInvalidDecl();
       return Param;
     }
     Default = DefaultRes.get();
-
     Param->setDefaultArgument(Default);
+
   }
 
   return Param;
+}
+
+ExprResult Sema::ActOnIntegerSequenceExpression(Scope *S,
+                                          SourceLocation Begin,
+                                          SourceLocation End,
+                                          ArrayRef<Expr *> Exprs) {
+    assert(S->isTemplateParamScope() &&
+           "Integer Sequence not in template parameter scope!");
+    // Return
+    if(Exprs.size() < 1 || Exprs.size() > 3) {
+        assert(false && "Incorrect number of parameters for ActOnIntegerSequenceExpression");
+        return {};
+    }
+    return CXXIntegerSequenceExpr::Create(Context, Begin, End, Exprs);
 }
 
 /// ActOnTemplateTemplateParameter - Called when a C++ template template
@@ -2760,7 +2779,7 @@ bool Sema::CheckTemplateParameterList(TemplateParameterList *NewParams,
       NonTypeTemplateParmDecl *OldNonTypeParm
         = OldParams? cast<NonTypeTemplateParmDecl>(*OldParam) : nullptr;
       if (NewNonTypeParm->isParameterPack()) {
-        assert(!NewNonTypeParm->hasDefaultArgument() &&
+        assert((!NewNonTypeParm->hasDefaultArgument() || isa<CXXIntegerSequenceExpr>(NewNonTypeParm->getDefaultArgument())) &&
                "Parameter packs can't have a default argument!");
         if (!NewNonTypeParm->isPackExpansion())
           SawParameterPack = true;
@@ -2833,13 +2852,13 @@ bool Sema::CheckTemplateParameterList(TemplateParameterList *NewParams,
     // C++11 [temp.param]p11:
     //   If a template parameter of a primary class template or alias template
     //   is a template parameter pack, it shall be the last template parameter.
-    if (SawParameterPack && (NewParam + 1) != NewParamEnd &&
-        (TPC == TPC_ClassTemplate || TPC == TPC_VarTemplate ||
-         TPC == TPC_TypeAliasTemplate)) {
-      Diag((*NewParam)->getLocation(),
-           diag::err_template_param_pack_must_be_last_template_parameter);
-      Invalid = true;
-    }
+    //if (SawParameterPack && (NewParam + 1) != NewParamEnd && !(*(NewParam + 1).
+    //    (TPC == TPC_ClassTemplate || TPC == TPC_VarTemplate ||
+    //     TPC == TPC_TypeAliasTemplate)) {
+    //  Diag((*NewParam)->getLocation(),
+    //       diag::err_template_param_pack_must_be_last_template_parameter);
+    //  Invalid = true;
+    //}
 
     if (RedundantDefaultArg) {
       // C++ [temp.param]p12:
@@ -5776,6 +5795,94 @@ bool Sema::CheckTemplateArgumentList(
       return false;
     }
 
+    // Template parameter pack with integer sequence initializer
+    // Add a parameter for each value
+    if (NonTypeTemplateParmDecl *NTTP = dyn_cast<NonTypeTemplateParmDecl>(*Param)) {
+        if(ArgumentPack.empty() && NTTP->isTemplateParameterPack() && NTTP->hasDefaultArgument()) {
+            ExprResult E = SubstDefaultTemplateArgument(*this, Template,
+                                                        TemplateLoc,
+                                                        RAngleLoc,
+                                                        NTTP,
+                                                        Converted);
+            if(E.isInvalid()) {
+                return true;
+            }
+
+            CXXIntegerSequenceExpr* Seq = E.getAs<CXXIntegerSequenceExpr>();
+            if(Seq->isValueDependent()) {
+                Converted.push_back(TemplateArgument::CreatePackCopy(Context, ArgumentPack));
+                ++Param;
+                continue;
+            }
+
+            QualType CommonType = Seq->getInitializer(0)->getType().getCanonicalType();
+            assert(CommonType->isIntegerType());
+
+
+                   // llvm::APInt Size, 1);
+            struct SequenceArgument
+            {
+                ExprResult Expr  = {};
+                llvm::APSInt Int = llvm::APSInt();
+            };
+            std::array<SequenceArgument, 3> Exprs = {};
+
+
+
+            Exprs[1].Expr = Seq->getInitializer(Seq->getNumInitializers() == 1 ? 0 : 1);
+            if(Seq->getNumInitializers() > 1) {
+                Exprs[0].Expr = Seq->getInitializer(0);
+            }
+            else {
+                Exprs[0].Int = Context.MakeIntValue(0, CommonType);
+            }
+
+            if(Seq->getNumInitializers() > 2) {
+                Exprs[2].Expr = Seq->getInitializer(2);
+            }
+            else {
+                Exprs[2].Int = Context.MakeIntValue(1, CommonType);
+            }
+
+            for(std::size_t i = 0; i < Exprs.size(); i++) {
+                if(Exprs[i].Expr.isUnset())
+                    continue;
+
+                 Expr::EvalResult Res;
+
+                 if(!Exprs[i].Expr.get()->EvaluateAsInt(Res, Context)) {
+                     assert(false && "failed to evaluate as ints");
+                 }
+                 Exprs[i].Int = Res.Val.getInt();
+            }
+
+            auto Start = Exprs[0].Int;
+            auto End   = Exprs[1].Int;
+            auto Step  = Exprs[2].Int;
+
+            assert(Step > 0 && "Step should be > 0");
+            assert(Start <= End && "Start should be smaller than end");
+
+            for( unsigned int i = 0; Start < End; Start += Step, i++ ) {
+                TemplateArgument Arg(Context, Start, CommonType);
+                TemplateArgumentLoc Loc = getTrivialTemplateArgumentLoc(Arg, CommonType, TemplateLoc);
+                if (CheckTemplateArgument(NTTP, Loc, Template, TemplateLoc,
+                                          RAngleLoc, i, Converted)) {
+                    assert(false && "CheckTemplateArgument");
+                    return true;
+                }
+                ArgumentPack.push_back(Converted.pop_back_val());
+                assert(!ArgumentPack.back().isDependent() && "dependant??");
+            }
+
+            TemplateArgument Pack = TemplateArgument::CreatePackCopy(Context, ArgumentPack);
+            Converted.push_back(Pack);
+            ArgumentPack.clear();
+            Param++;
+            continue;
+        }
+    }
+
     // If we have a template parameter pack with no more corresponding
     // arguments, just break out now and we'll fill in the argument pack below.
     if ((*Param)->isTemplateParameterPack()) {
@@ -7365,6 +7472,25 @@ ExprResult Sema::CheckTemplateArgument(NonTypeTemplateParmDecl *Param,
                                            Converted))
     return ExprError();
   return Arg;
+}
+
+ExprResult Sema::CheckTemplateArgumentWithArgumentSequence(NonTypeTemplateParmDecl *Param,
+                                                           QualType InstantiatedParamType, CXXIntegerSequenceExpr *Arg,
+                                                           CheckTemplateArgumentKind CTAK)
+{
+    //SmallVector<Expr*, 3> ConvertedExprs;
+    int I = 0;
+    for(ExprResult E : *Arg) {
+        TemplateArgument Converted;
+        E = CheckTemplateArgument(Param, InstantiatedParamType, E.get(), Converted, CTAK);
+        if(!E.get()->isValueDependent() && !E.get()->isTypeDependent()
+                && !E.get()->isIntegerConstantExpr(Context)) {
+            assert(false && "Not an integral type");
+            return ExprError();
+        }
+        Arg->setInitializer(I++, E.get());
+    }
+    return Arg;
 }
 
 static void DiagnoseTemplateParameterListArityMismatch(

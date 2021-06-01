@@ -1620,6 +1620,24 @@ FunctionParmPackExpr::CreateEmpty(const ASTContext &Context,
       FunctionParmPackExpr(QualType(), nullptr, SourceLocation(), 0, nullptr);
 }
 
+CXXIntegerSequenceExpr::CXXIntegerSequenceExpr(SourceLocation LSquareBracketLoc,
+                       SourceLocation RSquareBracketLoc, ArrayRef<Expr*> Exprs)
+    : clang::Expr(CXXIntegerSequenceExprClass, QualType(), VK_LValue, OK_Ordinary),
+      LSquareBracketLoc(LSquareBracketLoc), RSquareBracketLoc(RSquareBracketLoc), NumParams(Exprs.size())
+{
+      std::uninitialized_copy(Exprs.data(), Exprs.data() + Exprs.size(), SubExprs);
+      setDependence(computeDependence(this));
+}
+
+//CXXIntegerSequenceExpr(EmptyShell Empty) : Expr(CXXIntegerSequenceExprClass, Empty) {}
+
+CXXIntegerSequenceExpr *
+CXXIntegerSequenceExpr::Create(const ASTContext &Context, SourceLocation LSquareBracketLoc,
+                               SourceLocation RSquareBracketLoc, ArrayRef<Expr*> Exprs)
+{
+    return new (Context) CXXIntegerSequenceExpr(LSquareBracketLoc, RSquareBracketLoc , Exprs);
+}
+
 MaterializeTemporaryExpr::MaterializeTemporaryExpr(
     QualType T, Expr *Temporary, bool BoundToLvalueReference,
     LifetimeExtendedTemporaryDecl *MTD)

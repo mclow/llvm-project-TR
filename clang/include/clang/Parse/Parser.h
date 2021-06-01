@@ -3392,6 +3392,8 @@ private:
   NamedDecl *ParseTypeParameter(unsigned Depth, unsigned Position);
   NamedDecl *ParseTemplateTemplateParameter(unsigned Depth, unsigned Position);
   NamedDecl *ParseNonTypeTemplateParameter(unsigned Depth, unsigned Position);
+  ExprResult ParseIntegerSequenceExpression();
+
   bool isTypeConstraintAnnotation();
   bool TryAnnotateTypeConstraint();
   void DiagnoseMisplacedEllipsis(SourceLocation EllipsisLoc,

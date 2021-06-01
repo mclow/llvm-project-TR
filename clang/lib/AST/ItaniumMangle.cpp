@@ -4175,6 +4175,7 @@ recurse:
   case Expr::OMPArrayShapingExprClass:
   case Expr::OMPIteratorExprClass:
   case Expr::CXXInheritedCtorInitExprClass:
+  case Expr::CXXIntegerSequenceExprClass:
     llvm_unreachable("unexpected statement kind");
 
   case Expr::ConstantExprClass:
@@ -5194,8 +5195,12 @@ struct TemplateArgManglingInfo {
     // Move to the next parameter.
     const NamedDecl *Param = UnresolvedExpandedPack;
     if (!Param) {
-      assert(ParamIdx < ResolvedTemplate->getTemplateParameters()->size() &&
-             "no parameter for argument");
+      if(ParamIdx >= ResolvedTemplate->getTemplateParameters()->size()) {
+          return true;
+      }
+
+        //assert(ParamIdx < ResolvedTemplate->getTemplateParameters()->size() &&
+      //       "no parameter for argument");
       Param = ResolvedTemplate->getTemplateParameters()->getParam(ParamIdx);
 
       // If we reach an expanded parameter pack whose argument isn't in pack
@@ -5203,6 +5208,10 @@ struct TemplateArgManglingInfo {
       // it, because it contains a pack expansion. Track the expanded pack for
       // all further template arguments until we hit that pack expansion.
       if (Param->isParameterPack() && Arg.getKind() != TemplateArgument::Pack) {
+          if(const NonTypeTemplateParmDecl* NTTP = dyn_cast<NonTypeTemplateParmDecl>(Param)) {
+              if(NTTP->hasDefaultArgument())
+                  return false;
+          }
         assert(getExpandedPackSize(Param) &&
                "failed to form pack argument for parameter pack");
         UnresolvedExpandedPack = Param;

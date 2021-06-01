@@ -983,7 +983,7 @@ Parser::ParseNonTypeTemplateParameter(unsigned Depth, unsigned Position) {
   // we introduce the template parameter into the local scope.
   SourceLocation EqualLoc;
   ExprResult DefaultArg;
-  if (TryConsumeToken(tok::equal, EqualLoc)) {
+  if (TryConsumeToken(tok::equal, EqualLoc)) {  
     // C++ [temp.param]p15:
     //   When parsing a default template-argument for a non-type
     //   template-parameter, the first non-nested > is taken as the
@@ -993,7 +993,12 @@ Parser::ParseNonTypeTemplateParameter(unsigned Depth, unsigned Position) {
     EnterExpressionEvaluationContext ConstantEvaluated(
         Actions, Sema::ExpressionEvaluationContext::ConstantEvaluated);
 
-    DefaultArg = Actions.CorrectDelayedTyposInExpr(ParseAssignmentExpression());
+    if(Tok.is(tok::ellipsis)) {
+        DefaultArg = ParseIntegerSequenceExpression();
+    }
+    else {
+        DefaultArg = Actions.CorrectDelayedTyposInExpr(ParseAssignmentExpression());
+    }
     if (DefaultArg.isInvalid())
       SkipUntil(tok::comma, tok::greater, StopAtSemi | StopBeforeMatch);
   }
@@ -1002,6 +1007,29 @@ Parser::ParseNonTypeTemplateParameter(unsigned Depth, unsigned Position) {
   return Actions.ActOnNonTypeTemplateParameter(getCurScope(), ParamDecl,
                                                Depth, Position, EqualLoc,
                                                DefaultArg.get());
+}
+
+ExprResult Parser::ParseIntegerSequenceExpression() {
+    assert(Tok.is(tok::ellipsis) && "Must have already parsed ...");
+    ConsumeToken();
+    assert(Tok.is(tok::kw_intseq) && "Must have already parsed intseq");
+    ConsumeToken();
+    BalancedDelimiterTracker T(*this, tok::l_paren);
+    T.consumeOpen();
+
+    ExprVector Exprs;
+    CommaLocsTy CommaLocs;
+
+    if(ParseExpressionList(Exprs, CommaLocs)) {
+        assert(false && "ParseIntegerSequenceExpression TODO");
+        return {};
+    }
+
+    // missing )
+    if(T.consumeClose())
+        return {};
+
+    return Actions.ActOnIntegerSequenceExpression(getCurScope(), T.getOpenLocation(), T.getCloseLocation(), Exprs);
 }
 
 void Parser::DiagnoseMisplacedEllipsis(SourceLocation EllipsisLoc,

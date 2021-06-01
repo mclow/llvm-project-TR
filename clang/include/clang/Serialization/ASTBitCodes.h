@@ -1864,6 +1864,7 @@ enum StmtCode {
   EXPR_FUNCTION_PARM_PACK,                // FunctionParmPackExpr
   EXPR_MATERIALIZE_TEMPORARY,             // MaterializeTemporaryExpr
   EXPR_CXX_FOLD,                          // CXXFoldExpr
+  EXPR_CXX_INTEGER_SEQUENCE,              // CXXIntegerSequenceExpr
   EXPR_CONCEPT_SPECIALIZATION,            // ConceptSpecializationExpr
   EXPR_REQUIRES,                          // RequiresExpr
 

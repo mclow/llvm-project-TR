@@ -1288,3 +1288,9 @@ ExprResult Sema::BuildEmptyCXXFoldExpr(SourceLocation EllipsisLoc,
       ScalarType, Context.getTrivialTypeSourceInfo(ScalarType, EllipsisLoc),
       EllipsisLoc);
 }
+
+ExprResult Sema::BuildCXXIntegerSequenceExpr(SourceLocation BeginLoc, SourceLocation EndLoc,
+                                  ArrayRef<Expr *> SubExprs) {
+    return new (Context) CXXIntegerSequenceExpr(BeginLoc, EndLoc, SubExprs);
+}
+

@@ -6121,8 +6121,13 @@ public:
                               SourceLocation EllipsisLoc, Expr *RHS,
                               SourceLocation RParenLoc,
                               Optional<unsigned> NumExpansions);
+
   ExprResult BuildEmptyCXXFoldExpr(SourceLocation EllipsisLoc,
                                    BinaryOperatorKind Operator);
+
+  ExprResult BuildCXXIntegerSequenceExpr(SourceLocation BeginLoc, SourceLocation EndLoc,
+                              ArrayRef<Expr *> SubExprs);
+
 
   //// ActOnCXXThis -  Parse 'this' pointer.
   ExprResult ActOnCXXThis(SourceLocation loc);
@@ -7503,6 +7508,12 @@ public:
                                       unsigned Position,
                                       SourceLocation EqualLoc,
                                       Expr *DefaultArg);
+
+  ExprResult ActOnIntegerSequenceExpression(Scope *S,
+                                            SourceLocation Begin,
+                                            SourceLocation End,
+                                            ArrayRef<Expr *> SizeExprs);
+
   NamedDecl *ActOnTemplateTemplateParameter(Scope *S,
                                        SourceLocation TmpLoc,
                                        TemplateParameterList *Params,
@@ -7781,6 +7792,11 @@ public:
                                    QualType InstantiatedParamType, Expr *Arg,
                                    TemplateArgument &Converted,
                                CheckTemplateArgumentKind CTAK = CTAK_Specified);
+
+  ExprResult CheckTemplateArgumentWithArgumentSequence(NonTypeTemplateParmDecl *Param,
+                                   QualType InstantiatedParamType, CXXIntegerSequenceExpr *Arg,
+                                   CheckTemplateArgumentKind CTAK = CTAK_Specified);
+
   bool CheckTemplateTemplateArgument(TemplateTemplateParmDecl *Param,
                                      TemplateParameterList *Params,
                                      TemplateArgumentLoc &Arg);

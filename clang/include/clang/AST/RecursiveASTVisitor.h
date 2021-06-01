@@ -2780,6 +2780,8 @@ DEF_TRAVERSE_STMT(RequiresExpr, {
     }
 })
 
+DEF_TRAVERSE_STMT(CXXIntegerSequenceExpr, {})
+
 // These literals (all of them) do not need any action.
 DEF_TRAVERSE_STMT(IntegerLiteral, {})
 DEF_TRAVERSE_STMT(FixedPointLiteral, {})

@@ -405,6 +405,7 @@ MODULES_KEYWORD(import)
 // C++20 keywords.
 CXX20_KEYWORD(consteval             , 0)
 CXX20_KEYWORD(constinit             , 0)
+CXX20_KEYWORD(intseq                , 0)
 // Not a CXX20_KEYWORD because it is disabled by -fno-char8_t.
 KEYWORD(char8_t                     , CHAR8SUPPORT)
 

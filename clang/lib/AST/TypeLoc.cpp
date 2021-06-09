@@ -683,6 +683,9 @@ namespace {
     TypeLoc VisitPackExpansionTypeLoc(PackExpansionTypeLoc T) {
       return Visit(T.getPatternLoc());
     }
+    TypeLoc VisitPackIndexingTypeLock(PackIndexingTypeLoc T) {
+      return Visit(T.getPatternLoc());
+    }
   };
 
 } // namespace

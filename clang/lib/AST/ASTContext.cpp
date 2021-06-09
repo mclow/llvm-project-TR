@@ -3509,6 +3509,7 @@ QualType ASTContext::getVariableArrayDecayedType(QualType type) const {
   case Type::Auto:
   case Type::DeducedTemplateSpecialization:
   case Type::PackExpansion:
+  case Type::PackIndexing:
   case Type::ExtInt:
   case Type::DependentExtInt:
     llvm_unreachable("type should never be variably-modified");
@@ -5034,6 +5035,34 @@ QualType ASTContext::getPackExpansionType(QualType Pattern,
   PackExpansionTypes.InsertNode(T, InsertPos);
   return QualType(T, 0);
 }
+
+
+QualType ASTContext::getPackIndexingType(QualType Pattern, Expr* IndexExpr) {
+  //assert((!ExpectPackInType || Pattern->containsUnexpandedParameterPack()) &&
+    //     "Pack expansions must expand one or more parameter packs");
+
+    llvm::FoldingSetNodeID ID;
+    PackIndexingType::Profile(ID, Pattern, IndexExpr);
+    void *InsertPos = nullptr;
+    PackIndexingType *T = PackIndexingTypes.FindNodeOrInsertPos(ID, InsertPos);
+    if (T)
+        return QualType(T, 0);
+
+    QualType Canon;
+    if (!Pattern.isCanonical()) {
+        Canon = getPackIndexingType(getCanonicalType(Pattern), IndexExpr);
+        // Find the insert position again, in case we inserted an element into
+        // PackIndexingTypes and invalidated our insert position.
+        PackIndexingTypes.FindNodeOrInsertPos(ID, InsertPos);
+    }
+
+
+  T = new (*this, TypeAlignment) PackIndexingType(Pattern, Canon, IndexExpr);
+  Types.push_back(T);
+  PackIndexingTypes.InsertNode(T, InsertPos);
+  return QualType(T, 0);
+}
+
 
 /// CmpProtocolNames - Comparison predicate for sorting protocols
 /// alphabetically.

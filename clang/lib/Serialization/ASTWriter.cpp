@@ -467,6 +467,10 @@ void TypeLocWriter::VisitPackExpansionTypeLoc(PackExpansionTypeLoc TL) {
   Record.AddSourceLocation(TL.getEllipsisLoc());
 }
 
+void TypeLocWriter::VisitPackIndexingTypeLoc(PackIndexingTypeLoc TL) {
+  Record.AddSourceLocation(TL.getEllipsisLoc());
+}
+
 void TypeLocWriter::VisitObjCInterfaceTypeLoc(ObjCInterfaceTypeLoc TL) {
   Record.AddSourceLocation(TL.getNameLoc());
 }

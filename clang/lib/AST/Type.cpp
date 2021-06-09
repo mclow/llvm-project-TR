@@ -1872,6 +1872,9 @@ namespace {
     Type *VisitPackExpansionType(const PackExpansionType *T) {
       return Visit(T->getPattern());
     }
+    Type *VisitPackIndexingType(const PackIndexingType *T) {
+      return Visit(T->getPattern());
+    }
   };
 
 } // namespace
@@ -3826,7 +3829,7 @@ static CachedProperties computeCachedProperties(const Type *T) {
 #define NON_CANONICAL_UNLESS_DEPENDENT_TYPE(Class,Base) case Type::Class:
 #include "clang/AST/TypeNodes.inc"
     // Treat instantiation-dependent types as external.
-    if (!T->isInstantiationDependentType()) T->dump();
+    //if (!T->isInstantiationDependentType()) T->dump();
     assert(T->isInstantiationDependentType());
     return CachedProperties(ExternalLinkage, false);
 
@@ -4152,6 +4155,7 @@ bool Type::canHaveNullability(bool ResultIfUnknown) const {
   case Type::Enum:
   case Type::InjectedClassName:
   case Type::PackExpansion:
+  case Type::PackIndexing:
   case Type::ObjCObject:
   case Type::ObjCInterface:
   case Type::Atomic:

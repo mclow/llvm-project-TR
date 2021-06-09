@@ -5697,6 +5697,11 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
     }
   }
 
+  if(D.isPackIndexing()) {
+      // TODO CORENTIN SEMA
+      T = Context.getPackIndexingType(T, D.getPackIndexingExpr());
+  }
+
   assert(!T.isNull() && "T must not be null at the end of this function");
   if (D.isInvalidType())
     return Context.getTrivialTypeSourceInfo(T);
@@ -6273,6 +6278,12 @@ GetTypeSourceInfoForDeclarator(TypeProcessingState &State,
   // Handle parameter packs whose type is a pack expansion.
   if (isa<PackExpansionType>(T)) {
     CurrTL.castAs<PackExpansionTypeLoc>().setEllipsisLoc(D.getEllipsisLoc());
+    CurrTL = CurrTL.getNextTypeLoc().getUnqualifiedLoc();
+  }
+
+  // Handle parameter packs whose type is a pack expansion.
+  if (isa<PackIndexingType>(T)) {
+    CurrTL.castAs<PackIndexingTypeLoc>().setEllipsisLoc(D.getEllipsisLoc());
     CurrTL = CurrTL.getNextTypeLoc().getUnqualifiedLoc();
   }
 

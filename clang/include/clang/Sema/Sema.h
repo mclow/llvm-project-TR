@@ -8222,6 +8222,10 @@ public:
                               SourceLocation EllipsisLoc,
                               Optional<unsigned> NumExpansions);
 
+
+  QualType CheckPackIndexing(QualType Pattern, SourceRange, SourceLocation,
+                              Expr* IndexExpr);
+
   /// Invoked when parsing an expression followed by an ellipsis, which
   /// creates a pack expansion.
   ///
@@ -8240,6 +8244,7 @@ public:
   /// \param EllipsisLoc The location of the ellipsis.
   ExprResult CheckPackExpansion(Expr *Pattern, SourceLocation EllipsisLoc,
                                 Optional<unsigned> NumExpansions);
+
 
   /// Determine whether we could expand a pack expansion with the
   /// given set of parameter packs into separate arguments by repeatedly

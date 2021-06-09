@@ -1888,6 +1888,9 @@ private:
   /// this declarator as a parameter pack.
   SourceLocation EllipsisLoc;
 
+  // If provided the expression used to unpack this tuple
+  Expr* PackIndexingExpression;
+
   friend struct DeclaratorChunk;
 
 public:
@@ -1900,7 +1903,7 @@ public:
         ObjCWeakProperty(false), InlineStorageUsed(false),
         HasInitializer(false), Attrs(ds.getAttributePool().getFactory()),
         AsmLabel(nullptr), TrailingRequiresClause(nullptr),
-        InventedTemplateParameterList(nullptr) {}
+        InventedTemplateParameterList(nullptr), PackIndexingExpression(nullptr) {}
 
   ~Declarator() {
     clear();
@@ -1987,6 +1990,7 @@ public:
     ObjCWeakProperty = false;
     CommaLoc = SourceLocation();
     EllipsisLoc = SourceLocation();
+    PackIndexingExpression = nullptr;
   }
 
   /// mayOmitIdentifier - Return true if the identifier is either optional or
@@ -2568,6 +2572,10 @@ public:
   bool hasEllipsis() const { return EllipsisLoc.isValid(); }
   SourceLocation getEllipsisLoc() const { return EllipsisLoc; }
   void setEllipsisLoc(SourceLocation EL) { EllipsisLoc = EL; }
+
+  bool isPackIndexing() const { return PackIndexingExpression != nullptr; }
+  Expr* getPackIndexingExpr() const { return PackIndexingExpression; }
+  void setPackIndexingExpr(Expr* E) { PackIndexingExpression = E; }
 
   void setFunctionDefinitionKind(FunctionDefinitionKind Val) {
     FunctionDefinition = static_cast<unsigned>(Val);

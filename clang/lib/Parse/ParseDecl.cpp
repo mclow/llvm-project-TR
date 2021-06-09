@@ -6185,6 +6185,9 @@ void Parser::ParseDirectDeclarator(Declarator &D) {
   assert(D.isPastIdentifier() &&
          "Haven't past the location of the identifier yet?");
 
+  // Try to parse T...[expr]
+  ParsePackIndexingExpression(D);
+
   // Don't parse attributes unless we have parsed an unparenthesized name.
   if (D.hasName() && !D.getNumTypeObjects())
     MaybeParseCXX11Attributes(D);
@@ -6244,6 +6247,28 @@ void Parser::ParseDirectDeclarator(Declarator &D) {
       break;
     }
   }
+}
+
+///       pack-indexing-expression
+///         '...' [ constant-expression ]
+void Parser::ParsePackIndexingExpression(Declarator &D) {
+    if(!(Tok.is(tok::ellipsis) && NextToken().is(tok::l_square))) {
+        return;
+    }
+
+    ConsumeToken();
+    BalancedDelimiterTracker T(*this, tok::l_square);
+    T.consumeOpen();
+
+    ExprResult Index = ParseConstantExpression();
+    // If there was an error parsing the assignment-expression, recover.
+    if (Index.isInvalid() || T.consumeClose()) {
+      D.setInvalidType(true);
+      // If the expression was invalid, skip it.
+      SkipUntil(tok::r_square, StopAtSemi);
+      return;
+    }
+    D.setPackIndexingExpr(Index.get());
 }
 
 void Parser::ParseDecompositionDeclarator(Declarator &D) {

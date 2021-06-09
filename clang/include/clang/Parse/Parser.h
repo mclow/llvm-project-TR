@@ -2972,6 +2972,7 @@ private:
       bool AtomicAllowed = true, bool IdentifierRequired = false,
       Optional<llvm::function_ref<void()>> CodeCompletionHandler = None);
   void ParseDirectDeclarator(Declarator &D);
+  void ParsePackIndexingExpression(Declarator &D);
   void ParseDecompositionDeclarator(Declarator &D);
   void ParseParenDeclarator(Declarator &D);
   void ParseFunctionDeclarator(Declarator &D,

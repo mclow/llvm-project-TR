@@ -5682,6 +5682,47 @@ public:
   }
 };
 
+
+class PackIndexingType: public Type, public llvm::FoldingSetNode {
+  friend class ASTContext; // ASTContext creates these
+
+  /// The pattern of the pack expansion.
+  QualType Pattern;
+  Expr* IndexExpr;
+
+  PackIndexingType(QualType Pattern, QualType Canon, Expr* IndexExpr)
+      : Type(PackIndexing, Canon,
+             (Pattern->getDependence() | TypeDependence::Dependent |TypeDependence::Instantiation) & ~TypeDependence::UnexpandedPack),
+        Pattern(Pattern), IndexExpr(IndexExpr) {
+  }
+
+public:
+  /// Retrieve the pattern of this pack expansion, which is the
+  /// type that will be repeatedly instantiated when instantiating the
+  /// pack expansion itself.
+  QualType getPattern() const { return Pattern; }
+
+  Expr* getIndexExpr() const {
+      return IndexExpr;
+  }
+
+  static void Profile(llvm::FoldingSetNodeID &ID, QualType Pattern, Expr* Index) {
+    ID.AddPointer(Pattern.getAsOpaquePtr());
+    ID.AddPointer(Index);
+  }
+
+  void Profile(llvm::FoldingSetNodeID &ID) {
+      Profile(ID, getPattern(), getIndexExpr());
+  }
+
+  bool isSugared() const { return false; }
+  QualType desugar() const { return QualType(this, 0); }
+
+  static bool classof(const Type *T) {
+    return T->getTypeClass() == PackIndexing;
+  }
+};
+
 /// This class wraps the list of protocol qualifiers. For types that can
 /// take ObjC protocol qualifers, they can subclass this class.
 template <class T>

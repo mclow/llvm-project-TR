@@ -2419,6 +2419,7 @@ APValue *VarDecl::evaluateValueImpl(SmallVectorImpl<PartialDiagnosticAt> &Notes,
   const auto *Init = cast<Expr>(Eval->Value);
   assert(!Init->isValueDependent());
 
+
   // We only produce notes indicating why an initializer is non-constant the
   // first time it is evaluated. FIXME: The notes won't always be emitted the
   // first time we try evaluation, so might not be produced at all.

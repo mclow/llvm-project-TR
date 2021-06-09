@@ -266,6 +266,7 @@ bool TypePrinter::canPrefixQualifiers(const Type *T,
     case Type::FunctionNoProto:
     case Type::Paren:
     case Type::PackExpansion:
+    case Type::PackIndexing:
     case Type::SubstTemplateTypeParm:
     case Type::MacroQualified:
       CanPrefixQualifiers = false;
@@ -1571,6 +1572,18 @@ void TypePrinter::printPackExpansionAfter(const PackExpansionType *T,
                                           raw_ostream &OS) {
   printAfter(T->getPattern(), OS);
   OS << "...";
+}
+
+void TypePrinter::printPackIndexingBefore(const PackIndexingType *T, raw_ostream &OS) {
+  printBefore(T->getPattern(), OS);
+}
+
+void TypePrinter::printPackIndexingAfter(const PackIndexingType *T, raw_ostream &OS) {
+    OS << "...";
+    printAfter(T->getPattern(), OS);
+    OS << " [";
+    T->getIndexExpr()->printPretty(OS, nullptr, Policy);
+    OS << "]";
 }
 
 void TypePrinter::printAttributedBefore(const AttributedType *T,

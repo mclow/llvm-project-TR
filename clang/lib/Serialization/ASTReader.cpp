@@ -6743,6 +6743,11 @@ void TypeLocReader::VisitPackExpansionTypeLoc(PackExpansionTypeLoc TL) {
   TL.setEllipsisLoc(readSourceLocation());
 }
 
+void TypeLocReader::VisitPackIndexingTypeLoc(PackIndexingTypeLoc TL) {
+  TL.setEllipsisLoc(readSourceLocation());
+}
+
+
 void TypeLocReader::VisitObjCInterfaceTypeLoc(ObjCInterfaceTypeLoc TL) {
   TL.setNameLoc(readSourceLocation());
 }

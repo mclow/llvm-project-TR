@@ -2463,6 +2463,44 @@ public:
   }
 };
 
+
+struct PackIndexingTypeLocInfo {
+  SourceLocation EllipsisLoc;
+};
+
+class PackIndexingTypeLoc
+  : public ConcreteTypeLoc<UnqualTypeLoc, PackIndexingTypeLoc,
+                           PackIndexingType, PackIndexingTypeLocInfo> {
+public:
+  SourceLocation getEllipsisLoc() const {
+    return this->getLocalData()->EllipsisLoc;
+  }
+
+  Expr* getIndexExpr() const {
+    return getTypePtr()->getIndexExpr();
+  }
+
+  void setEllipsisLoc(SourceLocation Loc) {
+    this->getLocalData()->EllipsisLoc = Loc;
+  }
+
+  SourceRange getLocalSourceRange() const {
+    return SourceRange(getEllipsisLoc(), getEllipsisLoc());
+  }
+
+  void initializeLocal(ASTContext &, SourceLocation Loc) {
+    setEllipsisLoc(Loc);
+  }
+
+  TypeLoc getPatternLoc() const {
+      return getInnerTypeLoc();
+  }
+
+  QualType getInnerType() const {
+    return this->getTypePtr()->getPattern();
+  }
+};
+
 struct AtomicTypeLocInfo {
   SourceLocation KWLoc, LParenLoc, RParenLoc;
 };

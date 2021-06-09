@@ -182,6 +182,8 @@ namespace {
     bool TraversePackExpansionType(PackExpansionType *T) { return true; }
     bool TraversePackExpansionTypeLoc(PackExpansionTypeLoc TL) { return true; }
     bool TraversePackExpansionExpr(PackExpansionExpr *E) { return true; }
+    bool TraversePackIndexingTypeLoc(PackIndexingTypeLoc TL) { return true; }
+    bool TraversePackIndexingType(PackIndexingType* T) { return true; }
     bool TraverseCXXFoldExpr(CXXFoldExpr *E) { return true; }
 
     ///@}
@@ -380,12 +382,13 @@ Sema::DiagnoseUnexpandedParameterPacks(SourceLocation Loc,
 
 bool Sema::DiagnoseUnexpandedParameterPack(SourceLocation Loc,
                                            TypeSourceInfo *T,
-                                         UnexpandedParameterPackContext UPPC) {
+                                           UnexpandedParameterPackContext UPPC) {
   // C++0x [temp.variadic]p5:
   //   An appearance of a name of a parameter pack that is not expanded is
   //   ill-formed.
   if (!T->getType()->containsUnexpandedParameterPack())
     return false;
+
 
   SmallVector<UnexpandedParameterPack, 2> Unexpanded;
   CollectUnexpandedParameterPacksVisitor(Unexpanded).TraverseTypeLoc(
@@ -639,6 +642,14 @@ QualType Sema::CheckPackExpansion(QualType Pattern, SourceRange PatternRange,
 
   return Context.getPackExpansionType(Pattern, NumExpansions,
                                       /*ExpectPackInType=*/false);
+}
+
+QualType Sema::CheckPackIndexing(QualType Pattern,
+                           SourceRange,
+                           SourceLocation,
+                           Expr* IndexExpr)
+{
+    return Context.getPackIndexingType(Pattern, IndexExpr);
 }
 
 ExprResult Sema::ActOnPackExpansion(Expr *Pattern, SourceLocation EllipsisLoc) {
@@ -1056,7 +1067,7 @@ Sema::getTemplateArgumentPackExpansionPattern(
       TemplateArgumentLoc OrigLoc,
       SourceLocation &Ellipsis, Optional<unsigned> &NumExpansions) const {
   const TemplateArgument &Argument = OrigLoc.getArgument();
-  assert(Argument.isPackExpansion());
+  //assert(Argument.isPackExpansion());
   switch (Argument.getKind()) {
   case TemplateArgument::Type: {
     // FIXME: We shouldn't ever have to worry about missing

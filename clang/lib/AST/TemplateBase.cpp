@@ -255,7 +255,7 @@ bool TemplateArgument::isPackExpansion() const {
     return true;
 
   case Type:
-    return isa<PackExpansionType>(getAsType());
+    return isa<PackExpansionType>(getAsType()) || isa<PackIndexingType>(getAsType()); // TODO FIXME CORENTIN
 
   case Expression:
     return isa<PackExpansionExpr>(getAsExpr());

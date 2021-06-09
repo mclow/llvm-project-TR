@@ -1,4 +1,4 @@
-//===------- SemaTemplate.cpp - Semantic Analysis for C++ Templates -------===//
+﻿//===------- SemaTemplate.cpp - Semantic Analysis for C++ Templates -------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -2823,7 +2823,7 @@ bool Sema::CheckTemplateParameterList(TemplateParameterList *NewParams,
         = OldParams? cast<TemplateTemplateParmDecl>(*OldParam) : nullptr;
       if (NewTemplateParm->isParameterPack()) {
         assert(!NewTemplateParm->hasDefaultArgument() &&
-               "Parameter packs can't have a default argument!");
+                 "Parameter packs can't have a default argument!");
         if (!NewTemplateParm->isPackExpansion())
           SawParameterPack = true;
       } else if (OldTemplateParm &&
@@ -5699,7 +5699,8 @@ bool Sema::CheckTemplateArgumentList(
   LocalInstantiationScope InstScope(*this, true);
   for (TemplateParameterList::iterator Param = Params->begin(),
                                        ParamEnd = Params->end();
-       Param != ParamEnd; /* increment in loop */) {
+       Param != ParamEnd; /* increment in loop */)
+  {
     // If we have an expanded parameter pack, make sure we don't have too
     // many arguments.
     if (Optional<unsigned> Expansions = getExpandedPackSize(*Param)) {
@@ -5798,7 +5799,7 @@ bool Sema::CheckTemplateArgumentList(
     // Template parameter pack with integer sequence initializer
     // Add a parameter for each value
     if (NonTypeTemplateParmDecl *NTTP = dyn_cast<NonTypeTemplateParmDecl>(*Param)) {
-        if(ArgumentPack.empty() && NTTP->isTemplateParameterPack() && NTTP->hasDefaultArgument()) {
+        if(NTTP->isTemplateParameterPack() && NTTP->hasDefaultArgument()) {
             ExprResult E = SubstDefaultTemplateArgument(*this, Template,
                                                         TemplateLoc,
                                                         RAngleLoc,
@@ -5892,8 +5893,8 @@ bool Sema::CheckTemplateArgumentList(
       // A non-expanded parameter pack before the end of the parameter list
       // only occurs for an ill-formed template parameter list, unless we've
       // got a partial argument list for a function template, so just bail out.
-      if (Param + 1 != ParamEnd)
-        return true;
+      //if (Param + 1 != ParamEnd)
+      //  return true;
 
       Converted.push_back(
           TemplateArgument::CreatePackCopy(Context, ArgumentPack));
@@ -6235,6 +6236,11 @@ bool UnnamedLocalNoLinkageFinder::VisitPackExpansionType(
                                                    const PackExpansionType* T) {
   return Visit(T->getPattern());
 }
+
+bool UnnamedLocalNoLinkageFinder::VisitPackIndexingType(const PackIndexingType * T) {
+  return Visit(T->getPattern());
+}
+
 
 bool UnnamedLocalNoLinkageFinder::VisitObjCObjectType(const ObjCObjectType *) {
   return false;

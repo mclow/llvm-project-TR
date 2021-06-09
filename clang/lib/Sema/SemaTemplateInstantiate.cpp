@@ -2305,6 +2305,10 @@ namespace {
     TemplateTypeParmDecl *VisitPackExpansionType(const PackExpansionType *T) {
       return Visit(T->getPattern());
     }
+
+    TemplateTypeParmDecl *VisitPackIndexingType(const PackIndexingType *T) {
+      return Visit(T->getPattern());
+    }
   };
 
 } // namespace

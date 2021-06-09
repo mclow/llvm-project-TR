@@ -2297,6 +2297,7 @@ DeduceTemplateArgumentsByTypeMatch(Sema &S,
     case Type::DeducedTemplateSpecialization:
     case Type::DependentTemplateSpecialization:
     case Type::PackExpansion:
+    case Type::PackIndexing:
     case Type::Pipe:
       // No template argument deduction for these types
       return Sema::TDK_Success;
@@ -2436,7 +2437,8 @@ static bool hasTemplateArgumentForDeduction(ArrayRef<TemplateArgument> &Args,
   if (Arg.getKind() != TemplateArgument::Pack)
     return true;
 
-  assert(ArgIdx == Args.size() - 1 && "Pack not at the end of argument list?");
+  //TODO CORENTIN
+  //assert(ArgIdx == Args.size() - 1 && "Pack not at the end of argument list?");
   Args = Arg.pack_elements();
   ArgIdx = 0;
   return ArgIdx < Args.size();
@@ -6065,6 +6067,15 @@ MarkUsedTemplateParameters(ASTContext &Ctx, QualType T,
   case Type::PackExpansion:
     MarkUsedTemplateParameters(Ctx,
                                cast<PackExpansionType>(T)->getPattern(),
+                               OnlyDeduced, Depth, Used);
+    break;
+
+  case Type::PackIndexing:
+    MarkUsedTemplateParameters(Ctx,
+                               cast<PackIndexingType>(T)->getPattern(),
+                               OnlyDeduced, Depth, Used);
+    MarkUsedTemplateParameters(Ctx,
+                               cast<PackIndexingType>(T)->getIndexExpr(),
                                OnlyDeduced, Depth, Used);
     break;
 

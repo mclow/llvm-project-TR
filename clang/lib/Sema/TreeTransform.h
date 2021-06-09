@@ -1185,6 +1185,13 @@ public:
                                         NumExpansions);
   }
 
+  QualType RebuildPackIndexingType(QualType Pattern,
+                                    SourceRange PatternRange,
+                                    SourceLocation EllipsisLoc,
+                                    Expr* IndexExpr) {
+    return getSema().CheckPackIndexing(Pattern, PatternRange, EllipsisLoc, IndexExpr);
+  }
+
   /// Build a new atomic type given its value type.
   ///
   /// By default, performs semantic analysis when building the atomic type.
@@ -6985,6 +6992,75 @@ QualType TreeTransform<Derived>::TransformPackExpansionType(TypeLocBuilder &TLB,
   NewT.setEllipsisLoc(TL.getEllipsisLoc());
   return Result;
 }
+
+template<typename Derived>
+QualType TreeTransform<Derived>::TransformPackIndexingType(TypeLocBuilder &TLB,
+                                                           PackIndexingTypeLoc TL) {
+    QualType Pattern = getDerived().TransformType(TLB, TL.getPatternLoc());
+    if (Pattern.isNull())
+        return QualType();
+
+    EnterExpressionEvaluationContext Unevaluated(
+      SemaRef, Sema::ExpressionEvaluationContext::ConstantEvaluated);
+
+    // Transform the condition
+    ExprResult Index = getDerived().TransformExpr(TL.getIndexExpr());
+    if (!Index.isUsable())
+        return QualType();
+
+    TemplateArgumentLoc
+            Loc(TemplateArgument(TL.getInnerType()), SemaRef.Context.getTrivialTypeSourceInfo(TL.getInnerType()));
+
+    SmallVector<UnexpandedParameterPack, 2> Unexpanded;
+    SemaRef.collectUnexpandedParameterPacks(TL.getInnerType(),
+                                          Unexpanded);
+    bool Expand = true;
+    bool RetainExpansion = false;
+    Optional<unsigned> OrigNumExpansions;
+    Optional<unsigned> NumExpansions = OrigNumExpansions;
+    if (getDerived().TryExpandParameterPacks(TL.getEllipsisLoc(),
+                                           TL.getSourceRange(),
+                                           Unexpanded,
+                                           Expand, RetainExpansion,
+                                           NumExpansions)) {
+      return QualType();
+    }
+    if (!Expand) {
+      QualType Result = TL.getType();
+      if (getDerived().AlwaysRebuild() ||
+          Pattern != TL.getPatternLoc().getType() ||
+          Index.get() != TL.getIndexExpr()) {
+
+        Result = getDerived().RebuildPackIndexingType(
+            Pattern, TL.getPatternLoc().getSourceRange(), TL.getEllipsisLoc(),
+            Index.get());
+        if (Result.isNull())
+          return QualType();
+      }
+
+      PackIndexingTypeLoc NewT = TLB.push<PackIndexingTypeLoc>(Result);
+      NewT.setEllipsisLoc(TL.getEllipsisLoc());
+      return Result;
+    }
+
+    Expr::EvalResult Result;
+    if (!Index.get()->EvaluateAsInt(Result, SemaRef.Context)) {
+        return QualType();
+    }
+
+    Sema::ArgumentPackSubstitutionIndexRAII SubstIndex(getSema(), Result.Val.getInt().getZExtValue());
+    TLB.clear();
+    QualType NewTypeArg =
+        getDerived().TransformType(TLB, TL.getPatternLoc());
+    if (NewTypeArg.isNull())
+      return QualType();
+
+    //TLB.pushFullCopy(TypeLoc(NewTypeArg));
+    //PackIndexingTypeLoc NewT = TLB.pushFullCopy(TypeArgBuilder.);
+    //NewT.setEllipsisLoc(TL.getEllipsisLoc());
+    return NewTypeArg;
+}
+
 
 template<typename Derived>
 QualType

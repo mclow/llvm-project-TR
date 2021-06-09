@@ -2249,6 +2249,7 @@ bool CXXNameMangler::mangleUnresolvedTypeOrSimpleId(QualType Ty,
   case Type::Auto:
   case Type::DeducedTemplateSpecialization:
   case Type::PackExpansion:
+  case Type::PackIndexing:
   case Type::ObjCObject:
   case Type::ObjCInterface:
   case Type::ObjCObjectPointer:
@@ -3747,6 +3748,13 @@ void CXXNameMangler::mangleType(const PackExpansionType *T) {
   // <type>  ::= Dp <type>          # pack expansion (C++0x)
   Out << "Dp";
   mangleType(T->getPattern());
+}
+
+void CXXNameMangler::mangleType(const PackIndexingType *T) {
+    DiagnosticsEngine &Diags = Context.getDiags();
+    unsigned DiagID = Diags.getCustomDiagID(DiagnosticsEngine::Error,
+      "cannot mangle this pack indexing yet");
+    Diags.Report(DiagID);
 }
 
 void CXXNameMangler::mangleType(const ObjCInterfaceType *T) {

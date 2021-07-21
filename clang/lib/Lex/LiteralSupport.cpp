@@ -170,6 +170,7 @@ static unsigned ProcessCharEscape(const char *ThisTokBegin,
       }
       int CharVal = llvm::hexDigitValue(*ThisTokBuf);
       if (CharVal == -1) {
+        // Non delimited hex escape sequences stop at the first non-hex digit
         if (!Delimited)
           break;
         HadError = true;

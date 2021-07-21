@@ -17,7 +17,7 @@ const char *errors =
 
 void ucn() {
   char a = '\u{1234}'; // expected-error {{character too large for enclosing character literal type}}
-                       // expected-warning@-1 {{delimited escape sequence is a clang extension}}
+                       // expected-warning@-1 {{delimited escape sequences are a clang extension}}
 
   unsigned b = U'\u{1234}'; // expected-warning {{extension}}
 
@@ -36,7 +36,7 @@ void hex() {
   char b = '\x{abcdegggggabc}'; // expected-error 5{{invalid digit 'g' in escape sequence}}
   char c = '\x{ff1}';           // expected-error {{hex escape sequence out of range}}
 
-#if WCHAR_MAX == 0xFFFFFFFF
+#if __WCHAR_MAX__ > 0xFFFF
   unsigned d = L'\x{FFFFFFFF}';  // expected-warning {{extension}}
   unsigned e = L'\x{100000000}'; // expected-error {{hex escape sequence out of range}}
 #else
@@ -51,7 +51,7 @@ void octal() {
   char a = '\o{1}';              // expected-warning {{extension}}
   char b = '\o{12345678881238}'; // expected-error 4{{invalid digit '8' in escape sequence}}
   char c = '\o{777}';            // //expected-error {{octal escape sequence out of range}}
-#if WCHAR_MAX == 0xFFFFFFFF
+#if __WCHAR_MAX__ > 0xFFFF
   unsigned d = L'\o{37777777777}'; // expected-warning {{extension}}
   unsigned e = L'\o{40000000000}'; // expected-error {{octal escape sequence out of range}}
 #else
@@ -61,12 +61,9 @@ void octal() {
 }
 
 void concat() {
-  (void)"\x{"
-        "12}"; // expected-error {{expected '}'}}
-  (void)"\u{"
-        "12}"; // expected-error {{expected '}'}}
-  (void)"\o{"
-        "12}"; // expected-error {{expected '}'}}
+  (void)"\x{" "12}"; // expected-error {{expected '}'}}
+  (void)"\u{" "12}"; // expected-error {{expected '}'}}
+  (void)"\o{" "12}"; // expected-error {{expected '}'}}
 
   (void)"\x{12" "}"; // expected-error {{expected '}'}}
   (void)"\u{12" "}"; // expected-error {{expected '}'}}

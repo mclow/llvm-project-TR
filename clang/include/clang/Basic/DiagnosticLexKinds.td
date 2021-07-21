@@ -125,8 +125,9 @@ def warn_utf8_symbol_zero_width : Warning<
   "identifier contains Unicode character <U+%0> that is invisible in "
   "some environments">, InGroup<DiagGroup<"unicode-zero-width">>;
 
-def ext_delimited_escape_sequence : Extension<"delimited escape sequence is a clang extension">,
-  InGroup<DiagGroup<"delimited-escape-sequence">>;
+def ext_delimited_escape_sequence : Extension<
+  "delimited escape sequences are a clang extension">,
+  InGroup<DiagGroup<"delimited-escape-sequence-extension">>;
 def err_delimited_escape_empty : Error<
   "empty escape sequence">;
 def err_delimited_escape_missing_brace: Error<

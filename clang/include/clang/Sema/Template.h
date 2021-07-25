@@ -86,6 +86,8 @@ enum class TemplateSubstitutionKind : char {
     /// being substituted.
     unsigned NumRetainedOuterLevels = 0;
 
+    Optional<unsigned> DeducedPackSize;
+
     /// The kind of substitution described by this argument list.
     TemplateSubstitutionKind Kind = TemplateSubstitutionKind::Specialization;
 
@@ -94,8 +96,10 @@ enum class TemplateSubstitutionKind : char {
     MultiLevelTemplateArgumentList() = default;
 
     /// Construct a single-level template argument list.
-    explicit
-    MultiLevelTemplateArgumentList(const TemplateArgumentList &TemplateArgs) {
+    explicit MultiLevelTemplateArgumentList(
+        const TemplateArgumentList &TemplateArgs,
+        Optional<unsigned> DeducedPackSize = None)
+        : DeducedPackSize(DeducedPackSize) {
       addOuterTemplateArguments(&TemplateArgs);
     }
 
@@ -231,6 +235,10 @@ enum class TemplateSubstitutionKind : char {
     }
     ArgListsIterator end() { return TemplateArgumentLists.end(); }
     ConstArgListsIterator end() const { return TemplateArgumentLists.end(); }
+
+    void setDeducedPackSize(Optional<unsigned> size) { DeducedPackSize = size; }
+
+    Optional<unsigned> deducedPackSize() const { return DeducedPackSize; }
   };
 
   /// The context in which partial ordering of function templates occurs.
@@ -503,6 +511,7 @@ enum class TemplateSubstitutionKind : char {
     const MultiLevelTemplateArgumentList &TemplateArgs;
     Sema::LateInstantiatedAttrVec* LateAttrs = nullptr;
     LocalInstantiationScope *StartingScope = nullptr;
+    Optional<unsigned> DeducedPackSize;
 
     /// A list of out-of-line class template partial
     /// specializations that will need to be instantiated after the
@@ -521,10 +530,12 @@ enum class TemplateSubstitutionKind : char {
 
   public:
     TemplateDeclInstantiator(Sema &SemaRef, DeclContext *Owner,
-                             const MultiLevelTemplateArgumentList &TemplateArgs)
+                             const MultiLevelTemplateArgumentList &TemplateArgs,
+                             Optional<unsigned> DeducedPackSize = None)
         : SemaRef(SemaRef),
           SubstIndex(SemaRef, SemaRef.ArgumentPackSubstitutionIndex),
-          Owner(Owner), TemplateArgs(TemplateArgs) {}
+          Owner(Owner), TemplateArgs(TemplateArgs),
+          DeducedPackSize(DeducedPackSize) {}
 
 // Define all the decl visitors using DeclNodes.inc
 #define DECL(DERIVED, BASE) \

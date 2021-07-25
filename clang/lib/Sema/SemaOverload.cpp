@@ -10844,14 +10844,20 @@ static void DiagnoseArityMismatch(Sema &S, NamedDecl *Found, Decl *D,
     modeCount = FnTy->getNumParams();
   }
 
+  unsigned Index = 0;
+  for (; Index < FnTy->getNumParams(); Index++) {
+    if (!Fn->getParamDecl(Index)->isParameterPack())
+      break;
+  }
+
   std::string Description;
   std::pair<OverloadCandidateKind, OverloadCandidateSelect> FnKindPair =
       ClassifyOverloadCandidate(S, Found, Fn, CRK_None, Description);
 
-  if (modeCount == 1 && Fn->getParamDecl(0)->getDeclName())
+  if (modeCount == 1 && Fn->getParamDecl(Index)->getDeclName())
     S.Diag(Fn->getLocation(), diag::note_ovl_candidate_arity_one)
         << (unsigned)FnKindPair.first << (unsigned)FnKindPair.second
-        << Description << mode << Fn->getParamDecl(0) << NumFormalArgs;
+        << Description << mode << Fn->getParamDecl(Index) << NumFormalArgs;
   else
     S.Diag(Fn->getLocation(), diag::note_ovl_candidate_arity)
         << (unsigned)FnKindPair.first << (unsigned)FnKindPair.second

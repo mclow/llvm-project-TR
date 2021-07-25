@@ -133,12 +133,10 @@ unsigned TemplateParameterList::getMinRequiredArguments() const {
     if (P->isTemplateParameterPack()) {
       if (Optional<unsigned> Expansions = getExpandedPackSize(P)) {
         NumRequiredArgs += *Expansions;
-        continue;
       }
-      break;
+      continue;
     }
-
-    if (const auto *TTP = dyn_cast<TemplateTypeParmDecl>(P)) {
+    else if (const auto *TTP = dyn_cast<TemplateTypeParmDecl>(P)) {
       if (TTP->hasDefaultArgument())
         break;
     } else if (const auto *NTTP = dyn_cast<NonTypeTemplateParmDecl>(P)) {

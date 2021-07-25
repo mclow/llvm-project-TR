@@ -171,7 +171,7 @@ namespace std_examples {
   template <class... T> struct value_holder {
     template<T... Values> struct apply { };
   };
-  template <class... T, T... Values> struct static_array; // expected-error {{must be the last}}
+  template <class... T, T... Values> struct static_array; // expected-error {{non-trailing template parameter packs are a C++23 extension}}
 
   int n;
   value_holder<int, char, int*>::apply<12345, 'x', &n> test;

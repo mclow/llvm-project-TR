@@ -23,25 +23,24 @@ template<template<class> class M = vector, template<class> class... Metas>
 
 // If a template-parameter of a primary class template or alias template is a
 // template parameter pack, it shall be the last template-parameter.
-template<typename ...Types, // expected-error{{template parameter pack must be the last template parameter}}
-         int After, int After2>
+template<typename ...Types, int After, int After2> // expected-error 2{{non-trailing template parameter packs are a C++23 extension}}
 struct X0t;
 X0t<int> pr9789();
-template<typename ...Types, // expected-error{{template parameter pack must be the last template parameter}}
+template<typename ...Types, // expected-error{{non-trailing template parameter packs are a C++23 extension}}
          int After>
 using A0t = int;
 
-template<int ...Values, // expected-error{{template parameter pack must be the last template parameter}}
+template<int ...Values, // expected-error{{non-trailing template parameter packs are a C++23 extension}}
          int After>
 struct X0nt;
-template<int ...Values, // expected-error{{template parameter pack must be the last template parameter}}
+template<int ...Values, // expected-error{{non-trailing template parameter packs are a C++23 extension}}
          int After>
 using A0nt = int;
 
-template<template<typename> class ...Templates, // expected-error{{template parameter pack must be the last template parameter}}
+template<template<typename> class ...Templates, // expected-error{{non-trailing template parameter packs are a C++23 extension}}
          int After>
 struct X0tt;
-template<template<typename> class ...Templates, // expected-error{{template parameter pack must be the last template parameter}}
+template<template<typename> class ...Templates, // expected-error{{non-trailing template parameter packs are a C++23 extension}}
          int After>
 using A0tt = int;
 
@@ -55,7 +54,7 @@ template<int... Values> struct X1nt;
 template<int ...Values, int V> struct X1nt<V, Values...> { };
 
 template<template<int> class... Meta> struct X1tt;
-template<template<int> class... Meta, template<int> class M> 
+template<template<int> class... Meta, template<int> class M>
   struct X1tt<M, Meta...> { };
 
 template<typename ...Types, typename T>
@@ -64,7 +63,7 @@ void f1t(X1t<T, Types...>);
 template<int ...Values, int V>
 void f1nt(X1nt<V, Values...>);
 
-template<template<int> class... Meta, template<int> class M> 
+template<template<int> class... Meta, template<int> class M>
 void f1tt(X1tt<M, Meta...>);
 
 namespace DefaultTemplateArgsInFunction {

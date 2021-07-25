@@ -281,7 +281,8 @@ public:
                                ArrayRef<UnexpandedParameterPack> Unexpanded,
                                bool &ShouldExpand,
                                bool &RetainExpansion,
-                               Optional<unsigned> &NumExpansions) {
+                               Optional<unsigned> &NumExpansions,
+                               Optional<unsigned> DeducedPackSize = None) {
     ShouldExpand = false;
     return false;
   }
@@ -636,12 +637,11 @@ public:
   QualType Transform##CLASS##Type(TypeLocBuilder &TLB, CLASS##TypeLoc T);
 #include "clang/AST/TypeLocNodes.def"
 
-  template<typename Fn>
-  QualType TransformFunctionProtoType(TypeLocBuilder &TLB,
-                                      FunctionProtoTypeLoc TL,
-                                      CXXRecordDecl *ThisContext,
-                                      Qualifiers ThisTypeQuals,
-                                      Fn TransformExceptionSpec);
+  template <typename Fn>
+  QualType TransformFunctionProtoType(
+      TypeLocBuilder &TLB, FunctionProtoTypeLoc TL, CXXRecordDecl *ThisContext,
+      Qualifiers ThisTypeQuals, Fn TransformExceptionSpec,
+      Optional<unsigned> DeducedPackSize = None);
 
   bool TransformExceptionSpec(SourceLocation Loc,
                               FunctionProtoType::ExceptionSpecInfo &ESI,
@@ -677,7 +677,8 @@ public:
       const QualType *ParamTypes,
       const FunctionProtoType::ExtParameterInfo *ParamInfos,
       SmallVectorImpl<QualType> &PTypes, SmallVectorImpl<ParmVarDecl *> *PVars,
-      Sema::ExtParameterInfoBuilder &PInfos);
+      Sema::ExtParameterInfoBuilder &PInfos,
+      Optional<unsigned> DeducedPackSize = None);
 
   /// Transforms a single function-type parameter.  Return null
   /// on error.
@@ -5661,10 +5662,13 @@ bool TreeTransform<Derived>::TransformFunctionTypeParams(
     const FunctionProtoType::ExtParameterInfo *ParamInfos,
     SmallVectorImpl<QualType> &OutParamTypes,
     SmallVectorImpl<ParmVarDecl *> *PVars,
-    Sema::ExtParameterInfoBuilder &PInfos) {
+    Sema::ExtParameterInfoBuilder &PInfos,
+    Optional<unsigned> DeducedPackSize) {
+
   int indexAdjustment = 0;
 
   unsigned NumParams = Params.size();
+  unsigned NumPack   = 0;
   for (unsigned i = 0; i != NumParams; ++i) {
     if (ParmVarDecl *OldParm = Params[i]) {
       assert(OldParm->getFunctionScopeIndex() == i);
@@ -5684,16 +5688,16 @@ bool TreeTransform<Derived>::TransformFunctionTypeParams(
         // Determine whether we should expand the parameter packs.
         bool ShouldExpand = false;
         bool RetainExpansion = false;
-        Optional<unsigned> OrigNumExpansions;
+        Optional<unsigned> OrigNumExpansions = ExpansionTL.getTypePtr()->getNumExpansions();
         if (Unexpanded.size() > 0) {
-          OrigNumExpansions = ExpansionTL.getTypePtr()->getNumExpansions();
           NumExpansions = OrigNumExpansions;
           if (getDerived().TryExpandParameterPacks(ExpansionTL.getEllipsisLoc(),
                                                    Pattern.getSourceRange(),
                                                    Unexpanded,
                                                    ShouldExpand,
                                                    RetainExpansion,
-                                                   NumExpansions)) {
+                                                   NumExpansions,
+                                                   DeducedPackSize)) {
             return true;
           }
         } else {
@@ -5718,6 +5722,8 @@ bool TreeTransform<Derived>::TransformFunctionTypeParams(
                                                 /*ExpectParameterPack=*/false);
             if (!NewParm)
               return true;
+
+            NewParm->setOriginalPackIndex(NumPack);
 
             if (ParamInfos)
               PInfos.set(OutParamTypes.size(), ParamInfos[i]);
@@ -5751,6 +5757,8 @@ bool TreeTransform<Derived>::TransformFunctionTypeParams(
           // go down by one.
           indexAdjustment--;
 
+          NumPack++;
+
           // We're done with the pack expansion.
           continue;
         }
@@ -5765,6 +5773,7 @@ bool TreeTransform<Derived>::TransformFunctionTypeParams(
         assert(NewParm->isParameterPack() &&
                "Parameter pack no longer a parameter pack after "
                "transformation.");
+        NumPack++;
       } else {
         NewParm = getDerived().TransformFunctionTypeParam(
             OldParm, indexAdjustment, None, /*ExpectParameterPack=*/ false);
@@ -5897,10 +5906,12 @@ TreeTransform<Derived>::TransformFunctionProtoType(TypeLocBuilder &TLB,
       });
 }
 
-template<typename Derived> template<typename Fn>
+template <typename Derived>
+template <typename Fn>
 QualType TreeTransform<Derived>::TransformFunctionProtoType(
     TypeLocBuilder &TLB, FunctionProtoTypeLoc TL, CXXRecordDecl *ThisContext,
-    Qualifiers ThisTypeQuals, Fn TransformExceptionSpec) {
+    Qualifiers ThisTypeQuals, Fn TransformExceptionSpec,
+    Optional<unsigned> DeducedPackSize) {
 
   // Transform the parameters and return type.
   //
@@ -5920,8 +5931,8 @@ QualType TreeTransform<Derived>::TransformFunctionProtoType(
     if (getDerived().TransformFunctionTypeParams(
             TL.getBeginLoc(), TL.getParams(),
             TL.getTypePtr()->param_type_begin(),
-            T->getExtParameterInfosOrNull(),
-            ParamTypes, &ParamDecls, ExtParamInfos))
+            T->getExtParameterInfosOrNull(), ParamTypes, &ParamDecls,
+            ExtParamInfos, DeducedPackSize))
       return QualType();
 
     {
@@ -5946,8 +5957,8 @@ QualType TreeTransform<Derived>::TransformFunctionProtoType(
     if (getDerived().TransformFunctionTypeParams(
             TL.getBeginLoc(), TL.getParams(),
             TL.getTypePtr()->param_type_begin(),
-            T->getExtParameterInfosOrNull(),
-            ParamTypes, &ParamDecls, ExtParamInfos))
+            T->getExtParameterInfosOrNull(), ParamTypes, &ParamDecls,
+            ExtParamInfos, DeducedPackSize))
       return QualType();
   }
 

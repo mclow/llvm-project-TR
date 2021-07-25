@@ -4340,34 +4340,42 @@ TemplateDeclInstantiator::SubstFunctionType(FunctionDecl *D,
       // Get parameters from the new type info.
       TypeLoc NewTL = NewTInfo->getTypeLoc().IgnoreParens();
       FunctionProtoTypeLoc NewProtoLoc = NewTL.castAs<FunctionProtoTypeLoc>();
-      unsigned NewIdx = 0;
-      for (unsigned OldIdx = 0, NumOldParams = OldProtoLoc.getNumParams();
-           OldIdx != NumOldParams; ++OldIdx) {
-        ParmVarDecl *OldParam = OldProtoLoc.getParam(OldIdx);
-        if (!OldParam)
-          return nullptr;
-
+      unsigned OldIdx = 0;
+      ParmVarDecl *OldParam = nullptr;
+      Optional<unsigned> PackIndex;
+      Optional<unsigned> NumArgumentsInExpansion;
+      for (unsigned NewIdx = 0, NumNewParams = NewProtoLoc.getNumParams();
+           NewIdx != NumNewParams;) {
         LocalInstantiationScope *Scope = SemaRef.CurrentInstantiationScope;
 
-        Optional<unsigned> NumArgumentsInExpansion;
-        if (OldParam->isParameterPack())
-          NumArgumentsInExpansion =
-              SemaRef.getNumArgumentsInExpansion(OldParam->getType(),
-                                                 TemplateArgs);
-        if (!NumArgumentsInExpansion) {
+        ParmVarDecl *NewParam = NewProtoLoc.getParam(NewIdx);
+        if (!PackIndex || !NewParam->wasExpandedFromPack() ||
+            (PackIndex && *PackIndex != NewParam->originalPackIndex())) {
+          OldParam = OldProtoLoc.getParam(OldIdx++);
+          if (!OldParam)
+            return nullptr;
+          NumArgumentsInExpansion = None;
+          if (OldParam->isParameterPack()) {
+            Scope->MakeInstantiatedLocalArgPack(OldParam);
+            NumArgumentsInExpansion = SemaRef.getNumArgumentsInExpansion(
+                OldParam->getType(), TemplateArgs);
+          }
+        }
+
+        PackIndex = NewParam->wasExpandedFromPack()
+                        ? Optional<unsigned>(NewParam->originalPackIndex())
+                        : None;
+
+        if (!(NumArgumentsInExpansion || NewParam->wasExpandedFromPack())) {
           // Simple case: normal parameter, or a parameter pack that's
           // instantiated to a (still-dependent) parameter pack.
-          ParmVarDecl *NewParam = NewProtoLoc.getParam(NewIdx++);
           Params.push_back(NewParam);
           Scope->InstantiatedLocal(OldParam, NewParam);
-        } else {
-          // Parameter pack expansion: make the instantiation an argument pack.
-          Scope->MakeInstantiatedLocalArgPack(OldParam);
-          for (unsigned I = 0; I != *NumArgumentsInExpansion; ++I) {
-            ParmVarDecl *NewParam = NewProtoLoc.getParam(NewIdx++);
+          NewIdx++;
+        } else if (NewParam->wasExpandedFromPack()) {
             Params.push_back(NewParam);
             Scope->InstantiatedLocalPackArg(OldParam, NewParam);
-          }
+            NewIdx++;
         }
       }
     } else {

@@ -5457,7 +5457,9 @@ def note_parameter_type : Note<
 def err_template_param_pack_default_arg : Error<
   "template parameter pack cannot have a default argument">;
 def err_template_param_pack_must_be_last_template_parameter : Error<
-  "template parameter pack must be the last template parameter">;
+  "non-trailing template parameter packs are a C++23 extension">;
+def err_template_param_multiple_packs : Error<
+  "template parameter list cannot contain multiple parameter packs">;
 
 def err_template_parameter_pack_non_pack : Error<
   "%select{template type|non-type template|template template}0 parameter"

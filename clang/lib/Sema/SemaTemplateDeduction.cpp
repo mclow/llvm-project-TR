@@ -2444,22 +2444,23 @@ static bool hasTemplateArgumentForDeduction(ArrayRef<TemplateArgument> &Args,
 
 /// Determine whether the given set of template arguments has a pack
 /// expansion that is not the last template argument.
-static bool hasPackExpansionBeforeEnd(ArrayRef<TemplateArgument> Args) {
-  bool FoundPackExpansion = false;
-  for (const auto &A : Args) {
-    if (FoundPackExpansion)
-      return true;
-
-    if (A.getKind() == TemplateArgument::Pack)
-      return hasPackExpansionBeforeEnd(A.pack_elements());
-
-    // FIXME: If this is a fixed-arity pack expansion from an outer level of
-    // templates, it should not be treated as a pack expansion.
-    if (A.isPackExpansion())
-      FoundPackExpansion = true;
+static bool hasNonDeduciblePackExtension(const ASTContext & Ctx, ArrayRef<TemplateArgument> Args) {
+  unsigned Packs  = 0;
+  bool  PackAtEnd = false;
+  for (auto it = Args.begin(); it != Args.end(); ++it) {
+      const auto& A =*it;
+      if (A.isPackExpansion()
+              || (A.getKind() == TemplateArgument::Pack && hasNonDeduciblePackExtension(Ctx, A.pack_elements()))) {
+          Packs ++;
+          if(it + 1 == Args.end()) {
+              PackAtEnd = true;
+          }
+      }
   }
-
-  return false;
+  if(Ctx.getLangOpts().CPlusPlus2b) {
+      return Packs > 1;
+  }
+  return Packs > 1 || (Packs == 1 && !PackAtEnd);
 }
 
 static Sema::TemplateDeductionResult
@@ -2473,7 +2474,7 @@ DeduceTemplateArguments(Sema &S, TemplateParameterList *TemplateParams,
   //   If the template argument list of P contains a pack expansion that is not
   //   the last template argument, the entire template argument list is a
   //   non-deduced context.
-  if (hasPackExpansionBeforeEnd(Params))
+  if (hasNonDeduciblePackExtension(S.Context, Params))
     return Sema::TDK_Success;
 
   // C++0x [temp.deduct.type]p9:
@@ -4140,6 +4141,30 @@ Sema::TemplateDeductionResult Sema::DeduceTemplateArguments(
         OriginalCallArgs, /*Decomposed*/false, ArgIdx, /*TDF*/ 0);
   };
 
+  // Collect the number of packs and the number of arguments after the pack
+  bool HasSinglePack = false;
+  int  NonDefaultArgsAfterPack = 0;
+  for (unsigned ParamIdx = 0, NumParamTypes = ParamTypes.size();
+       ParamIdx != NumParamTypes; ++ParamIdx) {
+      QualType ParamType = ParamTypes[ParamIdx];
+      const PackExpansionType *ParamExpansion =
+          dyn_cast<PackExpansionType>(ParamType);
+      if (ParamExpansion) {
+          if(HasSinglePack) {
+              HasSinglePack = false;
+          }
+          else {
+              HasSinglePack = true;
+          }
+          continue;
+      }
+      if(Function->getParamDecl(ParamIdx)->hasDefaultArg())
+          break;
+      if(HasSinglePack)
+          NonDefaultArgsAfterPack++;
+      continue;
+  }
+
   // Deduce template arguments from the function parameters.
   Deduced.resize(TemplateParams->size());
   SmallVector<QualType, 8> ParamTypesForArgChecking;
@@ -4181,8 +4206,9 @@ Sema::TemplateDeductionResult Sema::DeduceTemplateArguments(
     // the length of the explicitly-specified pack if it's expanded by the
     // parameter pack and 0 otherwise, and we treat each deduction as a
     // non-deduced context.
-    if (ParamIdx + 1 == NumParamTypes || PackScope.hasFixedArity()) {
-      for (; ArgIdx < Args.size() && PackScope.hasNextElement();
+    if (HasSinglePack || PackScope.hasFixedArity()) {
+      unsigned Count = Args.size() -  NonDefaultArgsAfterPack;
+      for (; ArgIdx < Count && PackScope.hasNextElement();
            PackScope.nextPackElement(), ++ArgIdx) {
         ParamTypesForArgChecking.push_back(ParamPattern);
         if (auto Result = DeduceCallArgument(ParamPattern, ArgIdx))
@@ -5803,8 +5829,7 @@ MarkUsedTemplateParameters(ASTContext &Ctx,
 
 /// Mark the template parameters that are used by the given
 /// type.
-static void
-MarkUsedTemplateParameters(ASTContext &Ctx, QualType T,
+static void MarkUsedTemplateParameters(ASTContext &Ctx, QualType T,
                            bool OnlyDeduced,
                            unsigned Depth,
                            llvm::SmallBitVector &Used) {
@@ -5979,7 +6004,7 @@ MarkUsedTemplateParameters(ASTContext &Ctx, QualType T,
     //   not the last template argument, the entire template argument list is a
     //   non-deduced context.
     if (OnlyDeduced &&
-        hasPackExpansionBeforeEnd(Spec->template_arguments()))
+        hasNonDeduciblePackExtension(Ctx, Spec->template_arguments()))
       break;
 
     for (unsigned I = 0, N = Spec->getNumArgs(); I != N; ++I)
@@ -6176,7 +6201,7 @@ Sema::MarkUsedTemplateParameters(const TemplateArgumentList &TemplateArgs,
   //   the last template argument, the entire template argument list is a
   //   non-deduced context.
   if (OnlyDeduced &&
-      hasPackExpansionBeforeEnd(TemplateArgs.asArray()))
+      hasNonDeduciblePackExtension(Context, TemplateArgs.asArray()))
     return;
 
   for (unsigned I = 0, N = TemplateArgs.size(); I != N; ++I)

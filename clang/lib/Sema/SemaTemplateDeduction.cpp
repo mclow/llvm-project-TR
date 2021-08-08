@@ -845,6 +845,8 @@ public:
   /// (notionally) already been expanded.
   bool hasFixedArity() { return FixedNumExpansions.hasValue(); }
 
+  Optional<unsigned> getFixedArity() const { return FixedNumExpansions; }
+
   /// Determine whether the next element of the argument is still part of this
   /// pack. This is the case unless the pack is already expanded to a fixed
   /// length.
@@ -3236,19 +3238,17 @@ static bool isSimpleTemplateIdType(QualType T) {
 ///
 /// \returns TDK_Success if substitution was successful, or some failure
 /// condition.
-Sema::TemplateDeductionResult
-Sema::SubstituteExplicitTemplateArguments(
-                                      FunctionTemplateDecl *FunctionTemplate,
-                               TemplateArgumentListInfo &ExplicitTemplateArgs,
-                       SmallVectorImpl<DeducedTemplateArgument> &Deduced,
-                                 SmallVectorImpl<QualType> &ParamTypes,
-                                          QualType *FunctionType,
-                                          TemplateDeductionInfo &Info) {
+Sema::TemplateDeductionResult Sema::SubstituteExplicitTemplateArguments(
+    FunctionTemplateDecl *FunctionTemplate,
+    TemplateArgumentListInfo *ExplicitTemplateArgs,
+    SmallVectorImpl<DeducedTemplateArgument> &Deduced,
+    SmallVectorImpl<QualType> &ParamTypes, QualType *FunctionType,
+    TemplateDeductionInfo &Info, Optional<unsigned> PackSize) {
   FunctionDecl *Function = FunctionTemplate->getTemplatedDecl();
   TemplateParameterList *TemplateParams
     = FunctionTemplate->getTemplateParameters();
 
-  if (ExplicitTemplateArgs.size() == 0) {
+  if (!ExplicitTemplateArgs || ExplicitTemplateArgs->size() == 0) {
     // No arguments to substitute; just copy over the parameter types and
     // fill in the function type.
     for (auto P : Function->parameters())
@@ -3282,7 +3282,7 @@ Sema::SubstituteExplicitTemplateArguments(
     return TDK_InstantiationDepth;
 
   if (CheckTemplateArgumentList(FunctionTemplate, SourceLocation(),
-                                ExplicitTemplateArgs, true, Builder, false) ||
+                                *ExplicitTemplateArgs, true, Builder, false) ||
       Trap.hasErrorOccurred()) {
     unsigned Index = Builder.size();
     if (Index >= TemplateParams->size())
@@ -3309,16 +3309,20 @@ Sema::SubstituteExplicitTemplateArguments(
   // for this template parameter pack.
   unsigned PartiallySubstitutedPackIndex = -1u;
   if (!Builder.empty()) {
-    const TemplateArgument &Arg = Builder.back();
-    if (Arg.getKind() == TemplateArgument::Pack) {
-      auto *Param = TemplateParams->getParam(Builder.size() - 1);
-      // If this is a fully-saturated fixed-size pack, it should be
-      // fully-substituted, not partially-substituted.
+    auto it = std::find_if(Builder.begin(), Builder.end(),
+                           [](const TemplateArgument &Arg) {
+                             return Arg.getKind() == TemplateArgument::Pack;
+                           });
+    if (it != Builder.end()) {
+      unsigned Index = std::distance(Builder.begin(), it);
+      auto *Param = TemplateParams->getParam(Index);
       Optional<unsigned> Expansions = getExpandedPackSize(Param);
-      if (!Expansions || Arg.pack_size() < *Expansions) {
-        PartiallySubstitutedPackIndex = Builder.size() - 1;
+      if (!Expansions)
+        Expansions = PackSize;
+      if (!Expansions || it->pack_size() < *Expansions) {
+        PartiallySubstitutedPackIndex = Index;
         CurrentInstantiationScope->SetPartiallySubstitutedPack(
-            Param, Arg.pack_begin(), Arg.pack_size());
+            Param, it->pack_begin(), it->pack_size());
       }
     }
   }
@@ -3337,10 +3341,11 @@ Sema::SubstituteExplicitTemplateArguments(
   // return type, substitute it after the arguments to ensure we substitute
   // in lexical order.
   if (Proto->hasTrailingReturn()) {
-    if (SubstParmTypes(Function->getLocation(), Function->parameters(),
-                       Proto->getExtParameterInfosOrNull(),
-                       MultiLevelTemplateArgumentList(*ExplicitArgumentList),
-                       ParamTypes, /*params*/ nullptr, ExtParamInfos))
+    if (SubstParmTypes(
+            Function->getLocation(), Function->parameters(),
+            Proto->getExtParameterInfosOrNull(),
+            MultiLevelTemplateArgumentList(*ExplicitArgumentList, PackSize),
+            ParamTypes, /*params*/ nullptr, ExtParamInfos))
       return TDK_SubstitutionFailure;
   }
 
@@ -3381,10 +3386,11 @@ Sema::SubstituteExplicitTemplateArguments(
   // Instantiate the types of each of the function parameters given the
   // explicitly-specified template arguments if we didn't do so earlier.
   if (!Proto->hasTrailingReturn() &&
-      SubstParmTypes(Function->getLocation(), Function->parameters(),
-                     Proto->getExtParameterInfosOrNull(),
-                     MultiLevelTemplateArgumentList(*ExplicitArgumentList),
-                     ParamTypes, /*params*/ nullptr, ExtParamInfos))
+      SubstParmTypes(
+          Function->getLocation(), Function->parameters(),
+          Proto->getExtParameterInfosOrNull(),
+          MultiLevelTemplateArgumentList(*ExplicitArgumentList, PackSize),
+          ParamTypes, /*params*/ nullptr, ExtParamInfos))
     return TDK_SubstitutionFailure;
 
   if (FunctionType) {
@@ -3586,8 +3592,8 @@ static unsigned getPackIndexForParam(Sema &S,
 Sema::TemplateDeductionResult Sema::FinishTemplateArgumentDeduction(
     FunctionTemplateDecl *FunctionTemplate,
     SmallVectorImpl<DeducedTemplateArgument> &Deduced,
-    unsigned NumExplicitlySpecified, FunctionDecl *&Specialization,
-    TemplateDeductionInfo &Info,
+    unsigned NumExplicitlySpecified, Optional<unsigned> DeducedPackSize,
+    FunctionDecl *&Specialization, TemplateDeductionInfo &Info,
     SmallVectorImpl<OriginalCallArg> const *OriginalCallArgs,
     bool PartialOverloading, llvm::function_ref<bool()> CheckNonDependent) {
   // Unevaluated SFINAE context.
@@ -3639,6 +3645,8 @@ Sema::TemplateDeductionResult Sema::FinishTemplateArgumentDeduction(
   if (FunctionTemplate->getFriendObjectKind())
     Owner = FunctionTemplate->getLexicalDeclContext();
   MultiLevelTemplateArgumentList SubstArgs(*DeducedArgumentList);
+  SubstArgs.setDeducedPackSize(DeducedPackSize);
+
   Specialization = cast_or_null<FunctionDecl>(
       SubstDecl(FunctionTemplate->getTemplatedDecl(), Owner, SubstArgs));
   if (!Specialization || Specialization->isInvalidDecl())
@@ -4130,30 +4138,54 @@ Sema::TemplateDeductionResult Sema::DeduceTemplateArguments(
       return TDK_TooManyArguments;
   }
 
-  // The types of the parameters from which we will perform template argument
-  // deduction.
-  LocalInstantiationScope InstScope(*this);
   TemplateParameterList *TemplateParams
     = FunctionTemplate->getTemplateParameters();
   SmallVector<DeducedTemplateArgument, 4> Deduced;
   SmallVector<QualType, 8> ParamTypes;
-  unsigned NumExplicitlySpecified = 0;
-  if (ExplicitTemplateArgs) {
-    TemplateDeductionResult Result;
-    runWithSufficientStackSpace(Info.getLocation(), [&] {
-      Result = SubstituteExplicitTemplateArguments(
-          FunctionTemplate, *ExplicitTemplateArgs, Deduced, ParamTypes, nullptr,
-          Info);
-    });
-    if (Result)
-      return Result;
 
-    NumExplicitlySpecified = Deduced.size();
-  } else {
-    // Just fill in the parameter types from the function declaration.
-    for (unsigned I = 0; I != NumParams; ++I)
-      ParamTypes.push_back(Function->getParamDecl(I)->getType());
+  // Collect the number of packs and the number of arguments after the pack
+  // This is done before handling explicit template parameters
+  bool HasSinglePack = false;
+  unsigned NonDefaultArgsExcludingPack = 0;
+  unsigned PackIndex = 0;
+  for (unsigned ParamIdx = 0, NumParamTypes = Function->getNumParams();
+       ParamIdx != NumParamTypes; ParamIdx++) {
+    ParmVarDecl *Param = Function->getParamDecl(ParamIdx);
+    if (Param->isParameterPack()) {;
+        if (HasSinglePack) {
+            HasSinglePack = false;
+        }
+        HasSinglePack = true;
+        PackIndex = ParamIdx;
+        continue;
+    }
+    if (Param->hasDefaultArg())
+      break;
+    NonDefaultArgsExcludingPack++;
+    continue;
   }
+
+  Optional<unsigned> PackSize;
+  if(LangOpts.CPlusPlus2b && HasSinglePack) {
+      PackSize = std::max(unsigned(Args.size() -
+                          NonDefaultArgsExcludingPack),
+                          ExplicitTemplateArgs ? ExplicitTemplateArgs->size() - NonDefaultArgsExcludingPack : 0);
+  }
+
+  // The types of the parameters from which we will perform template argument
+  // deduction.
+  LocalInstantiationScope InstScope(*this);
+
+  unsigned NumExplicitlySpecified = 0;
+  TemplateDeductionResult Result;
+  runWithSufficientStackSpace(Info.getLocation(), [&] {
+    Result = SubstituteExplicitTemplateArguments(
+        FunctionTemplate, ExplicitTemplateArgs, Deduced, ParamTypes, nullptr,
+        Info, PackSize);
+  });
+  if (Result)
+    return Result;
+  NumExplicitlySpecified = Deduced.size();
 
   SmallVector<OriginalCallArg, 8> OriginalCallArgs;
 
@@ -4171,30 +4203,6 @@ Sema::TemplateDeductionResult Sema::DeduceTemplateArguments(
         *this, TemplateParams, FirstInnerIndex, ParamType, Args[ArgIdx], Info, Deduced,
         OriginalCallArgs, /*Decomposed*/false, ArgIdx, /*TDF*/ 0);
   };
-
-  // Collect the number of packs and the number of arguments after the pack
-  bool HasSinglePack = false;
-  int  NonDefaultArgsAfterPack = 0;
-  for (unsigned ParamIdx = 0, NumParamTypes = ParamTypes.size();
-       ParamIdx != NumParamTypes; ++ParamIdx) {
-      QualType ParamType = ParamTypes[ParamIdx];
-      const PackExpansionType *ParamExpansion =
-          dyn_cast<PackExpansionType>(ParamType);
-      if (ParamExpansion) {
-          if(HasSinglePack) {
-              HasSinglePack = false;
-          }
-          else {
-              HasSinglePack = true;
-          }
-          continue;
-      }
-      if(Function->getParamDecl(ParamIdx)->hasDefaultArg())
-          break;
-      if(HasSinglePack)
-          NonDefaultArgsAfterPack++;
-      continue;
-  }
 
   // Deduce template arguments from the function parameters.
   Deduced.resize(TemplateParams->size());
@@ -4221,46 +4229,24 @@ Sema::TemplateDeductionResult Sema::DeduceTemplateArguments(
     PackDeductionScope PackScope(*this, TemplateParams, Deduced, Info,
                                  ParamPattern);
 
-    // C++0x [temp.deduct.call]p1:
-    //   For a function parameter pack that occurs at the end of the
-    //   parameter-declaration-list, the type A of each remaining argument of
-    //   the call is compared with the type P of the declarator-id of the
-    //   function parameter pack. Each comparison deduces template arguments
-    //   for subsequent positions in the template parameter packs expanded by
-    //   the function parameter pack. When a function parameter pack appears
-    //   in a non-deduced context [not at the end of the list], the type of
-    //   that parameter pack is never deduced.
-    //
-    // FIXME: The above rule allows the size of the parameter pack to change
-    // after we skip it (in the non-deduced case). That makes no sense, so
-    // we instead notionally deduce the pack against N arguments, where N is
-    // the length of the explicitly-specified pack if it's expanded by the
-    // parameter pack and 0 otherwise, and we treat each deduction as a
-    // non-deduced context.
-    if (HasSinglePack || PackScope.hasFixedArity()) {
-      unsigned Count = Args.size() -  NonDefaultArgsAfterPack;
-      for (; ArgIdx < Count && PackScope.hasNextElement();
-           PackScope.nextPackElement(), ++ArgIdx) {
-        ParamTypesForArgChecking.push_back(ParamPattern);
-        if (auto Result = DeduceCallArgument(ParamPattern, ArgIdx))
-          return Result;
-      }
-    } else {
-      // If the parameter type contains an explicitly-specified pack that we
-      // could not expand, skip the number of parameters notionally created
-      // by the expansion.
-      Optional<unsigned> NumExpansions = ParamExpansion->getNumExpansions();
-      if (NumExpansions && !PackScope.isPartiallyExpanded()) {
-        for (unsigned I = 0; I != *NumExpansions && ArgIdx < Args.size();
-             ++I, ++ArgIdx) {
+    if(PackSize || ParamIdx + 1 == NumParamTypes || PackScope.hasFixedArity()) {
+        unsigned End = PackSize ? std::min(PackIndex + *PackSize, unsigned(Args.size())) : Args.size();
+        for (; ArgIdx < End && PackScope.hasNextElement(); ++ArgIdx,
+             PackScope.nextPackElement()) {
           ParamTypesForArgChecking.push_back(ParamPattern);
-          // FIXME: Should we add OriginalCallArgs for these? What if the
-          // corresponding argument is a list?
-          PackScope.nextPackElement();
+          if (auto Result = DeduceCallArgument(ParamPattern, ArgIdx))
+            return Result;
         }
-      }
     }
-
+    else {
+        Optional<unsigned> NumExpansions = ParamExpansion->getNumExpansions();
+        if (NumExpansions && !PackScope.isPartiallyExpanded()) {
+            for (unsigned I = 0; I != *NumExpansions && ArgIdx < Args.size();
+                     ++I, ++ArgIdx, PackScope.nextPackElement()) {
+                  ParamTypesForArgChecking.push_back(ParamPattern);
+            }
+        }
+    }
     // Build argument packs for each of the parameter packs expanded by this
     // pack expansion.
     if (auto Result = PackScope.finish())
@@ -4271,11 +4257,11 @@ Sema::TemplateDeductionResult Sema::DeduceTemplateArguments(
   // that is needed when the accessibility of template arguments is checked.
   DeclContext *CallingCtx = CurContext;
 
-  TemplateDeductionResult Result;
   runWithSufficientStackSpace(Info.getLocation(), [&] {
     Result = FinishTemplateArgumentDeduction(
-        FunctionTemplate, Deduced, NumExplicitlySpecified, Specialization, Info,
-        &OriginalCallArgs, PartialOverloading, [&, CallingCtx]() {
+        FunctionTemplate, Deduced, NumExplicitlySpecified, PackSize,
+        Specialization, Info, &OriginalCallArgs, PartialOverloading,
+        [&, CallingCtx]() {
           ContextRAII SavedContext(*this, CallingCtx);
           return CheckNonDependent(ParamTypesForArgChecking);
         });
@@ -4369,8 +4355,8 @@ Sema::TemplateDeductionResult Sema::DeduceTemplateArguments(
     TemplateDeductionResult Result;
     runWithSufficientStackSpace(Info.getLocation(), [&] {
       Result = SubstituteExplicitTemplateArguments(
-          FunctionTemplate, *ExplicitTemplateArgs, Deduced, ParamTypes,
-          &FunctionType, Info);
+          FunctionTemplate, ExplicitTemplateArgs, Deduced, ParamTypes,
+          &FunctionType, Info, None);
     });
     if (Result)
       return Result;
@@ -4417,7 +4403,7 @@ Sema::TemplateDeductionResult Sema::DeduceTemplateArguments(
   TemplateDeductionResult Result;
   runWithSufficientStackSpace(Info.getLocation(), [&] {
     Result = FinishTemplateArgumentDeduction(FunctionTemplate, Deduced,
-                                             NumExplicitlySpecified,
+                                             NumExplicitlySpecified, None,
                                              Specialization, Info);
   });
   if (Result)
@@ -4580,7 +4566,7 @@ Sema::DeduceTemplateArguments(FunctionTemplateDecl *ConversionTemplate,
   TemplateDeductionResult Result;
   runWithSufficientStackSpace(Info.getLocation(), [&] {
     Result = FinishTemplateArgumentDeduction(ConversionTemplate, Deduced, 0,
-                                             ConversionSpecialized, Info);
+                                             None, ConversionSpecialized, Info);
   });
   Specialization = cast_or_null<CXXConversionDecl>(ConversionSpecialized);
   return Result;

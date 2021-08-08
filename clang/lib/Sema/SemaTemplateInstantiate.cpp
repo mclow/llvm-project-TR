@@ -953,13 +953,14 @@ namespace {
                                  SourceRange PatternRange,
                                  ArrayRef<UnexpandedParameterPack> Unexpanded,
                                  bool &ShouldExpand, bool &RetainExpansion,
-                                 Optional<unsigned> &NumExpansions) {
+                                 Optional<unsigned> &NumExpansions, Optional<unsigned> DeducedPackSize = None) {
       return getSema().CheckParameterPacksForExpansion(EllipsisLoc,
                                                        PatternRange, Unexpanded,
                                                        TemplateArgs,
                                                        ShouldExpand,
                                                        RetainExpansion,
-                                                       NumExpansions);
+                                                       NumExpansions,
+                                                       DeducedPackSize);
     }
 
     void ExpandingFunctionParameterPack(ParmVarDecl *Pack) {
@@ -2477,7 +2478,8 @@ bool Sema::SubstParmTypes(
   TemplateInstantiator Instantiator(*this, TemplateArgs, Loc,
                                     DeclarationName());
   return Instantiator.TransformFunctionTypeParams(
-      Loc, Params, nullptr, ExtParamInfos, ParamTypes, OutParams, ParamInfos);
+      Loc, Params, nullptr, ExtParamInfos, ParamTypes, OutParams, ParamInfos,
+      TemplateArgs.deducedPackSize());
 }
 
 /// Perform substitution on the base class specifiers of the

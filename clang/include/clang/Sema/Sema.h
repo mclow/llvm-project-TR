@@ -8314,7 +8314,8 @@ public:
                              const MultiLevelTemplateArgumentList &TemplateArgs,
                                        bool &ShouldExpand,
                                        bool &RetainExpansion,
-                                       Optional<unsigned> &NumExpansions);
+                                       Optional<unsigned> &NumExpansions,
+                                       Optional<unsigned> DeducedPackSize = None);
 
   /// Determine the number of arguments in the given pack expansion
   /// type.
@@ -8451,10 +8452,10 @@ public:
 
   TemplateDeductionResult SubstituteExplicitTemplateArguments(
       FunctionTemplateDecl *FunctionTemplate,
-      TemplateArgumentListInfo &ExplicitTemplateArgs,
+      TemplateArgumentListInfo *ExplicitTemplateArgs,
       SmallVectorImpl<DeducedTemplateArgument> &Deduced,
       SmallVectorImpl<QualType> &ParamTypes, QualType *FunctionType,
-      sema::TemplateDeductionInfo &Info);
+      sema::TemplateDeductionInfo &Info, Optional<unsigned> PackSize);
 
   /// brief A function argument from which we performed template argument
   // deduction for a call.
@@ -8474,11 +8475,11 @@ public:
   TemplateDeductionResult FinishTemplateArgumentDeduction(
       FunctionTemplateDecl *FunctionTemplate,
       SmallVectorImpl<DeducedTemplateArgument> &Deduced,
-      unsigned NumExplicitlySpecified, FunctionDecl *&Specialization,
-      sema::TemplateDeductionInfo &Info,
+      unsigned NumExplicitlySpecified, Optional<unsigned> DeducedPackSize,
+      FunctionDecl *&Specialization, sema::TemplateDeductionInfo &Info,
       SmallVectorImpl<OriginalCallArg> const *OriginalCallArgs = nullptr,
       bool PartialOverloading = false,
-      llvm::function_ref<bool()> CheckNonDependent = []{ return false; });
+      llvm::function_ref<bool()> CheckNonDependent = [] { return false; });
 
   TemplateDeductionResult DeduceTemplateArguments(
       FunctionTemplateDecl *FunctionTemplate,
@@ -9304,12 +9305,11 @@ public:
                             const MultiLevelTemplateArgumentList &TemplateArgs,
                             SourceLocation Loc, DeclarationName Entity);
 
-  TypeSourceInfo *SubstFunctionDeclType(TypeSourceInfo *T,
-                            const MultiLevelTemplateArgumentList &TemplateArgs,
-                                        SourceLocation Loc,
-                                        DeclarationName Entity,
-                                        CXXRecordDecl *ThisContext,
-                                        Qualifiers ThisTypeQuals);
+  TypeSourceInfo *
+  SubstFunctionDeclType(TypeSourceInfo *T,
+                        const MultiLevelTemplateArgumentList &TemplateArgs,
+                        SourceLocation Loc, DeclarationName Entity,
+                        CXXRecordDecl *ThisContext, Qualifiers ThisTypeQuals);
   void SubstExceptionSpec(FunctionDecl *New, const FunctionProtoType *Proto,
                           const MultiLevelTemplateArgumentList &Args);
   bool SubstExceptionSpec(SourceLocation Loc,

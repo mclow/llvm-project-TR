@@ -670,7 +670,8 @@ bool Sema::CheckParameterPacksForExpansion(
     SourceLocation EllipsisLoc, SourceRange PatternRange,
     ArrayRef<UnexpandedParameterPack> Unexpanded,
     const MultiLevelTemplateArgumentList &TemplateArgs, bool &ShouldExpand,
-    bool &RetainExpansion, Optional<unsigned> &NumExpansions) {
+    bool &RetainExpansion,
+    Optional<unsigned> &NumExpansions, Optional<unsigned> DeducedPackSize) {
   ShouldExpand = true;
   RetainExpansion = false;
   std::pair<IdentifierInfo *, SourceLocation> FirstPack;
@@ -733,6 +734,9 @@ bool Sema::CheckParameterPacksForExpansion(
       NewPackSize = TemplateArgs(Depth, Index).pack_size();
     }
 
+    if (!HaveFirstPack && DeducedPackSize && DeducedPackSize < NewPackSize)
+      NewPackSize = *DeducedPackSize;
+
     // C++0x [temp.arg.explicit]p9:
     //   Template argument deduction can extend the sequence of template
     //   arguments corresponding to a template parameter pack, even when the
@@ -742,7 +746,9 @@ bool Sema::CheckParameterPacksForExpansion(
                     = CurrentInstantiationScope->getPartiallySubstitutedPack()){
         unsigned PartialDepth, PartialIndex;
         std::tie(PartialDepth, PartialIndex) = getDepthAndIndex(PartialPack);
-        if (PartialDepth == Depth && PartialIndex == Index) {
+        if ((!DeducedPackSize ||
+             *DeducedPackSize >= TemplateArgs(Depth, Index).pack_size()) &&
+            PartialDepth == Depth && PartialIndex == Index) {
           RetainExpansion = true;
           // We don't actually know the new pack size yet.
           NumPartialExpansions = NewPackSize;

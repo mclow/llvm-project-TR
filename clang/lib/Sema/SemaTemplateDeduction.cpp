@@ -2478,6 +2478,18 @@ static bool hasNonDeduciblePackExpansion(ArrayRef<TemplateArgument> Args, const 
      return false;
 }
 
+void Expand(SmallVector<std::pair<const TemplateArgument&, const TemplateArgument&>, 5> & FlattenArguments,
+            const TemplateArgument & Arg, const TemplateArgument* Parent = nullptr)
+{
+    if(Arg.getKind() != TemplateArgument::Pack) {
+        FlattenArguments.emplace_back(Arg, Parent ? *Parent : Arg);
+        return;
+    }
+    for(auto && Child : Arg.pack_elements()) {
+        Expand(FlattenArguments, Child, Parent ? Parent : &Arg);
+    }
+}
+
 static Sema::TemplateDeductionResult
 DeduceTemplateArguments(Sema &S, TemplateParameterList *TemplateParams,
                         ArrayRef<TemplateArgument> Params,
@@ -2492,19 +2504,9 @@ DeduceTemplateArguments(Sema &S, TemplateParameterList *TemplateParams,
   if (hasNonDeduciblePackExpansion(Params, S.LangOpts))
     return Sema::TDK_Success;
 
-  SmallVector<std::pair<TemplateArgument, const TemplateArgument*>, 5> FlattenArguments;
-  llvm::function_ref<void(const TemplateArgument & Arg)> Expand = [&](const TemplateArgument & Arg) {
-      if(Arg.getKind() != TemplateArgument::Pack) {
-          FlattenArguments.emplace_back(Arg, &Arg);
-          return;
-      }
-      for(auto && Child : Arg.pack_elements()) {
-          Expand(Child);
-      }
-  };
-
+  SmallVector<std::pair<const TemplateArgument&, const TemplateArgument&>, 5> FlattenArguments;
   for(auto && Arg : Args) {
-      Expand(Arg);
+      Expand(FlattenArguments, Arg);
   }
 
 
@@ -2526,7 +2528,7 @@ DeduceTemplateArguments(Sema &S, TemplateParameterList *TemplateParams,
       // C++1z [temp.deduct.type]p9:
       //   During partial ordering, if Ai was originally a pack expansion [and]
       //   Pi is not a pack expansion, template argument deduction fails.
-      if (FlattenArguments[ArgIdx].second->isPackExpansion())
+      if (FlattenArguments[ArgIdx].second.isPackExpansion())
         return Sema::TDK_MiscellaneousDeductionFailure;
 
       // Perform deduction for this Pi/Ai pair.

@@ -5658,7 +5658,7 @@ bool Sema::CheckTemplateArgumentList(
     TemplateDecl *Template, SourceLocation TemplateLoc,
     TemplateArgumentListInfo &TemplateArgs, bool PartialTemplateArgs,
     SmallVectorImpl<TemplateArgument> &Converted,
-    bool UpdateArgsWithConversions, bool *ConstraintsNotSatisfied) {
+    bool UpdateArgsWithConversions, bool *ConstraintsNotSatisfied, Optional<unsigned> PackSize) {
 
   if (ConstraintsNotSatisfied)
     *ConstraintsNotSatisfied = false;
@@ -5691,8 +5691,11 @@ bool Sema::CheckTemplateArgumentList(
        Param != ParamEnd; /* increment in loop */) {
     // If we have an expanded parameter pack, make sure we don't have too
     // many arguments.
-    if (Optional<unsigned> Expansions = getExpandedPackSize(*Param)) {
-      if (*Expansions == ArgumentPack.size()) {
+    Optional<unsigned> Expansions = getExpandedPackSize(*Param);
+    bool Done = Expansions && *Expansions == ArgumentPack.size();
+    if((*Param)->isParameterPack() && PackSize && *PackSize == ArgumentPack.size())
+        Done = true;
+    if (Done) {
         // We're done with this parameter pack. Pack up its arguments and add
         // them to the list.
         Converted.push_back(
@@ -5702,7 +5705,7 @@ bool Sema::CheckTemplateArgumentList(
         // This argument is assigned to the next parameter.
         ++Param;
         continue;
-      } else if (ArgIdx == NumArgs && !PartialTemplateArgs) {
+      } else if (Expansions && ArgIdx == NumArgs && !PartialTemplateArgs) {
         // Not enough arguments for this parameter pack.
         Diag(TemplateLoc, diag::err_template_arg_list_different_arity)
           << /*not enough args*/0
@@ -5712,7 +5715,6 @@ bool Sema::CheckTemplateArgumentList(
           << Params->getSourceRange();
         return true;
       }
-    }
 
     if (ArgIdx < NumArgs) {
       // Check the template argument we were given.

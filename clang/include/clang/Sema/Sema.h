@@ -7818,7 +7818,8 @@ public:
                                  bool PartialTemplateArgs,
                                  SmallVectorImpl<TemplateArgument> &Converted,
                                  bool UpdateArgsWithConversions = true,
-                                 bool *ConstraintsNotSatisfied = nullptr);
+                                 bool *ConstraintsNotSatisfied = nullptr,
+                                 Optional<unsigned> PackSize = None);
 
   bool CheckTemplateTypeArgument(TemplateTypeParmDecl *Param,
                                  TemplateArgumentLoc &Arg,

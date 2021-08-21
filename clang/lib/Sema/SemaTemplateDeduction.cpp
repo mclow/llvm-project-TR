@@ -3284,7 +3284,7 @@ Sema::TemplateDeductionResult Sema::SubstituteExplicitTemplateArguments(
     return TDK_InstantiationDepth;
 
   if (CheckTemplateArgumentList(FunctionTemplate, SourceLocation(),
-                                *ExplicitTemplateArgs, true, Builder, false) ||
+                                *ExplicitTemplateArgs, true, Builder, false, nullptr, PackSize) ||
       Trap.hasErrorOccurred()) {
     unsigned Index = Builder.size();
     if (Index >= TemplateParams->size())
@@ -4169,9 +4169,9 @@ Sema::TemplateDeductionResult Sema::DeduceTemplateArguments(
 
   Optional<unsigned> PackSize;
   if(LangOpts.CPlusPlus2b && HasSinglePack) {
-      PackSize = std::max(unsigned(Args.size() -
-                          NonDefaultArgsExcludingPack),
-                          ExplicitTemplateArgs ? ExplicitTemplateArgs->size() - NonDefaultArgsExcludingPack : 0);
+      PackSize = std::max<int>(Args.size() -
+                          NonDefaultArgsExcludingPack,
+                          ExplicitTemplateArgs ? int(ExplicitTemplateArgs->size()) - NonDefaultArgsExcludingPack : 0);
   }
 
   // The types of the parameters from which we will perform template argument

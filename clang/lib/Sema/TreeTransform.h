@@ -5606,6 +5606,7 @@ bool TreeTransform<Derived>::TransformFunctionTypeParams(
   int indexAdjustment = 0;
 
   unsigned NumParams = Params.size();
+  unsigned NumPack   = 0;
   for (unsigned i = 0; i != NumParams; ++i) {
     if (ParmVarDecl *OldParm = Params[i]) {
       assert(OldParm->getFunctionScopeIndex() == i);
@@ -5660,6 +5661,8 @@ bool TreeTransform<Derived>::TransformFunctionTypeParams(
             if (!NewParm)
               return true;
 
+            NewParm->setOriginalPackIndex(NumPack);
+
             if (ParamInfos)
               PInfos.set(OutParamTypes.size(), ParamInfos[i]);
             OutParamTypes.push_back(NewParm->getType());
@@ -5692,6 +5695,8 @@ bool TreeTransform<Derived>::TransformFunctionTypeParams(
           // go down by one.
           indexAdjustment--;
 
+          NumPack++;
+
           // We're done with the pack expansion.
           continue;
         }
@@ -5706,6 +5711,7 @@ bool TreeTransform<Derived>::TransformFunctionTypeParams(
         assert(NewParm->isParameterPack() &&
                "Parameter pack no longer a parameter pack after "
                "transformation.");
+        NumPack++;
       } else {
         NewParm = getDerived().TransformFunctionTypeParam(
             OldParm, indexAdjustment, None, /*ExpectParameterPack=*/ false);

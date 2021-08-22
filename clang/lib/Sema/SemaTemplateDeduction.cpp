@@ -4074,6 +4074,43 @@ static Sema::TemplateDeductionResult DeduceTemplateArgumentsFromCallArgument(
                                             ArgType, Info, Deduced, TDF);
 }
 
+Optional<unsigned> DeducedPackSize(LangOptions LangOpts,
+                                   FunctionDecl *Function,
+                                   TemplateArgumentListInfo *ExplicitTemplateArgs,
+                                   ArrayRef<Expr *> Args,
+                                   unsigned & PackIndex,
+                                   unsigned & NonDefaultArgsExcludingPack) {
+    // Collect the number of packs and the number of arguments after the pack
+    // This is done before handling explicit template parameters
+    bool HasSinglePack = false;
+    NonDefaultArgsExcludingPack = 0;
+    PackIndex = 0;
+    for (unsigned ParamIdx = 0, NumParamTypes = Function->getNumParams();
+         ParamIdx != NumParamTypes; ParamIdx++) {
+      ParmVarDecl *Param = Function->getParamDecl(ParamIdx);
+      if (Param->isParameterPack()) {;
+          if (HasSinglePack) {
+              return None;
+          }
+          HasSinglePack = true;
+          PackIndex = ParamIdx;
+          continue;
+      }
+      if (Param->hasDefaultArg())
+        break;
+      NonDefaultArgsExcludingPack++;
+      continue;
+    }
+
+    Optional<unsigned> PackSize;
+    if(LangOpts.CPlusPlus2b && HasSinglePack) {
+        PackSize = std::max<int>(Args.size() -
+                            NonDefaultArgsExcludingPack,
+                            ExplicitTemplateArgs ? int(ExplicitTemplateArgs->size()) - NonDefaultArgsExcludingPack : 0);
+    }
+    return PackSize;
+}
+
 /// Perform template argument deduction from a function call
 /// (C++ [temp.deduct.call]).
 ///
@@ -4132,34 +4169,11 @@ Sema::TemplateDeductionResult Sema::DeduceTemplateArguments(
   SmallVector<DeducedTemplateArgument, 4> Deduced;
   SmallVector<QualType, 8> ParamTypes;
 
-  // Collect the number of packs and the number of arguments after the pack
-  // This is done before handling explicit template parameters
-  bool HasSinglePack = false;
-  unsigned NonDefaultArgsExcludingPack = 0;
-  unsigned PackIndex = 0;
-  for (unsigned ParamIdx = 0, NumParamTypes = Function->getNumParams();
-       ParamIdx != NumParamTypes; ParamIdx++) {
-    ParmVarDecl *Param = Function->getParamDecl(ParamIdx);
-    if (Param->isParameterPack()) {;
-        if (HasSinglePack) {
-            HasSinglePack = false;
-        }
-        HasSinglePack = true;
-        PackIndex = ParamIdx;
-        continue;
-    }
-    if (Param->hasDefaultArg())
-      break;
-    NonDefaultArgsExcludingPack++;
-    continue;
-  }
+  unsigned PackIndex;
+  unsigned NonDefaultArgsExcludingPack;
+  Optional<unsigned> PackSize = DeducedPackSize(LangOpts, Function, ExplicitTemplateArgs, Args, PackIndex,
+                                                NonDefaultArgsExcludingPack);
 
-  Optional<unsigned> PackSize;
-  if(LangOpts.CPlusPlus2b && HasSinglePack) {
-      PackSize = std::max<int>(Args.size() -
-                          NonDefaultArgsExcludingPack,
-                          ExplicitTemplateArgs ? int(ExplicitTemplateArgs->size()) - NonDefaultArgsExcludingPack : 0);
-  }
 
   // The types of the parameters from which we will perform template argument
   // deduction.

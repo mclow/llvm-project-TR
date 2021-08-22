@@ -2525,9 +2525,15 @@ DeduceTemplateArguments(Sema &S, TemplateParameterList *TemplateParams,
       continue;
     }
 
+
+    auto HasDefaultArgument = [&](unsigned Index) {
+        return S.hasVisibleDefaultArgument(TemplateParams->getParam(Index));
+    };
+
     unsigned RemainingParams = 0;
     for(unsigned I = ParamIdx+1; I < FlattenParams.size(); I++, RemainingParams++) {
-        // if(!HasDefault)
+        if(HasDefaultArgument(I))
+            break;
     }
     unsigned RemainingArguments = FlattenArguments.size() - ArgIdx;
     unsigned PackSize  = RemainingArguments - RemainingParams;

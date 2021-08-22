@@ -5792,12 +5792,6 @@ bool Sema::CheckTemplateArgumentList(
       assert(!getExpandedPackSize(*Param) &&
              "Should have dealt with this already");
 
-      // A non-expanded parameter pack before the end of the parameter list
-      // only occurs for an ill-formed template parameter list, unless we've
-      // got a partial argument list for a function template, so just bail out.
-      if (Param + 1 != ParamEnd)
-        return true;
-
       Converted.push_back(
           TemplateArgument::CreatePackCopy(Context, ArgumentPack));
       ArgumentPack.clear();

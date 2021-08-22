@@ -1029,6 +1029,9 @@ DeduceTemplateArguments(Sema &S,
   //   Pi of the respective parameter-type- list of P is compared with the
   //   corresponding parameter type Ai of the corresponding parameter-type-list
   //   of A. [...]
+
+  bool HasMultiplePacks = false;
+
   unsigned ArgIdx = 0, ParamIdx = 0;
   for (; ParamIdx != NumParams; ++ParamIdx) {
     // Check argument types.
@@ -1070,10 +1073,32 @@ DeduceTemplateArguments(Sema &S,
     QualType Pattern = Expansion->getPattern();
     PackDeductionScope PackScope(S, TemplateParams, Deduced, Info, Pattern);
 
+    unsigned RemainingParams = 0;
+    bool ShouldDeduce = (ParamIdx + 1 == NumParams) || (!PartialOrdering &&
+                                                        !HasMultiplePacks && (S.LangOpts.CPlusPlus2b));
+    if(!PackScope.hasFixedArity() &&  ShouldDeduce) {
+        for(auto OtherParam = ParamIdx+1; OtherParam !=NumParams; ++OtherParam) {
+            const PackExpansionType *Expansion
+                                        = dyn_cast<PackExpansionType>(Params[OtherParam]);
+            if (Expansion) {
+                HasMultiplePacks = true;
+                break;
+            }
+            RemainingParams++;
+        }
+    }
+
+    Optional<unsigned> PackSize =  PackScope.getFixedArity();
+    if(!PackSize && ShouldDeduce) {
+        unsigned RemainingArguments = NumArgs - ArgIdx ;
+        PackSize  = RemainingArguments - RemainingParams;
+    }
+
     // A pack scope with fixed arity is not really a pack any more, so is not
     // a non-deduced context.
-    if (ParamIdx + 1 == NumParams || PackScope.hasFixedArity()) {
-      for (; ArgIdx < NumArgs && PackScope.hasNextElement(); ++ArgIdx) {
+    if (PackSize) {
+      unsigned End = ArgIdx + *PackSize;
+      for (; ArgIdx < End && PackScope.hasNextElement(); ++ArgIdx) {
         // Deduce template arguments from the pattern.
         if (Sema::TemplateDeductionResult Result
               = DeduceTemplateArgumentsByTypeMatch(S, TemplateParams, Pattern,

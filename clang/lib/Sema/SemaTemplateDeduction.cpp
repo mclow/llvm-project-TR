@@ -2481,14 +2481,15 @@ static bool hasNonDeduciblePackExpansion(ArrayRef<TemplateArgument> Args, const 
      return false;
 }
 
-void Expand(SmallVector<const TemplateArgument*, 5> & FlattenArguments, const TemplateArgument & Arg)
+void Expand(SmallVector<std::pair<const TemplateArgument*, unsigned>, 5> & FlattenArguments,
+            const TemplateArgument & Arg, unsigned Index = -1u)
 {
     if(Arg.getKind() != TemplateArgument::Pack) {
-        FlattenArguments.emplace_back(&Arg);
+        FlattenArguments.emplace_back(&Arg, Index);
         return;
     }
     for(auto && Child : Arg.pack_elements()) {
-        Expand(FlattenArguments, Child);
+        Expand(FlattenArguments, Child, Index);
     }
 }
 
@@ -2506,14 +2507,18 @@ DeduceTemplateArguments(Sema &S, TemplateParameterList *TemplateParams,
   if (hasNonDeduciblePackExpansion(Params, S.LangOpts))
     return Sema::TDK_Success;
 
-  SmallVector<const TemplateArgument*, 5> FlattenArguments;
+  SmallVector<std::pair<const TemplateArgument*, unsigned>, 5> FlattenArguments;
   for(auto && Arg : Args) {
       Expand(FlattenArguments, Arg);
   }
 
-  SmallVector<const TemplateArgument*, 5> FlattenParams;
-  for(auto && Param : Params) {
-      Expand(FlattenParams, Param);
+  SmallVector<std::pair<const TemplateArgument*, unsigned>, 5> FlattenParams;
+  {
+      unsigned ParamIndex = 0;
+      for(auto && Param : Params) {
+          Expand(FlattenParams, Param, ParamIndex);
+          ParamIndex++;
+      }
   }
 
 
@@ -2523,7 +2528,7 @@ DeduceTemplateArguments(Sema &S, TemplateParameterList *TemplateParams,
   //   argument Ai of the corresponding template argument list of A.
   unsigned ArgIdx = 0, ParamIdx = 0;
   for (; ParamIdx != FlattenParams.size(); ++ParamIdx) {
-    if (!FlattenParams[ParamIdx]->isPackExpansion()) {
+    if (!FlattenParams[ParamIdx].first->isPackExpansion()) {
       // The simple case: deduce template arguments by matching Pi and Ai.
 
       // Check whether we have enough arguments.
@@ -2535,13 +2540,13 @@ DeduceTemplateArguments(Sema &S, TemplateParameterList *TemplateParams,
       // C++1z [temp.deduct.type]p9:
       //   During partial ordering, if Ai was originally a pack expansion [and]
       //   Pi is not a pack expansion, template argument deduction fails.
-      if (FlattenArguments[ArgIdx]->isPackExpansion())
+      if (FlattenArguments[ArgIdx].first->isPackExpansion())
         return Sema::TDK_MiscellaneousDeductionFailure;
 
       // Perform deduction for this Pi/Ai pair.
       if (Sema::TemplateDeductionResult Result
             = DeduceTemplateArguments(S, TemplateParams,
-                                      *FlattenParams[ParamIdx], *FlattenArguments[ArgIdx],
+                                      *FlattenParams[ParamIdx].first, *FlattenArguments[ArgIdx].first,
                                       Info, Deduced))
         return Result;
 
@@ -2551,13 +2556,17 @@ DeduceTemplateArguments(Sema &S, TemplateParameterList *TemplateParams,
     }
 
 
+    // TODO Corentin this seens fishy
+    // What should we do about default parameters?
     auto HasDefaultArgument = [&](unsigned Index) {
-        return S.hasVisibleDefaultArgument(TemplateParams->getParam(Index));
+        return Index < TemplateParams->size() &&
+                S.hasVisibleDefaultArgument(TemplateParams->getParam(Index));
     };
 
     unsigned RemainingParams = 0;
     for(unsigned I = ParamIdx+1; I < FlattenParams.size(); I++, RemainingParams++) {
-        if(HasDefaultArgument(I))
+        unsigned OriginalIndex = FlattenParams[I].second;
+        if(OriginalIndex != -1u && HasDefaultArgument(OriginalIndex))
             break;
     }
     unsigned RemainingArguments = FlattenArguments.size() - ArgIdx;
@@ -2569,7 +2578,7 @@ DeduceTemplateArguments(Sema &S, TemplateParameterList *TemplateParams,
     //   each remaining argument in the template argument list of A. Each
     //   comparison deduces template arguments for subsequent positions in the
     //   template parameter packs expanded by Pi.
-    TemplateArgument Pattern = FlattenParams[ParamIdx]->getPackExpansionPattern();
+    TemplateArgument Pattern = FlattenParams[ParamIdx].first->getPackExpansionPattern();
 
     // Prepare to deduce the packs within the pattern.
     PackDeductionScope PackScope(S, TemplateParams, Deduced, Info, Pattern);
@@ -2579,7 +2588,7 @@ DeduceTemplateArguments(Sema &S, TemplateParameterList *TemplateParams,
     for(; ArgIdx < Last && PackScope.hasNextElement(); ArgIdx++) {
         // Deduce template arguments from the pattern.
         if (Sema::TemplateDeductionResult Result
-              = DeduceTemplateArguments(S, TemplateParams, Pattern, *FlattenArguments[ArgIdx],
+              = DeduceTemplateArguments(S, TemplateParams, Pattern, *FlattenArguments[ArgIdx].first,
                                         Info, Deduced))
           return Result;
         PackScope.nextPackElement();

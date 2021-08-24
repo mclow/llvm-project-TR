@@ -5685,6 +5685,14 @@ bool Sema::CheckTemplateArgumentList(
   bool isTemplateTemplateParameter = isa<TemplateTemplateParmDecl>(Template);
   SmallVector<TemplateArgument, 2> ArgumentPack;
   unsigned ArgIdx = 0, NumArgs = NewArgs.size();
+
+  // Deduce the size of any parameter pack
+  // TODO Corentin this seems to break everything?
+  if(this->LangOpts.CPlusPlus2b && !PackSize && !PartialTemplateArgs) {
+      unsigned NumParams = Params->getMinRequiredArguments();
+      PackSize = NumArgs - NumParams;
+  }
+
   LocalInstantiationScope InstScope(*this, true);
   for (TemplateParameterList::iterator Param = Params->begin(),
                                        ParamEnd = Params->end();
@@ -5693,8 +5701,9 @@ bool Sema::CheckTemplateArgumentList(
     // many arguments.
     Optional<unsigned> Expansions = getExpandedPackSize(*Param);
     bool Done = Expansions && *Expansions == ArgumentPack.size();
-    if((*Param)->isParameterPack() && PackSize && *PackSize == ArgumentPack.size())
+    if((*Param)->isParameterPack() && PackSize && *PackSize == ArgumentPack.size()) {
         Done = true;
+    }
     if (Done) {
         // We're done with this parameter pack. Pack up its arguments and add
         // them to the list.

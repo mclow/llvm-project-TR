@@ -1,5 +1,10 @@
 // RUN: %clang_cc1 -std=c++2b -fsyntax-only -verify %s
-// expected-no-diagnostics
+
+template <typename A, typename B>
+constexpr bool is_same = false;
+
+template <typename A>
+constexpr bool is_same<A, A> = true;
 
 namespace types {
 
@@ -28,7 +33,6 @@ void test() {
 
 }
 
-
 namespace test_explicit{
 void f(auto a, auto... x, auto b, auto c) {}
 void explicit_test()
@@ -43,4 +47,25 @@ void explicit_test()
     f<int, double, double>(1, 2, 3, 4, 5);
 }
 
+}
+
+namespace partial_specialization {
+    template <typename... T, typename U>
+    struct S {            // expected-note {{template is declared here}}
+        using foo = U;
+    };
+
+    S<>::foo; //expected-error {{too few template arguments for class template 'S'}}
+    S<int, int>::foo s = 42;
+
+    static_assert(is_same<S<int>::foo, int>);
+    static_assert(is_same<S<int, int>::foo, int>);
+
+    template <typename... T>
+    struct S<T..., double> {
+        using foo = float;
+    };
+    static_assert(is_same<S<double, double, double>::foo, float>);
+    static_assert(is_same<S<double>::foo, float>);
+    static_assert(is_same<S<int, double>::foo, float>);
 }

@@ -14901,6 +14901,22 @@ ExprResult Sema::CreateBuiltinUnaryOp(SourceLocation OpLoc,
     break;
 
   case UO_LNot: // logical negation
+    {
+      UnaryOperator* InnerExpr = dyn_cast<UnaryOperator>(Input.get());
+      Expr* SubExpr = nullptr;
+      if(InnerExpr) {
+          SubExpr = InnerExpr->getSubExpr()->IgnoreImplicitAsWritten();
+      }
+      if (InnerExpr && SubExpr && InnerExpr->getOpcode() == UO_LNot
+                && InnerExpr->getType()->isBooleanType()
+                && SubExpr->getType()->isBooleanType())
+        {
+            Diag(OpLoc, diag::warn_multiple_logical_not)
+                        << Input.get()->getSourceRange();
+        }
+   }
+
+
     // Unlike +/-/~, integer promotions aren't done here (C99 6.5.3.3p5).
     Input = DefaultFunctionArrayLvalueConversion(Input.get());
     if (Input.isInvalid()) return ExprError();

@@ -6473,6 +6473,10 @@ def warn_bitwise_op_in_bitwise_op : Warning<
 def warn_logical_and_in_logical_or : Warning<
   "'&&' within '||'">, InGroup<LogicalOpParentheses>, DefaultIgnore;
 
+def warn_multiple_logical_not : Warning<
+  "negating a boolean expression twice has no effect">;
+
+
 def warn_overloaded_shift_in_comparison :Warning<
   "overloaded operator %select{>>|<<}0 has higher precedence than "
   "comparison operator">,

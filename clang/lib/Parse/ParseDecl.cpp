@@ -5350,6 +5350,7 @@ bool Parser::isDeclarationSpecifier(bool DisambiguatingWithExpression) {
   case tok::kw___interface:
     // enum-specifier
   case tok::kw_enum:
+  case tok::kw_namespace:
 
     // type-qualifier
   case tok::kw_const:
@@ -6966,6 +6967,12 @@ void Parser::ParseParameterDeclarationClause(
     // too much hassle.
     DS.takeAttributesFrom(FirstArgAttrs);
 
+    bool IsHiddingInAssociatedEntity = false;
+    if (Tok.getIdentifierInfo() == Ident_associated_decl) {
+        IsHiddingInAssociatedEntity = true;
+        ConsumeToken();
+    }
+
     ParseDeclarationSpecifiers(DS);
 
 
@@ -7047,7 +7054,7 @@ void Parser::ParseParameterDeclarationClause(
       }
       // Inform the actions module about the parameter declarator, so it gets
       // added to the current scope.
-      Decl *Param = Actions.ActOnParamDeclarator(getCurScope(), ParmDeclarator);
+      Decl *Param = Actions.ActOnParamDeclarator(getCurScope(), ParmDeclarator, IsHiddingInAssociatedEntity);
       // Parse the default argument, if any. We parse the default
       // arguments in all dialects; the semantic analysis in
       // ActOnParamDefaultArgument will reject the default argument in

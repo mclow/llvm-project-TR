@@ -254,6 +254,25 @@ inline void CXXRecordDecl::pushFriendDecl(FriendDecl *FD) {
   data().FirstFriend = FD;
 }
 
+/*inline CXXRecordDecl::associated_function_range CXXRecordDecl::associated_functions() const {
+
+}
+inline CXXRecordDecl::associated_function_iterator CXXRecordDecl::associated_function_begin() const {
+
+}
+inline CXXRecordDecl::associated_function_iterator CXXRecordDecl::associated_function_end() const {
+
+}
+
+inline void CXXRecordDecl::pushAssociatedFunction(FunctionDecl *FD) {
+   // assert(!FD->N && "friend already has next friend?");
+   // FD->NextFriend = data().FirstFriend;
+   // data().FirstFriend = FD;
+}
+*/
+
+
+
 } // namespace clang
 
 #endif // LLVM_CLANG_AST_DECLFRIEND_H

@@ -9100,6 +9100,26 @@ static Scope *getTagInjectionScope(Scope *S, const LangOptions &LangOpts) {
   return S;
 }
 
+static void HandleAssociatedEntityParameters(Sema & S, FunctionDecl *FD) {
+    bool HasAssociatedEntity = false;
+    for(const ParmVarDecl* P : llvm::make_range(FD->param_begin(), FD->param_end())) {
+        if(P->isHiddingAssociatedEntity()) {
+            QualType QT = P->getType();
+            RecordDecl *RD = QT.getCanonicalType()->getAsRecordDecl();
+            if(!RD) {
+                // TODO error
+                continue;
+            }
+            if(!HasAssociatedEntity) {
+                FD->setObjectOfFriendDecl();
+                HasAssociatedEntity = true;
+            }
+            FriendDecl::Create(S.getASTContext(), RD, P->getBeginLoc(), FD, {});
+            //RD->getPrimaryContext()->makeDeclVisibleInContext(FD);
+        }
+    }
+}
+
 NamedDecl*
 Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
                               TypeSourceInfo *TInfo, LookupResult &Previous,
@@ -9605,6 +9625,7 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
 
   // Finally, we know we have the right number of parameters, install them.
   NewFD->setParams(Params);
+  HandleAssociatedEntityParameters(*this, NewFD);
 
   if (D.getDeclSpec().isNoreturnSpecified())
     NewFD->addAttr(C11NoReturnAttr::Create(Context,
@@ -13865,7 +13886,7 @@ void Sema::CheckFunctionOrTemplateParamDeclarator(Scope *S, Declarator &D) {
 
 /// ActOnParamDeclarator - Called from Parser::ParseFunctionDeclarator()
 /// to introduce parameters into function prototype scope.
-Decl *Sema::ActOnParamDeclarator(Scope *S, Declarator &D) {
+Decl *Sema::ActOnParamDeclarator(Scope *S, Declarator &D, bool IsHiddingInAssociatedEntity) {
   const DeclSpec &DS = D.getDeclSpec();
 
   // Verify C99 6.7.5.3p2: The only SCS allowed is 'register'.
@@ -13966,6 +13987,8 @@ Decl *Sema::ActOnParamDeclarator(Scope *S, Declarator &D) {
 
   if (getLangOpts().OpenCL)
     deduceOpenCLAddressSpace(New);
+
+  New->setIsHiddingAssociatedEntity(IsHiddingInAssociatedEntity);
 
   return New;
 }
@@ -14145,7 +14168,7 @@ void Sema::ActOnFinishKNRParamDeclarations(Scope *S, Declarator &D,
         DS.SetRangeEnd(FTI.Params[i].IdentLoc);
         Declarator ParamD(DS, DeclaratorContext::KNRTypeList);
         ParamD.SetIdentifier(FTI.Params[i].Ident, FTI.Params[i].IdentLoc);
-        FTI.Params[i].Param = ActOnParamDeclarator(S, ParamD);
+        FTI.Params[i].Param = ActOnParamDeclarator(S, ParamD, false);
       }
     }
   }

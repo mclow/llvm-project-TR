@@ -2321,6 +2321,9 @@ public:
   /// Removes a declaration from this context.
   void removeDecl(Decl *D);
 
+  /// Hide decl from lookup
+  void hideDecl(Decl *D);
+
   /// Checks whether a declaration is in this context.
   bool containsDecl(Decl *D) const;
 

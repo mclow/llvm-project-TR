@@ -1549,10 +1549,12 @@ void ASTDeclReader::VisitParmVarDecl(ParmVarDecl *PD) {
   } else {
     PD->setScopeInfo(scopeDepth, scopeIndex);
   }
+  PD->ParmVarDeclBits.IsHiddingAssociatedEntity = Record.readInt();
   PD->ParmVarDeclBits.IsKNRPromoted = Record.readInt();
   PD->ParmVarDeclBits.HasInheritedDefaultArg = Record.readInt();
   if (Record.readInt()) // hasUninstantiatedDefaultArg.
     PD->setUninstantiatedDefaultArg(Record.readExpr());
+
 
   // FIXME: If this is a redeclaration of a function from another module, handle
   // inheritance of default arguments.

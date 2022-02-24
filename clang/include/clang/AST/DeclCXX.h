@@ -331,6 +331,8 @@ class CXXRecordDecl : public RecordDecl {
     /// This is actually currently stored in reverse order.
     LazyDeclPtr FirstFriend;
 
+    //llvm::SmallVector<NamedDecl*, 10>
+
     DefinitionData(CXXRecordDecl *D);
 
     /// Retrieve the set of direct base classes.
@@ -671,6 +673,14 @@ public:
   bool hasFriends() const {
     return data().FirstFriend.isValid();
   }
+
+  /*class associated_function_iterator;
+  using associated_function_range = llvm::iterator_range<associated_function_iterator>;
+  associated_function_range associated_functions() const;
+  associated_function_iterator associated_function_begin() const;
+  associated_function_iterator associated_function_end() const;
+  void pushAssociatedFunction(FunctionDecl *FD);
+  */
 
   /// \c true if a defaulted copy constructor for this class would be
   /// deleted.

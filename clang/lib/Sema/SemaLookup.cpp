@@ -16,6 +16,7 @@
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/DeclLookups.h"
+#include "clang/AST/DeclFriend.h"
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/Expr.h"
@@ -3612,10 +3613,20 @@ void Sema::ArgumentDependentLookup(DeclarationName Name, SourceLocation Loc,
             break;
           }
         } else if (D->getFriendObjectKind()) {
-          auto *RD = cast<CXXRecordDecl>(D->getLexicalDeclContext());
-          if (AssociatedClasses.count(RD) && isVisible(D)) {
+          auto *RD = dyn_cast<CXXRecordDecl>(D->getLexicalDeclContext());
+          if (RD && AssociatedClasses.count(RD) && isVisible(D)) {
             Visible = true;
             break;
+          }
+          if(!RD) {
+             for(CXXRecordDecl* R : AssociatedClasses) {
+                 for(FriendDecl* Fr : R->friends()) {
+                     if(Fr->getFriendDecl() == D) {
+                         Visible = true;
+                         break;
+                     }
+                 }
+             }
           }
         }
       }

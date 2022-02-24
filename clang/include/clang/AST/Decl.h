@@ -969,6 +969,10 @@ protected:
     /// Whether this parameter is an ObjC method parameter or not.
     unsigned IsObjCMethodParam : 1;
 
+    /// Is Associated Declaration
+    unsigned IsHiddingAssociatedEntity: 1;
+
+
     /// If IsObjCMethodParam, a Decl::ObjCDeclQualifier.
     /// Otherwise, the number of function parameter scopes enclosing
     /// the function parameter scope in which this parameter was
@@ -1674,6 +1678,7 @@ protected:
     assert(ParmVarDeclBits.DefaultArgKind == DAK_None);
     assert(ParmVarDeclBits.IsKNRPromoted == false);
     assert(ParmVarDeclBits.IsObjCMethodParam == false);
+    assert(ParmVarDeclBits.IsHiddingAssociatedEntity == false);
     setDefaultArg(DefArg);
   }
 
@@ -1693,6 +1698,11 @@ public:
     setParameterIndex(parameterIndex);
   }
 
+  void setIsHiddingAssociatedEntity(bool set) {
+
+      ParmVarDeclBits.IsHiddingAssociatedEntity = set;
+  }
+
   void setScopeInfo(unsigned scopeDepth, unsigned parameterIndex) {
     assert(!ParmVarDeclBits.IsObjCMethodParam);
 
@@ -1705,6 +1715,10 @@ public:
 
   bool isObjCMethodParameter() const {
     return ParmVarDeclBits.IsObjCMethodParam;
+  }
+
+  bool isHiddingAssociatedEntity() const {
+    return ParmVarDeclBits.IsHiddingAssociatedEntity;
   }
 
   /// Determines whether this parameter is destroyed in the callee function.

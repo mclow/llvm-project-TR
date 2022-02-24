@@ -2793,7 +2793,7 @@ public:
   Attr *getImplicitCodeSegOrSectionAttrForFunction(const FunctionDecl *FD,
                                                    bool IsDefinition);
   void CheckFunctionOrTemplateParamDeclarator(Scope *S, Declarator &D);
-  Decl *ActOnParamDeclarator(Scope *S, Declarator &D);
+  Decl *ActOnParamDeclarator(Scope *S, Declarator &D, bool IsHiddingInAssociatedEntity);
   ParmVarDecl *BuildParmVarDeclForTypedef(DeclContext *DC,
                                           SourceLocation Loc,
                                           QualType T);

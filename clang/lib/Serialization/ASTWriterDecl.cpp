@@ -1091,6 +1091,7 @@ void ASTDeclWriter::VisitParmVarDecl(ParmVarDecl *D) {
   Record.push_back(D->getFunctionScopeDepth());
   Record.push_back(D->getFunctionScopeIndex());
   Record.push_back(D->getObjCDeclQualifier()); // FIXME: stable encoding
+  Record.push_back(D->isHiddingAssociatedEntity());
   Record.push_back(D->isKNRPromoted());
   Record.push_back(D->hasInheritedDefaultArg());
   Record.push_back(D->hasUninstantiatedDefaultArg());
@@ -2129,6 +2130,7 @@ void ASTWriter::WriteDeclAbbrevs() {
   Abv->Add(BitCodeAbbrevOp(0));                       // ScopeDepth
   Abv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::VBR, 6)); // ScopeIndex
   Abv->Add(BitCodeAbbrevOp(0));                       // ObjCDeclQualifier
+  Abv->Add(BitCodeAbbrevOp(0));                       // IsHiddingAssociatedEntity
   Abv->Add(BitCodeAbbrevOp(0));                       // KNRPromoted
   Abv->Add(BitCodeAbbrevOp(0));                       // HasInheritedDefaultArg
   Abv->Add(BitCodeAbbrevOp(0));                   // HasUninstantiatedDefaultArg

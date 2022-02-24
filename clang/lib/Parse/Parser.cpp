@@ -500,6 +500,7 @@ void Parser::Initialize() {
   Ident_GNU_final = nullptr;
   Ident_import = nullptr;
   Ident_module = nullptr;
+  Ident_associated_decl = &PP.getIdentifierTable().get("adl_entity");;
 
   Ident_super = &PP.getIdentifierTable().get("super");
 
@@ -1454,7 +1455,7 @@ void Parser::ParseKNRParamDeclarations(Declarator &D) {
 
       // Ask the actions module to compute the type for this declarator.
       Decl *Param =
-        Actions.ActOnParamDeclarator(getCurScope(), ParmDeclarator);
+        Actions.ActOnParamDeclarator(getCurScope(), ParmDeclarator, false);
 
       if (Param &&
           // A missing identifier has already been diagnosed.

@@ -1515,6 +1515,12 @@ void DeclContext::removeDecl(Decl *D) {
   // Mark that D is no longer in the decl chain.
   D->NextInContextAndBits.setPointer(nullptr);
 
+  hideDecl(D);
+}
+
+
+void DeclContext::hideDecl(Decl *D) {
+
   // Remove D from the lookup table if necessary.
   if (isa<NamedDecl>(D)) {
     auto *ND = cast<NamedDecl>(D);

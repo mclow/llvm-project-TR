@@ -1490,7 +1490,7 @@ Decl *Parser::ParseObjCMethodDecl(SourceLocation mLoc,
     Declarator ParmDecl(DS, DeclaratorContext::Prototype);
     ParseDeclarator(ParmDecl);
     IdentifierInfo *ParmII = ParmDecl.getIdentifier();
-    Decl *Param = Actions.ActOnParamDeclarator(getCurScope(), ParmDecl);
+    Decl *Param = Actions.ActOnParamDeclarator(getCurScope(), ParmDecl, false);
     CParamInfo.push_back(DeclaratorChunk::ParamInfo(ParmII,
                                                     ParmDecl.getIdentifierLoc(),
                                                     Param,

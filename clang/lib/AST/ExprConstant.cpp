@@ -15447,8 +15447,9 @@ bool Expr::EvaluateAsInitializer(APValue &Value, const ASTContext &Ctx,
     if (!Info.discardCleanups())
       llvm_unreachable("Unhandled cleanup; missing full expression marker?");
   }
-  return CheckConstantExpression(Info, DeclLoc, DeclTy, Value,
-                                 ConstantExprKind::Normal) &&
+  return ((VD->getType()->isReferenceType() && Ctx.getLangOpts().CPlusPlus2b) ||
+         CheckConstantExpression(Info, DeclLoc, DeclTy, Value,
+                                  ConstantExprKind::Normal)) &&
          CheckMemoryLeaks(Info);
 }
 

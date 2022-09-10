@@ -1562,7 +1562,7 @@ constexpr const int l = k; // expected-error {{constant expression}} expected-no
 void f() {
   // The temporary here has automatic storage duration, so we can't bind a
   // constexpr reference to it.
-  constexpr const int &i = 1; // expected-error {{constant expression}} expected-note 2{{temporary}}
+  constexpr const int &i = 1; // cxx11_20-error {{constant expression}} cxx11_20-note 2{{temporary}}
 }
 
 }

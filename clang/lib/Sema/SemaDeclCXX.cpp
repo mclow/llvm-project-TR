@@ -786,7 +786,7 @@ Sema::ActOnDecompositionDeclarator(Scope *S, Declarator &D,
       CPlusPlus20Specifiers.push_back(DeclSpec::getSpecifierName(TSCS));
       CPlusPlus20SpecifierLocs.push_back(DS.getThreadStorageClassSpecLoc());
     }
-    if (DS.hasConstexprSpecifier()) {
+    if (!LangOpts.CPlusPlus2b && DS.hasConstexprSpecifier()) {
       BadSpecifiers.push_back(
           DeclSpec::getSpecifierName(DS.getConstexprSpecifier()));
       BadSpecifierLocs.push_back(DS.getConstexprSpecLoc());
@@ -1309,6 +1309,8 @@ static bool checkTupleLikeDecomposition(Sema &S,
         S.BuildReferenceType(T, E.get()->isLValue(), Loc, B->getDeclName());
     if (RefType.isNull())
       return true;
+    if(Src->isConstexpr())
+      RefType.addConst();
     auto *RefVD = VarDecl::Create(
         S.Context, Src->getDeclContext(), Loc, Loc,
         B->getDeclName().getAsIdentifierInfo(), RefType,

@@ -8908,8 +8908,10 @@ bool PointerExprEvaluator::VisitCastExpr(const CastExpr *E) {
       //    implementation had a parameter of type `void*`, and casts from
       //    that back to `const __impl*` in its body.
       if (VoidPtrCastMaybeOK &&
-          (Info.getStdAllocatorCaller("allocate") ||
-           IsDeclSourceLocationCurrent(Info.CurrentCall->Callee))) {
+           (Info.getStdAllocatorCaller("allocate") ||
+           IsDeclSourceLocationCurrent(Info.CurrentCall->Callee) ||
+           // Allow it in C++2b mode. Hey Jason!
+           Info.getLangOpts().CPlusPlus2b)) {
         // Permitted.
       } else {
         Result.Designator.setInvalid();

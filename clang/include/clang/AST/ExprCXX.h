@@ -4315,6 +4315,80 @@ public:
   }
 };
 
+class PackIndexingExpr final
+    : public Expr,
+      private llvm::TrailingObjects<PackIndexingExpr, TemplateArgument> {
+  friend class ASTStmtReader;
+  friend class ASTStmtWriter;
+  friend TrailingObjects;
+
+  SourceLocation EllipsisLoc;
+
+  // The location of the closing bracket
+  SourceLocation RSquareLoc;
+
+  // The pack being indexed, followed by the index
+  Stmt* SubExprs[2];
+
+  PackIndexingExpr(QualType Type,
+                   SourceLocation EllipsisLoc,
+                   SourceLocation RSquareLoc, Expr* PackIdExpr, Expr* IndexExpr)
+      : Expr(PackIndexingExprClass, Type, VK_LValue, OK_Ordinary),
+        EllipsisLoc(EllipsisLoc), RSquareLoc(RSquareLoc),
+        SubExprs{PackIdExpr, IndexExpr} {
+    setDependence(ExprDependence::ValueInstantiation);
+  }
+
+       /// Create an empty expression.
+  PackIndexingExpr(EmptyShell Empty)
+      : Expr(PackIndexingExprClass, Empty) {}
+
+public:
+  static PackIndexingExpr *Create(ASTContext &Context,
+                                  SourceLocation EllipsisLoc,
+                                  SourceLocation RSquareLoc, Expr* PackIdExpr, Expr* IndexExpr);
+  static PackIndexingExpr *CreateDeserialized(ASTContext &Context);
+
+       /// Determine the location of the 'sizeof' keyword.
+  SourceLocation getEllipsisLoc() const { return EllipsisLoc; }
+
+       /// Determine the location of the parameter pack.
+  SourceLocation getPackLoc() const { return SubExprs[0]->getBeginLoc(); }
+
+       /// Determine the location of the right parenthesis.
+  SourceLocation getRSquareLoc() const { return RSquareLoc; }
+
+  SourceLocation getBeginLoc() const LLVM_READONLY { return getPackLoc(); }
+  SourceLocation getEndLoc() const LLVM_READONLY { return RSquareLoc; }
+
+  Expr* getPackIdExpression() const {
+    return cast<Expr>(SubExprs[0]);
+  }
+
+  Expr* getIndexExpr() const {
+    return cast<Expr>(SubExprs[1]);
+  }
+
+  Expr* getSelectedExpr() const {
+    assert(false && "TODO Corentin");
+    return nullptr;
+  }
+
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == PackIndexingExprClass;
+  }
+
+       // Iterators
+  child_range children() {
+    return child_range(SubExprs, SubExprs+2);
+  }
+
+  const_child_range children() const {
+    return const_child_range(SubExprs, SubExprs+2);
+  }
+};
+
+
 /// Represents a reference to a non-type template parameter
 /// that has been substituted with a template argument.
 class SubstNonTypeTemplateParmExpr : public Expr {

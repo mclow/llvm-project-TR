@@ -2030,6 +2030,11 @@ void ASTStmtWriter::VisitSizeOfPackExpr(SizeOfPackExpr *E) {
   Code = serialization::EXPR_SIZEOF_PACK;
 }
 
+void ASTStmtWriter::VisitPackIndexingExpr(PackIndexingExpr *E) {
+  VisitExpr(E);
+  assert(false && "TODO CORENTIN");
+}
+
 void ASTStmtWriter::VisitSubstNonTypeTemplateParmExpr(
                                               SubstNonTypeTemplateParmExpr *E) {
   VisitExpr(E);

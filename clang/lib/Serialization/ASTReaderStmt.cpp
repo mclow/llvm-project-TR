@@ -2131,6 +2131,11 @@ void ASTStmtReader::VisitSizeOfPackExpr(SizeOfPackExpr *E) {
   }
 }
 
+void ASTStmtReader::VisitPackIndexingExpr(PackIndexingExpr *E) {
+  VisitExpr(E);
+  assert(false && "TODO CORENTIN");
+}
+
 void ASTStmtReader::VisitSubstNonTypeTemplateParmExpr(
                                               SubstNonTypeTemplateParmExpr *E) {
   VisitExpr(E);

@@ -13944,6 +13944,17 @@ TreeTransform<Derived>::TransformSizeOfPackExpr(SizeOfPackExpr *E) {
                                             Args.size(), std::nullopt);
 }
 
+
+template<typename Derived>
+ExprResult
+TreeTransform<Derived>::TransformPackIndexingExpr(PackIndexingExpr *E) {
+  //return getDerived().RebuildPackIndexingExpr(E->getEllipsisLoc(), E->getRSquareLoc(),
+  //                                            E->getPackIdExpression(), E->getIndexExpr());
+
+  return E;
+}
+
+
 template<typename Derived>
 ExprResult
 TreeTransform<Derived>::TransformSubstNonTypeTemplateParmPackExpr(

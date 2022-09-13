@@ -2434,6 +2434,11 @@ void StmtPrinter::VisitSizeOfPackExpr(SizeOfPackExpr *E) {
   OS << "sizeof...(" << *E->getPack() << ")";
 }
 
+void StmtPrinter::VisitPackIndexingExpr(PackIndexingExpr *E) {
+  //VisitExpr(E);
+  assert(false && "TODO CORENTIN");
+}
+
 void StmtPrinter::VisitSubstNonTypeTemplateParmPackExpr(
                                        SubstNonTypeTemplateParmPackExpr *Node) {
   OS << *Node->getParameterPack();

@@ -1645,6 +1645,18 @@ NonTypeTemplateParmDecl *SubstNonTypeTemplateParmExpr::getParameter() const {
       getReplacedTemplateParameterList(getAssociatedDecl())->asArray()[Index]);
 }
 
+PackIndexingExpr *PackIndexingExpr::Create(ASTContext &Context,
+                                SourceLocation EllipsisLoc,
+                                SourceLocation RSquareLoc, Expr* PackIdExpr, Expr* IndexExpr)
+{
+   return new (Context)
+      PackIndexingExpr(Context.DependentTy, EllipsisLoc, RSquareLoc, PackIdExpr, IndexExpr);
+}
+
+PackIndexingExpr *PackIndexingExpr::CreateDeserialized(ASTContext &Context) {
+  return new (Context) PackIndexingExpr(EmptyShell{});
+}
+
 QualType SubstNonTypeTemplateParmExpr::getParameterType(
     const ASTContext &Context) const {
   // Note that, for a class type NTTP, we will have an lvalue of type 'const

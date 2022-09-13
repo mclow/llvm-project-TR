@@ -617,6 +617,8 @@ ExprResult Parser::tryParseCXXIdExpression(CXXScopeSpec &SS,
     break;
   }
 
+  //Might be a pack index expression!
+
   if (!E.isInvalid() && !E.isUnset() && Tok.is(tok::less))
     checkPotentialAngleBracket(E);
   return E;

@@ -199,6 +199,7 @@ C++2c Feature Support
 
 - Implemented `P2361R6 Template parameter initialization <https://wg21.link/P2308R1>`_.
   This change is applied as a DR in all language modes.
+- Implemented `P2662R3 Pack Indexing <https://wg21.link/P2662R3>`_.
 
 
 Resolutions to C++ Defect Reports

@@ -617,10 +617,37 @@ ExprResult Parser::tryParseCXXIdExpression(CXXScopeSpec &SS,
     break;
   }
 
-  //Might be a pack index expression!
-
+  // Might be a pack index expression!
+  E = tryParseCXXPackIndexingExpression(E);
   if (!E.isInvalid() && !E.isUnset() && Tok.is(tok::less))
     checkPotentialAngleBracket(E);
+  return E;
+}
+
+ExprResult Parser::ParseCXXPackIndexingExpression(ExprResult PackIdExpression) {
+  assert(Tok.is(tok::ellipsis) && NextToken().is(tok::l_square) &&
+         "expected ...[");
+  SourceLocation EllipsisLoc = ConsumeToken();
+  BalancedDelimiterTracker T(*this, tok::l_square);
+  T.consumeOpen();
+  ExprResult IndexExpr = ParseAssignmentExpression();
+  if (T.consumeClose()) {
+    return {};
+  }
+  if (!IndexExpr.isUsable())
+    return ExprError();
+  return Actions.ActOnPackIndexingExpr(getCurScope(), PackIdExpression.get(),
+                                       EllipsisLoc, T.getOpenLocation(),
+                                       IndexExpr.get(), T.getCloseLocation());
+}
+
+ExprResult
+Parser::tryParseCXXPackIndexingExpression(ExprResult PackIdExpression) {
+  ExprResult E = PackIdExpression;
+  if (!PackIdExpression.isInvalid() && !PackIdExpression.isUnset() &&
+      Tok.is(tok::ellipsis) && NextToken().is(tok::l_square)) {
+    E = ParseCXXPackIndexingExpression(E);
+  }
   return E;
 }
 

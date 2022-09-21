@@ -7520,6 +7520,10 @@ public:
     }
   }
 
+  bool VisitPackIndexingExpr(const PackIndexingExpr *E) {
+    return StmtVisitorTy::Visit(E->getSelectedExpr());
+  }
+
   bool VisitCXXRewrittenBinaryOperator(const CXXRewrittenBinaryOperator *E) {
     return StmtVisitorTy::Visit(E->getSemanticForm());
   }

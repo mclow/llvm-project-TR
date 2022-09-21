@@ -1043,8 +1043,7 @@ ExprResult Sema::ActOnSizeofParameterPackExpr(Scope *S,
   }
 
   if (!ParameterPack || !ParameterPack->isParameterPack()) {
-    Diag(NameLoc, diag::err_sizeof_pack_no_pack_name)
-      << &Name;
+    Diag(NameLoc, diag::err_expected_name_of_pack) << &Name;
     return ExprError();
   }
 
@@ -1052,6 +1051,64 @@ ExprResult Sema::ActOnSizeofParameterPackExpr(Scope *S,
 
   return SizeOfPackExpr::Create(Context, OpLoc, ParameterPack, NameLoc,
                                 RParenLoc);
+}
+
+static bool isParameterPack(Expr *PackExpression) {
+  if (auto D = dyn_cast<DeclRefExpr>(PackExpression); D) {
+    ValueDecl *VD = D->getDecl();
+    return VD->isParameterPack();
+  } else {
+    llvm::outs() << PackExpression;
+    assert(false && "Non variables packs not supported");
+  }
+  return false;
+}
+
+ExprResult Sema::ActOnPackIndexingExpr(Scope *S, Expr *PackExpression,
+                                       SourceLocation EllipsisLoc,
+                                       SourceLocation LSquareLoc,
+                                       Expr *IndexExpr,
+                                       SourceLocation RSquareLoc) {
+  bool isParameterPack = ::isParameterPack(PackExpression);
+  if (!isParameterPack) {
+    Diag(PackExpression->getBeginLoc(), diag::err_expected_name_of_pack)
+        << PackExpression;
+    return ExprError();
+  }
+  if (DiagnoseUnexpandedParameterPack(IndexExpr, UPPC_Expression)) {
+    return ExprError();
+  }
+  return BuildPackIndexingExpr(PackExpression, EllipsisLoc, IndexExpr,
+                               RSquareLoc);
+}
+
+ExprResult
+Sema::BuildPackIndexingExpr(Expr *PackExpression, SourceLocation EllipsisLoc,
+                            Expr *IndexExpr, SourceLocation RSquareLoc,
+                            ArrayRef<Expr *> ExpandedExprs, bool EmptyPack) {
+
+  llvm::Optional<int64_t> Index;
+  if (!IndexExpr->isValueDependent() && !IndexExpr->isTypeDependent()) {
+    llvm::APSInt Value(Context.getIntWidth(Context.getSizeType()));
+    // TODO: do we need a new enumerator instead of CCEK_ArrayBound?
+    ExprResult Res = CheckConvertedConstantExpression(
+        IndexExpr, Context.getSizeType(), Value, CCEK_ArrayBound);
+    if (!Res.isUsable())
+      return ExprError();
+    Index = Value.getExtValue();
+  }
+
+  if (Index && (!ExpandedExprs.empty() || EmptyPack)) {
+    if (*Index < 0 || EmptyPack || *Index >= int64_t(ExpandedExprs.size())) {
+      Diag(PackExpression->getBeginLoc(), diag::err_pack_index_out_of_bound)
+          << *Index << PackExpression << ExpandedExprs.size();
+      return ExprError();
+    }
+  }
+
+  return PackIndexingExpr::Create(getASTContext(), EllipsisLoc, RSquareLoc,
+                                  PackExpression, IndexExpr, Index,
+                                  ExpandedExprs);
 }
 
 TemplateArgumentLoc Sema::getTemplateArgumentPackExpansionPattern(

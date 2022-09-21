@@ -2435,7 +2435,7 @@ void StmtPrinter::VisitSizeOfPackExpr(SizeOfPackExpr *E) {
 }
 
 void StmtPrinter::VisitPackIndexingExpr(PackIndexingExpr *E) {
-  //VisitExpr(E);
+  // VisitExpr(E);
   assert(false && "TODO CORENTIN");
 }
 

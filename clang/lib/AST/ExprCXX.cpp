@@ -1646,11 +1646,33 @@ NonTypeTemplateParmDecl *SubstNonTypeTemplateParmExpr::getParameter() const {
 }
 
 PackIndexingExpr *PackIndexingExpr::Create(ASTContext &Context,
-                                SourceLocation EllipsisLoc,
-                                SourceLocation RSquareLoc, Expr* PackIdExpr, Expr* IndexExpr)
-{
-   return new (Context)
-      PackIndexingExpr(Context.DependentTy, EllipsisLoc, RSquareLoc, PackIdExpr, IndexExpr);
+                                           SourceLocation EllipsisLoc,
+                                           SourceLocation RSquareLoc,
+                                           Expr *PackIdExpr, Expr *IndexExpr,
+                                           Optional<int64_t> Index,
+                                           ArrayRef<Expr *> SubstitutedExprs) {
+  QualType Type;
+  if (Index && !SubstitutedExprs.empty()) {
+    Type = SubstitutedExprs[*Index]->getType();
+  } else {
+    Type = Context.DependentTy;
+  }
+
+  void *Storage =
+      Context.Allocate(totalSizeToAlloc<Expr *>(SubstitutedExprs.size()));
+  return new (Storage)
+      PackIndexingExpr(Type, EllipsisLoc, RSquareLoc, PackIdExpr, IndexExpr,
+                       Index, SubstitutedExprs);
+}
+
+NamedDecl *PackIndexingExpr::getPackDecl() const {
+  if (auto D = dyn_cast<DeclRefExpr>(getPackIdExpression()); D) {
+    NamedDecl *ND = dyn_cast<NamedDecl>(D->getDecl());
+    assert(ND && "exected a named decl");
+    return ND;
+  }
+  assert(false && "Non variables packs not supported");
+  return nullptr;
 }
 
 PackIndexingExpr *PackIndexingExpr::CreateDeserialized(ASTContext &Context) {

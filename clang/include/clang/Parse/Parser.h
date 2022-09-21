@@ -1886,6 +1886,8 @@ private:
   // C++ Expressions
   ExprResult tryParseCXXIdExpression(CXXScopeSpec &SS, bool isAddressOfOperand,
                                      Token &Replacement);
+  ExprResult tryParseCXXPackIndexingExpression(ExprResult PackIdExpression);
+  ExprResult ParseCXXPackIndexingExpression(ExprResult PackIdExpression);
   ExprResult ParseCXXIdExpression(bool isAddressOfOperand = false);
 
   bool areTokensAdjacent(const Token &A, const Token &B);

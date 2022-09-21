@@ -5738,6 +5738,18 @@ public:
                                           IdentifierInfo &Name,
                                           SourceLocation NameLoc,
                                           SourceLocation RParenLoc);
+
+  ExprResult ActOnPackIndexingExpr(Scope *S, Expr *PackExpression,
+                                   SourceLocation EllipsisLoc,
+                                   SourceLocation LSquareLoc, Expr *IndexExpr,
+                                   SourceLocation RSquareLoc);
+
+  ExprResult BuildPackIndexingExpr(Expr *PackExpression,
+                                   SourceLocation EllipsisLoc, Expr *IndexExpr,
+                                   SourceLocation RSquareLoc,
+                                   ArrayRef<Expr *> ExpandedExprs = {},
+                                   bool EmptyPack = false);
+
   ExprResult ActOnPostfixUnaryOp(Scope *S, SourceLocation OpLoc,
                                  tok::TokenKind Kind, Expr *Input);
 

@@ -4317,7 +4317,7 @@ public:
 
 class PackIndexingExpr final
     : public Expr,
-      private llvm::TrailingObjects<PackIndexingExpr, TemplateArgument> {
+      private llvm::TrailingObjects<PackIndexingExpr, Expr *> {
   friend class ASTStmtReader;
   friend class ASTStmtWriter;
   friend TrailingObjects;
@@ -4328,66 +4328,81 @@ class PackIndexingExpr final
   SourceLocation RSquareLoc;
 
   // The pack being indexed, followed by the index
-  Stmt* SubExprs[2];
+  Stmt *SubExprs[2];
 
-  PackIndexingExpr(QualType Type,
-                   SourceLocation EllipsisLoc,
-                   SourceLocation RSquareLoc, Expr* PackIdExpr, Expr* IndexExpr)
+  // The evaluated index
+  Optional<int64_t> Index;
+
+  PackIndexingExpr(QualType Type, SourceLocation EllipsisLoc,
+                   SourceLocation RSquareLoc, Expr *PackIdExpr, Expr *IndexExpr,
+                   Optional<int64_t> Index = None,
+                   ArrayRef<Expr *> SubstitutedExprs = {})
       : Expr(PackIndexingExprClass, Type, VK_LValue, OK_Ordinary),
-        EllipsisLoc(EllipsisLoc), RSquareLoc(RSquareLoc),
-        SubExprs{PackIdExpr, IndexExpr} {
-    setDependence(ExprDependence::ValueInstantiation);
+        EllipsisLoc(EllipsisLoc),
+        RSquareLoc(RSquareLoc), SubExprs{PackIdExpr, IndexExpr}, Index(Index) {
+
+    auto *Exprs = getTrailingObjects<Expr *>();
+    std::uninitialized_copy(SubstitutedExprs.begin(), SubstitutedExprs.end(),
+                            Exprs);
+
+    ExprDependence D = IndexExpr->getDependence();
+    if (SubstitutedExprs.empty())
+      D |= ExprDependence::TypeValueInstantiation;
+    else if (!IndexExpr->isValueDependent()) {
+      assert(Index && *Index < int64_t(SubstitutedExprs.size()) &&
+             "pack index out of bound");
+      D |= SubstitutedExprs[*Index]->getDependence();
+    }
+    setDependence(D);
   }
 
-       /// Create an empty expression.
-  PackIndexingExpr(EmptyShell Empty)
-      : Expr(PackIndexingExprClass, Empty) {}
+  /// Create an empty expression.
+  PackIndexingExpr(EmptyShell Empty) : Expr(PackIndexingExprClass, Empty) {}
 
 public:
   static PackIndexingExpr *Create(ASTContext &Context,
                                   SourceLocation EllipsisLoc,
-                                  SourceLocation RSquareLoc, Expr* PackIdExpr, Expr* IndexExpr);
+                                  SourceLocation RSquareLoc, Expr *PackIdExpr,
+                                  Expr *IndexExpr,
+                                  Optional<int64_t> Index = None,
+                                  ArrayRef<Expr *> SubstitutedExprs = {});
   static PackIndexingExpr *CreateDeserialized(ASTContext &Context);
 
-       /// Determine the location of the 'sizeof' keyword.
+  /// Determine the location of the 'sizeof' keyword.
   SourceLocation getEllipsisLoc() const { return EllipsisLoc; }
 
-       /// Determine the location of the parameter pack.
+  /// Determine the location of the parameter pack.
   SourceLocation getPackLoc() const { return SubExprs[0]->getBeginLoc(); }
 
-       /// Determine the location of the right parenthesis.
+  /// Determine the location of the right parenthesis.
   SourceLocation getRSquareLoc() const { return RSquareLoc; }
 
   SourceLocation getBeginLoc() const LLVM_READONLY { return getPackLoc(); }
   SourceLocation getEndLoc() const LLVM_READONLY { return RSquareLoc; }
 
-  Expr* getPackIdExpression() const {
-    return cast<Expr>(SubExprs[0]);
-  }
+  Expr *getPackIdExpression() const { return cast<Expr>(SubExprs[0]); }
 
-  Expr* getIndexExpr() const {
-    return cast<Expr>(SubExprs[1]);
-  }
+  NamedDecl *getPackDecl() const;
 
-  Expr* getSelectedExpr() const {
-    assert(false && "TODO Corentin");
-    return nullptr;
+  Expr *getIndexExpr() const { return cast<Expr>(SubExprs[1]); }
+
+  Expr *getSelectedExpr() const {
+    assert(Index && !isInstantiationDependent() &&
+           "**TODO** extracting the indexed expression of a dependant pack");
+    return getTrailingObjects<Expr *>()[*Index];
   }
 
   static bool classof(const Stmt *T) {
     return T->getStmtClass() == PackIndexingExprClass;
   }
 
-       // Iterators
-  child_range children() {
-    return child_range(SubExprs, SubExprs+2);
-  }
+  // Iterators
+  child_range children() { return child_range(SubExprs, SubExprs + 2); }
 
   const_child_range children() const {
-    return const_child_range(SubExprs, SubExprs+2);
+    return const_child_range(SubExprs, SubExprs + 2);
   }
 };
-
 
 /// Represents a reference to a non-type template parameter
 /// that has been substituted with a template argument.

@@ -7520,10 +7520,6 @@ public:
     }
   }
 
-  bool VisitPackIndexingExpr(const PackIndexingExpr *E) {
-    return StmtVisitorTy::Visit(E->getSelectedExpr());
-  }
-
   bool VisitCXXRewrittenBinaryOperator(const CXXRewrittenBinaryOperator *E) {
     return StmtVisitorTy::Visit(E->getSemanticForm());
   }
@@ -8003,6 +7999,10 @@ public:
     }
 
     llvm_unreachable("Return from function from the loop above.");
+  }
+
+  bool VisitPackIndexingExpr(const PackIndexingExpr *E) {
+    return StmtVisitorTy::Visit(E->getSelectedExpr());
   }
 
   /// Visit a value which is evaluated, but whose value is ignored.

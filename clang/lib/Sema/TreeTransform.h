@@ -13965,61 +13965,70 @@ TreeTransform<Derived>::TransformPackIndexingExpr(PackIndexingExpr *E) {
   if (IndexExpr.isInvalid())
     return ExprError();
 
-  Expr *Pattern = E->getPackIdExpression();
   SmallVector<Expr *, 5> ExpandedExprs;
+  if (E->getExpressions().empty()) {
+    Expr *Pattern = E->getPackIdExpression();
+    SmallVector<UnexpandedParameterPack, 2> Unexpanded;
+    getSema().collectUnexpandedParameterPacks(E->getPackIdExpression(),
+                                              Unexpanded);
+    assert(!Unexpanded.empty() && "Pack expansion without parameter packs?");
 
-  SmallVector<UnexpandedParameterPack, 2> Unexpanded;
-  getSema().collectUnexpandedParameterPacks(E->getPackIdExpression(),
-                                            Unexpanded);
-  assert(!Unexpanded.empty() && "Pack expansion without parameter packs?");
-
-  // Determine whether the set of unexpanded parameter packs can and should
-  // be expanded.
-  bool ShouldExpand = true;
-  bool RetainExpansion = false;
-  Optional<unsigned> OrigNumExpansions;
-  Optional<unsigned> NumExpansions = OrigNumExpansions;
-  if (getDerived().TryExpandParameterPacks(
-          E->getEllipsisLoc(), Pattern->getSourceRange(), Unexpanded,
-          ShouldExpand, RetainExpansion, NumExpansions))
-    return true;
-  if (!ShouldExpand) {
-    Sema::ArgumentPackSubstitutionIndexRAII SubstIndex(getSema(), -1);
-    ExprResult Pack = getDerived().TransformExpr(Pattern);
-    if (Pack.isInvalid())
-      return ExprError();
-    return getDerived().RebuildPackIndexingExpr(E->getEllipsisLoc(),
-                                                E->getRSquareLoc(), Pack.get(),
-                                                IndexExpr.get(), None);
-  }
-  for (unsigned I = 0; I != *NumExpansions; ++I) {
-    Sema::ArgumentPackSubstitutionIndexRAII SubstIndex(getSema(), I);
-    ExprResult Out = getDerived().TransformExpr(Pattern);
-    if (Out.isInvalid())
+    // Determine whether the set of unexpanded parameter packs can and should
+    // be expanded.
+    bool ShouldExpand = true;
+    bool RetainExpansion = false;
+    Optional<unsigned> OrigNumExpansions;
+    Optional<unsigned> NumExpansions = OrigNumExpansions;
+    if (getDerived().TryExpandParameterPacks(
+            E->getEllipsisLoc(), Pattern->getSourceRange(), Unexpanded,
+            ShouldExpand, RetainExpansion, NumExpansions))
       return true;
-    if (Out.get()->containsUnexpandedParameterPack()) {
+    if (!ShouldExpand) {
+      Sema::ArgumentPackSubstitutionIndexRAII SubstIndex(getSema(), -1);
+      ExprResult Pack = getDerived().TransformExpr(Pattern);
+      if (Pack.isInvalid())
+        return ExprError();
+      return getDerived().RebuildPackIndexingExpr(
+          E->getEllipsisLoc(), E->getRSquareLoc(), Pack.get(), IndexExpr.get(),
+          None);
+    }
+    for (unsigned I = 0; I != *NumExpansions; ++I) {
+      Sema::ArgumentPackSubstitutionIndexRAII SubstIndex(getSema(), I);
+      ExprResult Out = getDerived().TransformExpr(Pattern);
+      if (Out.isInvalid())
+        return true;
+      if (Out.get()->containsUnexpandedParameterPack()) {
+        Out = getDerived().RebuildPackExpansion(Out.get(), E->getEllipsisLoc(),
+                                                OrigNumExpansions);
+        if (Out.isInvalid())
+          return true;
+      }
+      ExpandedExprs.push_back(Out.get());
+    }
+    // If we're supposed to retain a pack expansion, do so by temporarily
+    // forgetting the partially-substituted parameter pack.
+    if (RetainExpansion) {
+      ForgetPartiallySubstitutedPackRAII Forget(getDerived());
+
+      ExprResult Out = getDerived().TransformExpr(Pattern);
+      if (Out.isInvalid())
+        return true;
+
       Out = getDerived().RebuildPackExpansion(Out.get(), E->getEllipsisLoc(),
                                               OrigNumExpansions);
       if (Out.isInvalid())
         return true;
+      ExpandedExprs.push_back(Out.get());
     }
-    ExpandedExprs.push_back(Out.get());
   }
-  // If we're supposed to retain a pack expansion, do so by temporarily
-  // forgetting the partially-substituted parameter pack.
-  if (RetainExpansion) {
-    ForgetPartiallySubstitutedPackRAII Forget(getDerived());
 
-    ExprResult Out = getDerived().TransformExpr(Pattern);
-    if (Out.isInvalid())
-      return true;
-
-    Out = getDerived().RebuildPackExpansion(Out.get(), E->getEllipsisLoc(),
-                                            OrigNumExpansions);
-    if (Out.isInvalid())
-      return true;
-    ExpandedExprs.push_back(Out.get());
+  else {
+    if (getDerived().TransformExprs(E->getExpressions().data(),
+                                    E->getExpressions().size(), false,
+                                    ExpandedExprs))
+      return ExprError();
   }
+
   return getDerived().RebuildPackIndexingExpr(
       E->getEllipsisLoc(), E->getRSquareLoc(), E->getPackIdExpression(),
       IndexExpr.get(), ExpandedExprs,

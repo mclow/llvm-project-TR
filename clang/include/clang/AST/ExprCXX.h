@@ -4333,13 +4333,16 @@ class PackIndexingExpr final
   // The evaluated index
   Optional<int64_t> Index;
 
+  size_t TransformedExpressions;
+
   PackIndexingExpr(QualType Type, SourceLocation EllipsisLoc,
                    SourceLocation RSquareLoc, Expr *PackIdExpr, Expr *IndexExpr,
                    Optional<int64_t> Index = None,
                    ArrayRef<Expr *> SubstitutedExprs = {})
       : Expr(PackIndexingExprClass, Type, VK_LValue, OK_Ordinary),
         EllipsisLoc(EllipsisLoc),
-        RSquareLoc(RSquareLoc), SubExprs{PackIdExpr, IndexExpr}, Index(Index) {
+        RSquareLoc(RSquareLoc), SubExprs{PackIdExpr, IndexExpr}, Index(Index),
+        TransformedExpressions(SubstitutedExprs.size()) {
 
     auto *Exprs = getTrailingObjects<Expr *>();
     std::uninitialized_copy(SubstitutedExprs.begin(), SubstitutedExprs.end(),
@@ -4347,17 +4350,24 @@ class PackIndexingExpr final
 
     ExprDependence D = IndexExpr->getDependence();
     if (SubstitutedExprs.empty())
-      D |= ExprDependence::TypeValueInstantiation;
+      D |= (PackIdExpr->getDependence() |
+            ExprDependence::TypeValueInstantiation) &
+           ~ExprDependence::UnexpandedPack;
     else if (!IndexExpr->isValueDependent()) {
       assert(Index && *Index < int64_t(SubstitutedExprs.size()) &&
              "pack index out of bound");
       D |= SubstitutedExprs[*Index]->getDependence();
+      setValueKind(SubstitutedExprs[*Index]->getValueKind());
     }
     setDependence(D);
   }
 
   /// Create an empty expression.
   PackIndexingExpr(EmptyShell Empty) : Expr(PackIndexingExprClass, Empty) {}
+
+  unsigned numTrailingObjects(OverloadToken<Expr *>) const {
+    return TransformedExpressions;
+  }
 
 public:
   static PackIndexingExpr *Create(ASTContext &Context,
@@ -4388,8 +4398,14 @@ public:
 
   Expr *getSelectedExpr() const {
     assert(Index && !isInstantiationDependent() &&
-           "**TODO** extracting the indexed expression of a dependant pack");
+           "extracting the indexed expression of a dependant pack");
     return getTrailingObjects<Expr *>()[*Index];
+  }
+
+  llvm::ArrayRef<Expr *> getExpressions() const {
+    if (TransformedExpressions == 0)
+      return {};
+    return {getTrailingObjects<Expr *>(), TransformedExpressions};
   }
 
   static bool classof(const Stmt *T) {

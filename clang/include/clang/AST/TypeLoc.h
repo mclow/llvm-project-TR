@@ -2049,6 +2049,35 @@ public:
   }
 };
 
+
+struct PackIndexingTypeLocInfo {
+  SourceLocation EllipsisLoc;
+};
+
+class PackIndexingTypeLoc
+    : public ConcreteTypeLoc<UnqualTypeLoc, PackIndexingTypeLoc, PackIndexingType,
+                             PackIndexingTypeLocInfo> {
+
+public:
+  Expr *getIndexExpr()  const {return getTypePtr()->getIndexExpr(); }
+  QualType getPattern() const {return getTypePtr()->getPattern(); }
+
+  SourceLocation getEllipsisLoc() const { return getLocalData()->EllipsisLoc; }
+  void setEllipsisLoc(SourceLocation Loc) { getLocalData()->EllipsisLoc = Loc; }
+
+  void initializeLocal(ASTContext &Context, SourceLocation Loc) {
+    setEllipsisLoc(Loc);
+  }
+
+  //FIXME
+  SourceRange getLocalSourceRange() const {
+    return SourceRange(getEllipsisLoc(), getEllipsisLoc());
+  }
+
+};
+
+
+
 struct UnaryTransformTypeLocInfo {
   // FIXME: While there's only one unary transform right now, future ones may
   // need different representations

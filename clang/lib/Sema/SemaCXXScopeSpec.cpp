@@ -912,6 +912,26 @@ bool Sema::ActOnCXXNestedNameSpecifierDecltype(CXXScopeSpec &SS,
   return false;
 }
 
+bool Sema::ActOnCXXNestedNameSpecifierIndexedPack(CXXScopeSpec &SS,
+                                            const DeclSpec &DS,
+                                            SourceLocation ColonColonLoc, QualType Type)
+{
+  if (SS.isInvalid() || DS.getTypeSpecType() == DeclSpec::TST_error)
+    return true;
+
+  assert(DS.getTypeSpecType() == DeclSpec::TST_indexed_typename_pack);
+
+  if (Type.isNull())
+    return true;
+
+  TypeLocBuilder TLB;
+  PackIndexingTypeLoc PIT = TLB.push<PackIndexingTypeLoc>(Type);
+  PIT.setEllipsisLoc(DS.getEllipsisLoc());
+  SS.Extend(Context, SourceLocation(), TLB.getTypeLocInContext(Context, Type),
+            ColonColonLoc);
+  return false;
+}
+
 /// IsInvalidUnlessNestedName - This method is used for error recovery
 /// purposes to determine whether the specified identifier is only valid as
 /// a nested name specifier, for example a namespace name.  It is

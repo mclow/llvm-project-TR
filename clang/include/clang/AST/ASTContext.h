@@ -209,6 +209,7 @@ class ASTContext : public RefCountedBase<ASTContext> {
     FunctionProtoTypes;
   mutable llvm::FoldingSet<DependentTypeOfExprType> DependentTypeOfExprTypes;
   mutable llvm::FoldingSet<DependentDecltypeType> DependentDecltypeTypes;
+  mutable llvm::FoldingSet<PackIndexingType> DependentPackIndexingTypes;
   mutable llvm::FoldingSet<TemplateTypeParmType> TemplateTypeParmTypes;
   mutable llvm::FoldingSet<ObjCTypeParamType> ObjCTypeParamTypes;
   mutable llvm::FoldingSet<SubstTemplateTypeParmType>
@@ -1698,6 +1699,10 @@ public:
 
   /// C++11 decltype.
   QualType getDecltypeType(Expr *e, QualType UnderlyingType) const;
+
+  QualType getPackIndexingType(QualType Pattern,
+                               Expr* IndexExpr, bool FullyExpanded = false,
+                               ArrayRef<QualType> Expansions = {}, int Index = -1) const;
 
   /// Unary type transforms
   QualType getUnaryTransformType(QualType BaseType, QualType UnderlyingType,

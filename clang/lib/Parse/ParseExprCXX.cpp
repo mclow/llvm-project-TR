@@ -233,6 +233,27 @@ bool Parser::ParseOptionalCXXScopeSpecifier(
     HasScopeSpecifier = true;
   }
 
+  else if(!HasScopeSpecifier && Tok.is(tok::identifier)
+      && GetLookAheadToken(1).is(tok::ellipsis)
+      && GetLookAheadToken(2).is(tok::l_square)) {
+    SourceLocation Start = Tok.getLocation();
+    DeclSpec DS(AttrFactory);
+    SourceLocation CCLoc;
+    SourceLocation EndLoc = ParseIndexedTypeNamePack(DS);
+    if(DS.getTypeSpecType() == DeclSpec::TST_error)
+      return false;
+    QualType Type = Actions.BuildPackIndexingType(DS.getRepAsType().get(),
+                                                          DS.getPackIndexingExpr(),
+                                                          DS.getBeginLoc(), DS.getEllipsisLoc());
+    if(!TryConsumeToken(tok::coloncolon, CCLoc)) {
+      AnnotateExistingIndexedTypeNamePack(ParsedType::make(Type), Start, EndLoc);
+      return false;
+    }
+    if (Actions.ActOnCXXNestedNameSpecifierIndexedPack(SS, DS, CCLoc, Type))
+      SS.SetInvalid(SourceRange(Start, CCLoc));
+    HasScopeSpecifier = true;
+  }
+
   // Preferred type might change when parsing qualifiers, we need the original.
   auto SavedType = PreferredType;
   while (true) {
@@ -1846,6 +1867,12 @@ Parser::ParseCXXPseudoDestructor(Expr *Base, SourceLocation OpLoc,
     Diag(Tok, diag::err_destructor_tilde_identifier);
     return ExprError();
   }
+  if(GetLookAheadToken(1).is(tok::ellipsis) && GetLookAheadToken(2).is(tok::l_square)) {
+    DeclSpec DS(AttrFactory);
+    ParseIndexedTypeNamePack(DS);
+    return Actions.ActOnPseudoDestructorExpr(getCurScope(), Base, OpLoc, OpKind,
+                                             TildeLoc, DS);
+  }
 
   // Parse the second type.
   UnqualifiedId SecondTypeName;
@@ -2292,7 +2319,6 @@ void Parser::ParseCXXSimpleTypeSpecifier(DeclSpec &DS) {
                        getTypeAnnotation(Tok), Policy);
     DS.SetRangeEnd(Tok.getAnnotationEndLoc());
     ConsumeAnnotationToken();
-
     DS.Finish(Actions, Policy);
     return;
   }
@@ -2392,6 +2418,10 @@ void Parser::ParseCXXSimpleTypeSpecifier(DeclSpec &DS) {
   case tok::annot_decltype:
   case tok::kw_decltype:
     DS.SetRangeEnd(ParseDecltypeSpecifier(DS));
+    return DS.Finish(Actions, Policy);
+
+  case tok::annot_indexed_pack_type:
+    DS.SetRangeEnd(ParseIndexedTypeNamePack(DS));
     return DS.Finish(Actions, Policy);
 
   // GNU typeof support.

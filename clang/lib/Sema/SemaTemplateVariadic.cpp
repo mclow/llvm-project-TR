@@ -858,6 +858,7 @@ std::optional<unsigned> Sema::getNumArgumentsInExpansion(
 bool Sema::containsUnexpandedParameterPacks(Declarator &D) {
   const DeclSpec &DS = D.getDeclSpec();
   switch (DS.getTypeSpecType()) {
+  case TST_indexed_typename_pack:
   case TST_typename:
   case TST_typeof_unqualType:
   case TST_typeofType:

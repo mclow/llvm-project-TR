@@ -2344,6 +2344,7 @@ bool CXXNameMangler::mangleUnresolvedTypeOrSimpleId(QualType Ty,
   case Type::TypeOfExpr:
   case Type::TypeOf:
   case Type::Decltype:
+  case Type::PackIndexing:
   case Type::TemplateTypeParm:
   case Type::UnaryTransform:
   case Type::SubstTemplateTypeParm:
@@ -3999,6 +4000,16 @@ void CXXNameMangler::mangleType(const PackExpansionType *T) {
   Out << "Dp";
   mangleType(T->getPattern());
 }
+
+void CXXNameMangler::mangleType(const PackIndexingType* T) {
+  if (!T->hasSelectedType()) {
+    mangleType(T->getPattern());
+  }
+  else {
+    mangleType(T->getSelectedType());
+  }
+}
+
 
 void CXXNameMangler::mangleType(const ObjCInterfaceType *T) {
   mangleSourceName(T->getDecl()->getIdentifier());

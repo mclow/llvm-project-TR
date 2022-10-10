@@ -461,6 +461,10 @@ void TypeLocWriter::VisitUnaryTransformTypeLoc(UnaryTransformTypeLoc TL) {
   Record.AddTypeSourceInfo(TL.getUnderlyingTInfo());
 }
 
+void TypeLocWriter::VisitPackIndexingTypeLoc(PackIndexingTypeLoc TL) {
+  addSourceLocation(TL.getEllipsisLoc());
+}
+
 void TypeLocWriter::VisitAutoTypeLoc(AutoTypeLoc TL) {
   addSourceLocation(TL.getNameLoc());
   Record.push_back(TL.isConstrained());

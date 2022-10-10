@@ -3667,6 +3667,7 @@ QualType ASTContext::getVariableArrayDecayedType(QualType type) const {
   case Type::Auto:
   case Type::DeducedTemplateSpecialization:
   case Type::PackExpansion:
+  case Type::PackIndexing:
   case Type::BitInt:
   case Type::DependentBitInt:
     llvm_unreachable("type should never be variably-modified");
@@ -5762,6 +5763,33 @@ QualType ASTContext::getDecltypeType(Expr *e, QualType UnderlyingType) const {
   }
   Types.push_back(dt);
   return QualType(dt, 0);
+}
+
+QualType ASTContext::getPackIndexingType(QualType Pattern, Expr* IndexExpr,
+                                         bool FullyExpanded,
+                                         ArrayRef<QualType> Expansions, int Index) const {
+  QualType Canonical;
+  if(FullyExpanded && Index != -1) {
+    Canonical = getCanonicalType(Expansions[Index]);
+  }
+  else {
+    llvm::FoldingSetNodeID ID;
+    PackIndexingType::Profile(ID, *this, Pattern, IndexExpr);
+    void *InsertPos = nullptr;
+    PackIndexingType *Canon
+        = DependentPackIndexingTypes.FindNodeOrInsertPos(ID, InsertPos);
+    if(!Canon) {
+      void *Mem = Allocate(PackIndexingType::totalSizeToAlloc<QualType>(Expansions.size()), TypeAlignment);
+      Canon = new (Mem) PackIndexingType(*this, QualType(), Pattern, IndexExpr, Expansions, Index);
+      DependentPackIndexingTypes.InsertNode(Canon, InsertPos);
+    }
+    Canonical = QualType(Canon, 0);
+  }
+
+  void *Mem = Allocate(PackIndexingType::totalSizeToAlloc<QualType>(Expansions.size()), TypeAlignment);
+  auto *T = new (Mem) PackIndexingType(*this, Canonical, Pattern, IndexExpr, Expansions, Index);
+  Types.push_back(T);
+  return QualType(T, 0);
 }
 
 /// getUnaryTransformationType - We don't unique these, since the memory

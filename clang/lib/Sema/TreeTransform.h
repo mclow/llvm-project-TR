@@ -1048,6 +1048,11 @@ public:
   /// Subclasses may override this routine to provide different behavior.
   QualType RebuildDecltypeType(Expr *Underlying, SourceLocation Loc);
 
+  QualType RebuildPackIndexingType(QualType Pattern, Expr* IndexExpr,
+                                   SourceLocation Loc, SourceLocation EllipsisLoc,
+                                   bool FullyExpanded,
+                                   ArrayRef<QualType> Expansions = {});
+
   /// Build a new C++11 auto type.
   ///
   /// By default, builds a new AutoType with the given deduced type.
@@ -6421,6 +6426,96 @@ QualType TreeTransform<Derived>::TransformDecltypeType(TypeLocBuilder &TLB,
   NewTL.setDecltypeLoc(TL.getDecltypeLoc());
   NewTL.setRParenLoc(TL.getRParenLoc());
   return Result;
+}
+
+template<typename Derived>
+QualType TreeTransform<Derived>::TransformPackIndexingType(TypeLocBuilder &TLB, PackIndexingTypeLoc TL) {
+  // Transform the index
+  ExprResult IndexExpr = getDerived().TransformExpr(TL.getIndexExpr());
+  if (IndexExpr.isInvalid())
+    return QualType();
+  QualType Pattern = getDerived().TransformType(TL.getPattern());
+
+  const PackIndexingType* PIT = TL.getTypePtr();
+  SmallVector<QualType, 5> ExpandedTypes;
+  llvm::ArrayRef<QualType> Types = PIT->getExpansions();
+
+  bool NotYetExpanded = Types.empty();
+  bool FullyExpanded = true;
+
+  if(Types.empty()) {
+    Types = llvm::ArrayRef<QualType>(&Pattern, 1);
+  }
+
+  for(const QualType & T : Types) {
+    QualType Transformed = NotYetExpanded? T : getDerived().TransformType(T);
+    if(Transformed.isNull())
+      return QualType();
+    if(!Transformed->containsUnexpandedParameterPack()) {
+      ExpandedTypes.push_back(Transformed);
+      continue;
+    }
+    SmallVector<UnexpandedParameterPack, 2> Unexpanded;
+    getSema().collectUnexpandedParameterPacks(Transformed, Unexpanded);
+    assert(!Unexpanded.empty() && "Pack expansion without parameter packs?");
+    // Determine whether the set of unexpanded parameter packs can and should
+    // be expanded.
+    bool ShouldExpand = true;
+    bool RetainExpansion = false;
+    Optional<unsigned> OrigNumExpansions;
+    Optional<unsigned> NumExpansions = OrigNumExpansions;
+    if (getDerived().TryExpandParameterPacks(
+            TL.getEllipsisLoc(), SourceRange(), Unexpanded,
+            ShouldExpand, RetainExpansion, NumExpansions))
+      return QualType();
+    if (!ShouldExpand) {
+      Sema::ArgumentPackSubstitutionIndexRAII SubstIndex(getSema(), -1);
+      QualType Pack = getDerived().TransformType(T);
+      if (Pack.isNull())
+        return QualType();
+      if(NotYetExpanded) {
+        FullyExpanded = false;
+        QualType Out = getDerived().RebuildPackIndexingType(Pack,
+                                                            IndexExpr.get(), SourceLocation(), TL.getEllipsisLoc(), FullyExpanded);
+        PackIndexingTypeLoc Loc = TLB.push<PackIndexingTypeLoc>(Out);
+        Loc.setEllipsisLoc(TL.getEllipsisLoc());
+        return Out;
+      }
+      ExpandedTypes.push_back(Pack);
+      continue;
+    }
+    for (unsigned I = 0; I != *NumExpansions; ++I) {
+      Sema::ArgumentPackSubstitutionIndexRAII SubstIndex(getSema(), I);
+      QualType Out = getDerived().TransformType(T);
+      if (Out.isNull())
+        return QualType();
+      //if (Out->containsUnexpandedParameterPack()) {
+      //  Out = getDerived().RebuildPackExpansionType(Out, SourceRange(), TL.getEllipsisLoc(), OrigNumExpansions);
+      //  if (Out.isNull())
+      //    return QualType();
+      //}
+      ExpandedTypes.push_back(Out);
+    }
+    // If we're supposed to retain a pack expansion, do so by temporarily
+    // forgetting the partially-substituted parameter pack.
+    if (RetainExpansion) {
+      FullyExpanded = false;
+      ForgetPartiallySubstitutedPackRAII Forget(getDerived());
+      QualType Out = getDerived().TransformType(T);
+      if (Out.isNull())
+        return QualType();
+      ExpandedTypes.push_back(Out);
+    }
+  }
+  QualType Out = getDerived().RebuildPackIndexingType(Pattern,
+                                                      IndexExpr.get(), SourceLocation(), TL.getEllipsisLoc(),
+                                                      FullyExpanded, ExpandedTypes);
+  if(Out.isNull())
+    return Out;
+
+  PackIndexingTypeLoc Loc = TLB.push<PackIndexingTypeLoc>(Out);
+  Loc.setEllipsisLoc(TL.getEllipsisLoc());
+  return Out;
 }
 
 template<typename Derived>
@@ -15087,6 +15182,15 @@ QualType TreeTransform<Derived>::RebuildTypeOfType(QualType Underlying,
 template <typename Derived>
 QualType TreeTransform<Derived>::RebuildDecltypeType(Expr *E, SourceLocation) {
   return SemaRef.BuildDecltypeType(E);
+}
+
+template <typename Derived>
+QualType TreeTransform<Derived>::RebuildPackIndexingType(QualType Pattern, Expr* IndexExpr,
+                                                         SourceLocation Loc,
+                                                         SourceLocation EllipsisLoc,
+                                                         bool FullyExpanded,
+                                                         ArrayRef<QualType> Expansions) {
+  return SemaRef.BuildPackIndexingType(Pattern, IndexExpr, Loc, EllipsisLoc, FullyExpanded, Expansions);
 }
 
 template<typename Derived>

@@ -1056,6 +1056,16 @@ ExprResult Parser::ParseCastExpression(CastParseKind ParseKind,
       // where the syntax forbids a type.
       const Token &Next = NextToken();
 
+      if (Next.is(tok::ellipsis) &&
+          Tok.is(tok::identifier) && GetLookAheadToken(2).is(tok::l_square)) {
+        // Annotate the token and tail recurse.
+        if (TryAnnotateTypeOrScopeToken())
+          return ExprError();
+        assert(Tok.isNot(tok::identifier));
+        return ParseCastExpression(ParseKind, isAddressOfOperand, isTypeCast,
+                                   isVectorLiteral, NotPrimaryExpression);
+      }
+
       // If this identifier was reverted from a token ID, and the next token
       // is a parenthesis, this is likely to be a use of a type trait. Check
       // those tokens.
@@ -1525,6 +1535,7 @@ ExprResult Parser::ParseCastExpression(CastParseKind ParseKind,
     [[fallthrough]];
 
   case tok::annot_decltype:
+  case tok::annot_indexed_pack_type:
   case tok::kw_char:
   case tok::kw_wchar_t:
   case tok::kw_char8_t:

@@ -2568,6 +2568,10 @@ public:
   /// context, such as when building a type for decltype(auto).
   QualType BuildDecltypeType(Expr *E, bool AsUnevaluated = true);
 
+  QualType BuildPackIndexingType(QualType Pattern, Expr *IndexExpr, SourceLocation Loc, SourceLocation EllipsisLoc,
+                                 bool FullyExpanded = false,
+                                 ArrayRef<QualType> Expansions = {});
+
   using UTTKind = UnaryTransformType::UTTKind;
   QualType BuildUnaryTransformType(QualType BaseType, UTTKind UKind,
                                    SourceLocation Loc);
@@ -7018,6 +7022,10 @@ public:
   bool ActOnCXXNestedNameSpecifierDecltype(CXXScopeSpec &SS,
                                            const DeclSpec &DS,
                                            SourceLocation ColonColonLoc);
+
+  bool ActOnCXXNestedNameSpecifierIndexedPack(CXXScopeSpec &SS,
+                                              const DeclSpec &DS,
+                                              SourceLocation ColonColonLoc, QualType Type);
 
   bool IsInvalidUnlessNestedName(Scope *S, CXXScopeSpec &SS,
                                  NestedNameSpecInfo &IdInfo,

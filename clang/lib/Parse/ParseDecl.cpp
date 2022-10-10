@@ -3541,6 +3541,9 @@ void Parser::ParseDeclarationSpecifiers(
       DS.SetRangeEnd(Tok.getLocation());
       ConsumeToken(); // The typename.
 
+      //if(!ParseDeclarationPackIndexingAfterTypeId(DS))
+      //  break;
+
       continue;
     }
 
@@ -4325,6 +4328,10 @@ void Parser::ParseDeclarationSpecifiers(
 
     case tok::annot_decltype:
       ParseDecltypeSpecifier(DS);
+      continue;
+
+    case tok::annot_indexed_pack_type:
+      ParseIndexedTypeNamePack(DS);
       continue;
 
     case tok::annot_pragma_pack:
@@ -5614,6 +5621,7 @@ bool Parser::isDeclarationSpecifier(
 
     // C++11 decltype and constexpr.
   case tok::annot_decltype:
+  case tok::annot_indexed_pack_type:
   case tok::kw_constexpr:
 
     // C++20 consteval and constinit.

@@ -17,12 +17,12 @@ int non_constant_index(); // expected-note 2{{declared here}}
 
 template <int idx>
 int params(auto... p) {
-    return p...[idx]; //expected-error 3{{is not a valid index for pack 'p' of size}}
+    return p...[idx]; //expected-error 3{{is not a valid index for pack p of size}}
 }
 
 template <auto N, typename...T>
 int test_types() {
-    T...[N] a; // expected-error 4{{is not a valid index for pack ''T'' of size}}
+    T...[N] a; // expected-error 4{{is not a valid index for pack 'T' of size}}
 }
 
 void test() {

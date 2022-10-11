@@ -3872,6 +3872,10 @@ MemInitResult Parser::ParseMemInitializer(Decl *ConstructorDecl) {
     // ParseOptionalCXXScopeSpecifier at this point.
     // FIXME: Can we get here with a scope specifier?
     ParseDecltypeSpecifier(DS);
+  } else if (Tok.is(tok::annot_indexed_pack_type)) {
+    // Uses of T...[N] will already have been converted to annot_indexed_pack_type by
+    // ParseOptionalCXXScopeSpecifier at this point.
+    ParseIndexedTypeNamePack(DS);
   } else {
     TemplateIdAnnotation *TemplateId = Tok.is(tok::annot_template_id)
                                            ? takeTemplateIdAnnotation(Tok)

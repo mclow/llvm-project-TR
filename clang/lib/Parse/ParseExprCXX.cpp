@@ -655,10 +655,7 @@ ExprResult Parser::ParseCXXPackIndexingExpression(ExprResult PackIdExpression) {
   BalancedDelimiterTracker T(*this, tok::l_square);
   T.consumeOpen();
   ExprResult IndexExpr = ParseConstantExpression();
-  if (T.consumeClose()) {
-    return {};
-  }
-  if (!IndexExpr.isUsable())
+  if (T.consumeClose() || IndexExpr.isInvalid())
     return ExprError();
   return Actions.ActOnPackIndexingExpr(getCurScope(), PackIdExpression.get(),
                                        EllipsisLoc, T.getOpenLocation(),

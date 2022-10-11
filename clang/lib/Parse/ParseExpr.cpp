@@ -1059,11 +1059,10 @@ ExprResult Parser::ParseCastExpression(CastParseKind ParseKind,
       if (Next.is(tok::ellipsis) &&
           Tok.is(tok::identifier) && GetLookAheadToken(2).is(tok::l_square)) {
         // Annotate the token and tail recurse.
-        if (TryAnnotateTypeOrScopeToken())
-          return ExprError();
-        assert(Tok.isNot(tok::identifier));
-        return ParseCastExpression(ParseKind, isAddressOfOperand, isTypeCast,
-                                   isVectorLiteral, NotPrimaryExpression);
+        // If the token is not annotated, then it might be an expression pack indexing
+        if (!TryAnnotateTypeOrScopeToken() && Tok.is(tok::annot_indexed_pack_type))
+          return ParseCastExpression(ParseKind, isAddressOfOperand, isTypeCast,
+                                     isVectorLiteral, NotPrimaryExpression);
       }
 
       // If this identifier was reverted from a token ID, and the next token

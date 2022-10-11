@@ -1874,6 +1874,13 @@ bool CursorVisitor::VisitDecltypeTypeLoc(DecltypeTypeLoc TL) {
   return false;
 }
 
+bool CursorVisitor::VisitPackIndexingTypeLoc(PackIndexingTypeLoc TL) {
+  // TODO CORENTIN
+  //if(Visit(TL.getPatternLoc()))
+  //  return true;
+  return Visit(MakeCXCursor(TL.getIndexExpr(), StmtParent, TU));
+}
+
 bool CursorVisitor::VisitInjectedClassNameTypeLoc(InjectedClassNameTypeLoc TL) {
   return Visit(MakeCursorTypeRef(TL.getDecl(), TL.getNameLoc(), TU));
 }

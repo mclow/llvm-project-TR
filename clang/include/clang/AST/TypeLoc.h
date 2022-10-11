@@ -2069,6 +2069,14 @@ public:
     setEllipsisLoc(Loc);
   }
 
+  //TypeLoc getPatternLoc() const {
+  //  return getInnerTypeLoc();
+ // }
+
+  //QualType getInnerType() const {
+  //  return this->getTypePtr()->getPattern();
+  //}
+
   //FIXME
   SourceRange getLocalSourceRange() const {
     return SourceRange(getEllipsisLoc(), getEllipsisLoc());

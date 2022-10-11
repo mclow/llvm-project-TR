@@ -233,7 +233,7 @@ bool Parser::ParseOptionalCXXScopeSpecifier(
     HasScopeSpecifier = true;
   }
 
-  else if(!HasScopeSpecifier && Tok.is(tok::identifier)
+  else if(getLangOpts().CPlusPlus2b && !HasScopeSpecifier && Tok.is(tok::identifier)
       && GetLookAheadToken(1).is(tok::ellipsis)
       && GetLookAheadToken(2).is(tok::l_square)) {
     SourceLocation Start = Tok.getLocation();
@@ -249,7 +249,7 @@ bool Parser::ParseOptionalCXXScopeSpecifier(
       AnnotateExistingIndexedTypeNamePack(ParsedType::make(Type), Start, EndLoc);
       return false;
     }
-    if (Actions.ActOnCXXNestedNameSpecifierIndexedPack(SS, DS, CCLoc, Type))
+    if (Actions.ActOnCXXNestedNameSpecifierIndexedPack(SS, DS, CCLoc, std::move(Type)))
       SS.SetInvalid(SourceRange(Start, CCLoc));
     HasScopeSpecifier = true;
   }
@@ -651,7 +651,7 @@ ExprResult Parser::ParseCXXPackIndexingExpression(ExprResult PackIdExpression) {
   SourceLocation EllipsisLoc = ConsumeToken();
   BalancedDelimiterTracker T(*this, tok::l_square);
   T.consumeOpen();
-  ExprResult IndexExpr = ParseAssignmentExpression();
+  ExprResult IndexExpr = ParseConstantExpression();
   if (T.consumeClose()) {
     return {};
   }

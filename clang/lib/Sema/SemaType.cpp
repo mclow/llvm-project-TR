@@ -9478,9 +9478,12 @@ QualType Sema::BuildPackIndexingType(QualType Pattern, Expr *IndexExpr,
                                      SourceLocation EllipsisLoc,
                                      bool FullyExpanded,
                                      ArrayRef<QualType> Expansions) {
-  if(Pattern->getTypeClass() != Type::TemplateTypeParm
-      || !Pattern->getAs<TemplateTypeParmType>()->isParameterPack()) {
-    Diag(Loc, diag::err_expected_name_of_pack) << Pattern;
+  if(!Pattern->containsUnexpandedParameterPack()) {
+    Diag(EllipsisLoc, diag::err_expected_name_of_pack) << Pattern;
+    return QualType();
+  }
+
+  if (DiagnoseUnexpandedParameterPack(IndexExpr, UPPC_Expression)) {
     return QualType();
   }
 
@@ -9497,7 +9500,7 @@ QualType Sema::BuildPackIndexingType(QualType Pattern, Expr *IndexExpr,
 
   if(FullyExpanded && Index) {
     if (*Index < 0 || *Index >= int64_t(Expansions.size())) {
-      Diag(Loc, diag::err_pack_index_out_of_bound)
+      Diag(IndexExpr->getBeginLoc(), diag::err_pack_index_out_of_bound)
           << *Index << Pattern << Expansions.size();
       return QualType();
     }

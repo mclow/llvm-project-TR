@@ -1,31 +1,54 @@
 // RUN: %clang_cc1 -std=c++2b -verify %s
 
+struct NotAPack;
+template <typename T, auto V, template<typename> typename Tp>
 void not_pack() {
     int i = 0;
     i...[0]; // expected-error {{i does not refer to the name of a parameter pack}}
+    V...[0]; // expected-error {{V does not refer to the name of a parameter pack}}
+    NotAPack...[0]; // expected-error{{'NotAPack' does not refer to the name of a parameter pack}}
+    T...[0];   // expected-error{{'T' does not refer to the name of a parameter pack}}
+    Tp...[0]; // expected-error{{'Tp' does not refer to the name of a parameter pack}}
 }
 
 namespace invalid_indexes {
 
-template <int idx>
-int f(auto... p) {
-    return p...[idx]; //expected-error 3{{is not a valid index for pack 'p' of size}}
+int non_constant_index(); // expected-note 2{{declared here}}
 
+template <int idx>
+int params(auto... p) {
+    return p...[idx]; //expected-error 3{{is not a valid index for pack 'p' of size}}
+}
+
+template <auto N, typename...T>
+int test_types() {
+    T...[N] a; // expected-error 4{{is not a valid index for pack ''T'' of size}}
 }
 
 void test() {
-    f<0>();   // expected-note{{here}}
-    f<1>(0);  // expected-note{{here}}
-    f<-1>(0); // expected-note{{here}}
+    params<0>();   // expected-note{{here}}
+    params<1>(0);  // expected-note{{here}}
+    params<-1>(0); // expected-note{{here}}
+
+    test_types<-1>(); //expected-note {{in instantiation}}
+    test_types<-1, int>(); //expected-note {{in instantiation}}
+    test_types<0>(); //expected-note {{in instantiation}}
+    test_types<1, int>(); //expected-note {{in instantiation}}
 }
 
-int non_constant_index(); // expected-note {{declared here}}
 void invalid_indexes(auto... p) {
     p...[non_constant_index()]; // expected-error {{array size is not a constant expression}}\
                                 // expected-note {{cannot be used in a constant expression}}
 
     const char* no_index = "";
     p...[no_index]; // expected-error {{value of type 'const char *' is not implicitly convertible to 'unsigned long'}}
+}
+
+void invalid_index_types() {
+    []<typename... T> {
+        T...[non_constant_index()] a;  // expected-error {{array size is not a constant expression}}\
+                                       // expected-note {{cannot be used in a constant expression}}
+    }(); //expected-note {{in instantiation}}
 }
 
 }

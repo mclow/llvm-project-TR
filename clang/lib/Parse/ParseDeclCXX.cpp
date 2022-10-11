@@ -1229,6 +1229,7 @@ SourceLocation Parser::ParseIndexedTypeNamePack(DeclSpec &DS) {
       DS.SetTypeSpecError();
       return T.getCloseLocation();
     }
+    DS.SetRangeStart(StartLoc);
     DS.SetRangeEnd(T.getCloseLocation());
     DS.SetTypeSpecType(DeclSpec::TST_typename, StartLoc, PrevSpec,
                        DiagID, Type, Policy);

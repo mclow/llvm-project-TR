@@ -9478,9 +9478,10 @@ QualType Sema::BuildPackIndexingType(QualType Pattern, Expr *IndexExpr,
                                      SourceLocation EllipsisLoc,
                                      bool FullyExpanded,
                                      ArrayRef<QualType> Expansions) {
-  if(Pattern->getTypeClass() == Type::TemplateTypeParm
-      && !Pattern->getAs<TemplateTypeParmType>()->isParameterPack()) {
+  if(Pattern->getTypeClass() != Type::TemplateTypeParm
+      || !Pattern->getAs<TemplateTypeParmType>()->isParameterPack()) {
     Diag(Loc, diag::err_expected_name_of_pack) << Pattern;
+    return QualType();
   }
 
   llvm::Optional<int64_t> Index;

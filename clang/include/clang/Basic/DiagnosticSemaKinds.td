@@ -5569,7 +5569,7 @@ def err_expected_name_of_pack : Error<
   "%0 does not refer to the name of a parameter pack">;
 
 def err_pack_index_out_of_bound : Error<
-  "%0 is not a valid index for pack '%1' of size %2">;
+  "%0 is not a valid index for pack %1 of size %2">;
 
 def err_pack_index_todo : Error<
   "Pack index not implemented">;

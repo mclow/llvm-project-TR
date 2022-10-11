@@ -245,6 +245,9 @@ bool Parser::ParseOptionalCXXScopeSpecifier(
     QualType Type = Actions.BuildPackIndexingType(DS.getRepAsType().get(),
                                                           DS.getPackIndexingExpr(),
                                                           DS.getBeginLoc(), DS.getEllipsisLoc());
+    if(Type.isNull())
+      return true;
+
     if(!TryConsumeToken(tok::coloncolon, CCLoc)) {
       AnnotateExistingIndexedTypeNamePack(ParsedType::make(Type), Start, EndLoc);
       return false;

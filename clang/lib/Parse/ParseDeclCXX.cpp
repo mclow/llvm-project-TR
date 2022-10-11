@@ -1220,7 +1220,7 @@ SourceLocation Parser::ParseIndexedTypeNamePack(DeclSpec &DS) {
     EllipsisLoc = ConsumeToken();
     BalancedDelimiterTracker T(*this, tok::l_square);
     T.consumeOpen();
-    ExprResult IndexExpr = ParseAssignmentExpression();
+    ExprResult IndexExpr = ParseConstantExpression();
     if (T.consumeClose()) {
       DS.SetTypeSpecError();
       return IndexExpr.isInvalid() ? StartLoc : IndexExpr.get()->getEndLoc();

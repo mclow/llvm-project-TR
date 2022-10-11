@@ -1,5 +1,30 @@
 // RUN: %clang_cc1 -std=c++2b -verify -fsyntax-only %s
-//expected-no-diagnostics
+
+template<typename... T>
+struct S {
+    T...1; // expected-error{{expected member name or ';' after declaration specifiers}}
+    T...[; // expected-error{{expected expression}} \
+           // expected-error{{expected ']'}} \
+           // expected-note {{to match this '['}}\
+           // expected-warning{{declaration does not declare anything}}
+
+    T...[1; // expected-error{{expected ']'}} \
+            // expected-note {{to match this '['}}\
+            // expected-warning{{declaration does not declare anything}}
+
+    T...[]; // expected-error{{expected expression}} \
+            // expected-warning{{declaration does not declare anything}}
+
+    void f(auto... v) {
+        decltype(v...[1]) a = v...[1];
+        decltype(v...[1]) b = v...[]; // expected-error{{expected expression}}
+
+        decltype(v...[1]) c = v...[ ;  // expected-error{{expected expression}}\
+                                      // expected-error{{expected ']'}} \
+                                      // expected-note {{to match this '['}}
+    }
+};
+
 
 template <typename...>
 struct typelist{};

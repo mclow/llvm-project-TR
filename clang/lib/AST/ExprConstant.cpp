@@ -2120,7 +2120,8 @@ static bool CheckEvaluationResult(CheckEvaluationResultKind CERK,
                                   QualType Type, const APValue &Value,
                                   ConstantExprKind Kind,
                                   SourceLocation SubobjectLoc,
-                                  CheckedTemporaries &CheckedTemps);
+                                  CheckedTemporaries &CheckedTemps,
+                                  bool IsReferenceInitialization = false);
 
 /// Check that this reference or pointer core constant expression is a valid
 /// value for an address or reference constant expression. Return true if we
@@ -2128,7 +2129,8 @@ static bool CheckEvaluationResult(CheckEvaluationResultKind CERK,
 static bool CheckLValueConstantExpression(EvalInfo &Info, SourceLocation Loc,
                                           QualType Type, const LValue &LVal,
                                           ConstantExprKind Kind,
-                                          CheckedTemporaries &CheckedTemps) {
+                                          CheckedTemporaries &CheckedTemps,
+                                          bool IsReferenceInitialization = false) {
   bool IsReferenceType = Type->isReferenceType();
 
   APValue::LValueBase Base = LVal.getLValueBase();
@@ -2175,7 +2177,7 @@ static bool CheckLValueConstantExpression(EvalInfo &Info, SourceLocation Loc,
   // Check that the object is a global. Note that the fake 'this' object we
   // manufacture when checking potential constant expressions is conservatively
   // assumed to be global here.
-  if (!IsGlobalLValue(Base)) {
+  if (!(IsReferenceInitialization || IsGlobalLValue(Base))) {
     if (Info.getLangOpts().CPlusPlus11) {
       Info.FFDiag(Loc, diag::note_constexpr_non_global, 1)
           << IsReferenceType << !Designator.Entries.empty() << !!BaseVD
@@ -2199,8 +2201,9 @@ static bool CheckLValueConstantExpression(EvalInfo &Info, SourceLocation Loc,
     // Don't allow references to temporaries to escape.
     return false;
   }
-  assert((Info.checkingPotentialConstantExpression() ||
-          LVal.getLValueCallIndex() == 0) &&
+
+  assert((IsReferenceInitialization || (Info.checkingPotentialConstantExpression() ||
+                                        LVal.getLValueCallIndex() == 0)) &&
          "have call index for global lvalue");
 
   if (Base.is<DynamicAllocLValue>()) {
@@ -2212,6 +2215,9 @@ static bool CheckLValueConstantExpression(EvalInfo &Info, SourceLocation Loc,
 
   if (BaseVD) {
     if (const VarDecl *Var = dyn_cast<const VarDecl>(BaseVD)) {
+      if(IsReferenceInitialization && !IsGlobalLValue(Base) && !Var->isUsableInConstantExpressions(Info.Ctx))
+        return false;
+
       // Check if this is a thread-local variable.
       if (Var->getTLSKind())
         // FIXME: Diagnostic!
@@ -2254,6 +2260,14 @@ static bool CheckLValueConstantExpression(EvalInfo &Info, SourceLocation Loc,
     }
   } else if (const auto *MTE =
                  dyn_cast_or_null<MaterializeTemporaryExpr>(BaseE)) {
+    if(IsReferenceInitialization && MTE->getStorageDuration() != SD_Static) {
+      Info.FFDiag(Loc, diag::note_constexpr_non_global, 1)
+          << IsReferenceType << !Designator.Entries.empty()
+          << 0;
+      Info.Note(MTE->getExprLoc(), diag::note_constexpr_temporary_here);
+      return false;
+    }
+
     if (CheckedTemps.insert(MTE).second) {
       QualType TempType = getType(Base);
       if (TempType.isDestructedType()) {
@@ -2267,7 +2281,7 @@ static bool CheckLValueConstantExpression(EvalInfo &Info, SourceLocation Loc,
       assert(V && "evasluation result refers to uninitialised temporary");
       if (!CheckEvaluationResult(CheckEvaluationResultKind::ConstantExpression,
                                  Info, MTE->getExprLoc(), TempType, *V,
-                                 Kind, SourceLocation(), CheckedTemps))
+                                 Kind, SourceLocation(), CheckedTemps, IsReferenceInitialization))
         return false;
     }
   }
@@ -2351,8 +2365,9 @@ static bool CheckEvaluationResult(CheckEvaluationResultKind CERK,
                                   QualType Type, const APValue &Value,
                                   ConstantExprKind Kind,
                                   SourceLocation SubobjectLoc,
-                                  CheckedTemporaries &CheckedTemps) {
-  if (!Value.hasValue()) {
+                                  CheckedTemporaries &CheckedTemps,
+                                  bool IsReferenceInitialization) {
+  if (!IsReferenceInitialization && !Value.hasValue()) {
     Info.FFDiag(DiagLoc, diag::note_constexpr_uninitialized)
       << true << Type;
     if (SubobjectLoc.isValid())
@@ -2406,7 +2421,9 @@ static bool CheckEvaluationResult(CheckEvaluationResultKind CERK,
 
       if (!CheckEvaluationResult(CERK, Info, DiagLoc, I->getType(),
                                  Value.getStructField(I->getFieldIndex()),
-                                 Kind, I->getLocation(), CheckedTemps))
+                                 Kind, I->getLocation(), CheckedTemps,
+                                 Info.getCtx().getLangOpts().CPlusPlus2b
+                                 && I->getType()->isReferenceType()))
         return false;
     }
   }
@@ -2416,7 +2433,7 @@ static bool CheckEvaluationResult(CheckEvaluationResultKind CERK,
     LValue LVal;
     LVal.setFrom(Info.Ctx, Value);
     return CheckLValueConstantExpression(Info, DiagLoc, Type, LVal, Kind,
-                                         CheckedTemps);
+                                         CheckedTemps, IsReferenceInitialization);
   }
 
   if (Value.isMemberPointer() &&
@@ -2432,7 +2449,7 @@ static bool CheckEvaluationResult(CheckEvaluationResultKind CERK,
 /// check that the expression is of literal type.
 static bool CheckConstantExpression(EvalInfo &Info, SourceLocation DiagLoc,
                                     QualType Type, const APValue &Value,
-                                    ConstantExprKind Kind) {
+                                    ConstantExprKind Kind, bool IsReferenceInitialization = false) {
   // Nothing to check for a constant expression of type 'cv void'.
   if (Type->isVoidType())
     return true;
@@ -2440,7 +2457,7 @@ static bool CheckConstantExpression(EvalInfo &Info, SourceLocation DiagLoc,
   CheckedTemporaries CheckedTemps;
   return CheckEvaluationResult(CheckEvaluationResultKind::ConstantExpression,
                                Info, DiagLoc, Type, Value, Kind,
-                               SourceLocation(), CheckedTemps);
+                               SourceLocation(), CheckedTemps, IsReferenceInitialization);
 }
 
 /// Check that this evaluated value is fully-initialized and can be loaded by
@@ -15441,9 +15458,11 @@ bool Expr::EvaluateAsInitializer(APValue &Value, const ASTContext &Ctx,
     if (!Info.discardCleanups())
       llvm_unreachable("Unhandled cleanup; missing full expression marker?");
   }
-  return ((VD->getType()->isReferenceType() && Ctx.getLangOpts().CPlusPlus2b) ||
-         CheckConstantExpression(Info, DeclLoc, DeclTy, Value,
-                                  ConstantExprKind::Normal)) &&
+
+  return (CheckConstantExpression(Info, DeclLoc, DeclTy, Value,
+                                  ConstantExprKind::Normal,
+                                  !VD->isConstexpr() &&
+                                  Ctx.getLangOpts().CPlusPlus2b && VD->getType()->isReferenceType())) &&
          CheckMemoryLeaks(Info);
 }
 

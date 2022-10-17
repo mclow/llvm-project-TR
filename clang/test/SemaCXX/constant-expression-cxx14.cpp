@@ -1258,14 +1258,14 @@ namespace PR39728 {
 
 namespace TemporaryWithBadPointer {
   constexpr int *get_bad_pointer() {
-    int n = 0; // expected-note 2{{here}}
+    int n = 0; // expected-note{{here}}  // cxx14_20-note {{here}}
     return &n; // expected-warning {{stack}}
   }
   constexpr int *bad_pointer = get_bad_pointer(); // expected-error {{constant expression}} expected-note {{pointer to 'n' is not a constant expression}}
 
   struct DoBadThings { int *&&wp; int n; };
   constexpr DoBadThings dbt = { // expected-error {{constant expression}}
-    nullptr, // expected-note {{pointer to 'n' is not a constant expression}}
+    nullptr, // cxx14_20-note {{pointer to 'n' is not a constant expression}}
     (dbt.wp = get_bad_pointer(), 0)
   };
 

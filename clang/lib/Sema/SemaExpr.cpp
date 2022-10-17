@@ -2066,12 +2066,14 @@ NonOdrUseReason Sema::getNonOdrUseReasonInCurrentContext(ValueDecl *D) {
   //   since the value of the referee is not known at compile time and must
   //   be loaded from the captured.
   if (VarDecl *VD = dyn_cast<VarDecl>(D)) {
+    Expr::EvalResult Eval;
     if (VD->getType()->isReferenceType() &&
         !(getLangOpts().OpenMP && isOpenMPCapturedDecl(D)) &&
         !isCapturingReferenceToHostVarInCUDADeviceLambda(*this, VD) &&
-        VD->isUsableInConstantExpressions(Context) && !getLangOpts().CPlusPlus2b)
-      return NOUR_Constant;
-  }
+        (VD->isUsableInConstantExpressions(Context) &&
+         (!getLangOpts().CPlusPlus23 || (VD->getInit() && VD->getInit()->EvaluateAsConstantExpr(Eval, Context)))))
+             return NOUR_Constant;
+    }
 
   // All remaining non-variable cases constitute an odr-use. For variables, we
   // need to wait and see how the expression is used.

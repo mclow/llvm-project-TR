@@ -6477,6 +6477,9 @@ QualType TreeTransform<Derived>::TransformPackIndexingType(TypeLocBuilder &TLB, 
         FullyExpanded = false;
         QualType Out = getDerived().RebuildPackIndexingType(Pack,
                                                             IndexExpr.get(), SourceLocation(), TL.getEllipsisLoc(), FullyExpanded);
+        if(Out.isNull())
+          return QualType();
+
         PackIndexingTypeLoc Loc = TLB.push<PackIndexingTypeLoc>(Out);
         Loc.setEllipsisLoc(TL.getEllipsisLoc());
         return Out;

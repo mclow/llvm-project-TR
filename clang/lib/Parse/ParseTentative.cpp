@@ -1323,6 +1323,8 @@ Parser::isCXXDeclarationSpecifier(ImplicitTypenameContext AllowImplicitTypename,
     if(GetLookAheadToken(1).is(tok::ellipsis) && GetLookAheadToken(2).is(tok::l_square)) {
       if (TryAnnotateTypeOrScopeToken())
         return TPResult::Error;
+      if(Tok.is(tok::identifier))
+        return TPResult::False;
       return isCXXDeclarationSpecifier(BracedCastResult, InvalidAsDeclSpec);
     }
 

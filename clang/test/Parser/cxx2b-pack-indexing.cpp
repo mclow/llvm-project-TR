@@ -31,10 +31,10 @@ struct typelist{};
 
 template <typename... T>
 requires requires(T...[0]) { {T...[0](0)}; }
-struct S : T...[1] {
+struct SS : T...[1] {
     [[no_unique_address]] T...[1] base = {};
     using foo = T...[1];
-    S()
+    SS()
     : T...[1]()
     {}
     typelist<T...[0]> a;
@@ -61,5 +61,5 @@ struct base {
 };
 
 int main() {
-    S<int, base>().f(0);
+    SS<int, base>().f(0);
 }

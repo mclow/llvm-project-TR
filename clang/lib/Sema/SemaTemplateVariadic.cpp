@@ -184,6 +184,9 @@ namespace {
     bool TraversePackExpansionTypeLoc(PackExpansionTypeLoc TL) { return true; }
     bool TraversePackExpansionExpr(PackExpansionExpr *E) { return true; }
     bool TraverseCXXFoldExpr(CXXFoldExpr *E) { return true; }
+    bool TraversePackIndexingExpr(PackIndexingExpr *E) {
+      return inherited::TraverseStmt(E->getIndexExpr());
+    }
 
     ///@}
 
@@ -1058,9 +1061,6 @@ static bool isParameterPack(Expr *PackExpression) {
   if (auto D = dyn_cast<DeclRefExpr>(PackExpression); D) {
     ValueDecl *VD = D->getDecl();
     return VD->isParameterPack();
-  } else {
-    llvm::outs() << PackExpression;
-    assert(false && "Non variables packs not supported");
   }
   return false;
 }
@@ -1072,11 +1072,9 @@ ExprResult Sema::ActOnPackIndexingExpr(Scope *S, Expr *PackExpression,
                                        SourceLocation RSquareLoc) {
   bool isParameterPack = ::isParameterPack(PackExpression);
   if (!isParameterPack) {
+    CorrectDelayedTyposInExpr(IndexExpr);
     Diag(PackExpression->getBeginLoc(), diag::err_expected_name_of_pack)
-        << PackExpression;
-    return ExprError();
-  }
-  if (DiagnoseUnexpandedParameterPack(IndexExpr, UPPC_Expression)) {
+        << IndexExpr;
     return ExprError();
   }
   return BuildPackIndexingExpr(PackExpression, EllipsisLoc, IndexExpr,

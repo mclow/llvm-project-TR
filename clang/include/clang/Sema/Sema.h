@@ -2568,6 +2568,7 @@ public:
   /// context, such as when building a type for decltype(auto).
   QualType BuildDecltypeType(Expr *E, bool AsUnevaluated = true);
 
+  QualType ActOnPackIndexingType(QualType Pattern, Expr *IndexExpr, SourceLocation Loc, SourceLocation EllipsisLoc);
   QualType BuildPackIndexingType(QualType Pattern, Expr *IndexExpr, SourceLocation Loc, SourceLocation EllipsisLoc,
                                  bool FullyExpanded = false,
                                  ArrayRef<QualType> Expansions = {});

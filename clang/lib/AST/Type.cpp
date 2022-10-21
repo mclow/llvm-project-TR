@@ -3666,9 +3666,10 @@ PackIndexingType::PackIndexingType(const ASTContext & Context, QualType Canonica
 TypeDependence PackIndexingType::computeDependence(QualType Pattern, Expr* IndexExpr,
                                         ArrayRef<QualType> Expansions)
 {
-  TypeDependence TD = toTypeDependence(IndexExpr->getDependence()) |
-                            (IndexExpr->isInstantiationDependent() ? TypeDependence::DependentInstantiation
-                                                                   : TypeDependence::None);
+  TypeDependence IndexD = toTypeDependence(IndexExpr->getDependence());
+
+  TypeDependence TD = IndexD | (IndexExpr->isInstantiationDependent() ? TypeDependence::DependentInstantiation
+                                                                      : TypeDependence::None);
   if(Expansions.empty()) {
     TD |= Pattern->getDependence() & TypeDependence::DependentInstantiation;
   }
@@ -3678,7 +3679,8 @@ TypeDependence PackIndexingType::computeDependence(QualType Pattern, Expr* Index
     }
   }
 
-  TD &= ~TypeDependence::UnexpandedPack;
+  if(!(IndexD & TypeDependence::UnexpandedPack))
+    TD &= ~TypeDependence::UnexpandedPack;
   return TD;
 }
 

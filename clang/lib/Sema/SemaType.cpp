@@ -9473,19 +9473,21 @@ QualType Sema::BuildDecltypeType(Expr *E, bool AsUnevaluated) {
   return Context.getDecltypeType(E, getDecltypeForExpr(E));
 }
 
+QualType Sema::ActOnPackIndexingType(QualType Pattern, Expr *IndexExpr,
+                                     SourceLocation Loc, SourceLocation EllipsisLoc)
+{
+  if(!Pattern->containsUnexpandedParameterPack()) {
+    Diag(EllipsisLoc, diag::err_expected_name_of_pack) << Pattern;
+    return QualType();
+  }
+  return BuildPackIndexingType(Pattern, IndexExpr, Loc, EllipsisLoc);
+}
+
 QualType Sema::BuildPackIndexingType(QualType Pattern, Expr *IndexExpr,
                                      SourceLocation Loc,
                                      SourceLocation EllipsisLoc,
                                      bool FullyExpanded,
                                      ArrayRef<QualType> Expansions) {
-  if(!Pattern->containsUnexpandedParameterPack()) {
-    Diag(EllipsisLoc, diag::err_expected_name_of_pack) << Pattern;
-    return QualType();
-  }
-
-  if (DiagnoseUnexpandedParameterPack(IndexExpr, UPPC_Expression)) {
-    return QualType();
-  }
 
   llvm::Optional<int64_t> Index;
   if (FullyExpanded && !IndexExpr->isValueDependent() && !IndexExpr->isTypeDependent()) {

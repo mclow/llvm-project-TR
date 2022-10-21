@@ -187,6 +187,12 @@ namespace {
     bool TraversePackIndexingExpr(PackIndexingExpr *E) {
       return inherited::TraverseStmt(E->getIndexExpr());
     }
+    bool TraversePackIndexingType(PackIndexingType *E) {
+      return inherited::TraverseStmt(E->getIndexExpr());
+    }
+    bool TraversePackIndexingTypeLoc(PackIndexingTypeLoc TL) {
+      return inherited::TraverseStmt(TL.getIndexExpr());
+    }
 
     ///@}
 

@@ -6434,7 +6434,7 @@ QualType TreeTransform<Derived>::TransformPackIndexingType(TypeLocBuilder &TLB, 
   ExprResult IndexExpr = getDerived().TransformExpr(TL.getIndexExpr());
   if (IndexExpr.isInvalid())
     return QualType();
-  QualType Pattern = getDerived().TransformType(TL.getPattern());
+  QualType Pattern = TL.getPattern();
 
   const PackIndexingType* PIT = TL.getTypePtr();
   SmallVector<QualType, 5> ExpandedTypes;
@@ -6448,15 +6448,16 @@ QualType TreeTransform<Derived>::TransformPackIndexingType(TypeLocBuilder &TLB, 
   }
 
   for(const QualType & T : Types) {
-    QualType Transformed = NotYetExpanded? T : getDerived().TransformType(T);
-    if(Transformed.isNull())
-      return QualType();
-    if(!Transformed->containsUnexpandedParameterPack()) {
+    if(!T->containsUnexpandedParameterPack()) {
+      QualType Transformed = getDerived().TransformType(T);
+      if(Transformed.isNull())
+        return QualType();
       ExpandedTypes.push_back(Transformed);
       continue;
     }
+
     SmallVector<UnexpandedParameterPack, 2> Unexpanded;
-    getSema().collectUnexpandedParameterPacks(Transformed, Unexpanded);
+    getSema().collectUnexpandedParameterPacks(T, Unexpanded);
     assert(!Unexpanded.empty() && "Pack expansion without parameter packs?");
     // Determine whether the set of unexpanded parameter packs can and should
     // be expanded.
@@ -6476,7 +6477,8 @@ QualType TreeTransform<Derived>::TransformPackIndexingType(TypeLocBuilder &TLB, 
       if(NotYetExpanded) {
         FullyExpanded = false;
         QualType Out = getDerived().RebuildPackIndexingType(Pack,
-                                                            IndexExpr.get(), SourceLocation(), TL.getEllipsisLoc(), FullyExpanded);
+                                                            IndexExpr.get(), SourceLocation(),
+                                                            TL.getEllipsisLoc(), FullyExpanded);
         if(Out.isNull())
           return QualType();
 
@@ -6492,11 +6494,6 @@ QualType TreeTransform<Derived>::TransformPackIndexingType(TypeLocBuilder &TLB, 
       QualType Out = getDerived().TransformType(T);
       if (Out.isNull())
         return QualType();
-      //if (Out->containsUnexpandedParameterPack()) {
-      //  Out = getDerived().RebuildPackExpansionType(Out, SourceRange(), TL.getEllipsisLoc(), OrigNumExpansions);
-      //  if (Out.isNull())
-      //    return QualType();
-      //}
       ExpandedTypes.push_back(Out);
     }
     // If we're supposed to retain a pack expansion, do so by temporarily

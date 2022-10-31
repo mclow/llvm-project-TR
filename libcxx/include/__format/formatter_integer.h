@@ -42,7 +42,7 @@ public:
   }
 
   template <integral _Tp>
-  _LIBCPP_HIDE_FROM_ABI auto format(_Tp __value, auto& __ctx) const -> decltype(__ctx.out()) {
+  _LIBCPP_HIDE_FROM_ABI constexpr auto format(_Tp __value, auto& __ctx) const -> decltype(__ctx.out()) {
     __format_spec::__parsed_specifications<_CharT> __specs = __parser_.__get_parsed_std_specifications(__ctx);
 
     if (__specs.__std_.__type_ == __format_spec::__type::__char)

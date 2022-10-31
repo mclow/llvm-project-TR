@@ -44,7 +44,7 @@ namespace __formatter {
 // Generic
 //
 
-_LIBCPP_HIDE_FROM_ABI inline char* __insert_sign(char* __buf, bool __negative, __format_spec::__sign __sign) {
+_LIBCPP_HIDE_FROM_ABI constexpr char* __insert_sign(char* __buf, bool __negative, __format_spec::__sign __sign) {
   if (__negative)
     *__buf++ = '-';
   else
@@ -79,7 +79,7 @@ _LIBCPP_HIDE_FROM_ABI inline char* __insert_sign(char* __buf, bool __negative, _
  * @note The grouping field of the locale is always a @c std::string,
  * regardless whether the @c std::numpunct's type is @c char or @c wchar_t.
  */
-_LIBCPP_HIDE_FROM_ABI inline string __determine_grouping(ptrdiff_t __size, const string& __grouping) {
+_LIBCPP_HIDE_FROM_ABI constexpr string __determine_grouping(ptrdiff_t __size, const string& __grouping) {
   _LIBCPP_ASSERT(!__grouping.empty() && __size > __grouping[0],
                  "The slow grouping formatting is used while there will be no "
                  "separators written");
@@ -114,7 +114,7 @@ _LIBCPP_HIDE_FROM_ABI inline string __determine_grouping(ptrdiff_t __size, const
 //
 
 template <__fmt_char_type _CharT>
-_LIBCPP_HIDE_FROM_ABI auto __format_char(
+_LIBCPP_HIDE_FROM_ABI constexpr auto __format_char(
     integral auto __value,
     output_iterator<const _CharT&> auto __out_it,
     __format_spec::__parsed_specifications<_CharT> __specs) -> decltype(__out_it) {
@@ -145,7 +145,7 @@ _LIBCPP_HIDE_FROM_ABI auto __format_char(
 
 /** Wrapper around @ref to_chars, returning the output pointer. */
 template <integral _Tp>
-_LIBCPP_HIDE_FROM_ABI char* __to_buffer(char* __first, char* __last, _Tp __value, int __base) {
+_LIBCPP_HIDE_FROM_ABI constexpr char* __to_buffer(char* __first, char* __last, _Tp __value, int __base) {
   // TODO FMT Evaluate code overhead due to not calling the internal function
   // directly. (Should be zero overhead.)
   to_chars_result __r = _VSTD::to_chars(__first, __last, __value, __base);
@@ -199,7 +199,7 @@ consteval size_t __buffer_size() noexcept
 }
 
 template <unsigned_integral _Tp, class _CharT>
-_LIBCPP_HIDE_FROM_ABI auto __format_integer(
+_LIBCPP_HIDE_FROM_ABI constexpr auto __format_integer(
     _Tp __value,
     auto& __ctx,
     __format_spec::__parsed_specifications<_CharT> __specs,
@@ -236,7 +236,7 @@ _LIBCPP_HIDE_FROM_ABI auto __format_integer(
   }
 #  endif
   auto __out_it = __ctx.out();
-  if (__specs.__alignment_ != __format_spec::__alignment::__zero_padding)
+  if (__specs.__std_.__alignment_ != __format_spec::__alignment::__zero_padding)
     __first = __begin;
   else {
     // __buf contains [sign][prefix]data
@@ -245,7 +245,7 @@ _LIBCPP_HIDE_FROM_ABI auto __format_integer(
     // - Write [sign][prefix]
     // - Write data right aligned with '0' as fill character.
     __out_it             = __formatter::__copy(__begin, __first, _VSTD::move(__out_it));
-    __specs.__alignment_ = __format_spec::__alignment::__right;
+    __specs.__std_.__alignment_ = __format_spec::__alignment::__right;
     __specs.__fill_      = _CharT('0');
     int32_t __size       = __first - __begin;
 
@@ -259,7 +259,7 @@ _LIBCPP_HIDE_FROM_ABI auto __format_integer(
 }
 
 template <unsigned_integral _Tp, class _CharT>
-_LIBCPP_HIDE_FROM_ABI auto __format_integer(
+_LIBCPP_HIDE_FROM_ABI constexpr auto __format_integer(
     _Tp __value, auto& __ctx, __format_spec::__parsed_specifications<_CharT> __specs, bool __negative = false)
     -> decltype(__ctx.out()) {
   switch (__specs.__std_.__type_) {
@@ -298,7 +298,7 @@ _LIBCPP_HIDE_FROM_ABI auto __format_integer(
 }
 
 template <signed_integral _Tp, class _CharT>
-_LIBCPP_HIDE_FROM_ABI auto
+_LIBCPP_HIDE_FROM_ABI constexpr auto
 __format_integer(_Tp __value, auto& __ctx, __format_spec::__parsed_specifications<_CharT> __specs)
     -> decltype(__ctx.out()) {
   // Depending on the std-format-spec string the sign and the value
@@ -337,7 +337,7 @@ struct _LIBCPP_TEMPLATE_VIS __bool_strings<wchar_t> {
 #  endif
 
 template <class _CharT>
-_LIBCPP_HIDE_FROM_ABI auto
+_LIBCPP_HIDE_FROM_ABI constexpr auto
 __format_bool(bool __value, auto& __ctx, __format_spec::__parsed_specifications<_CharT> __specs)
     -> decltype(__ctx.out()) {
 #  ifndef _LIBCPP_HAS_NO_LOCALIZATION

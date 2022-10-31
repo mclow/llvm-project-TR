@@ -40,7 +40,7 @@ public:
     return __result;
   }
 
-  _LIBCPP_HIDE_FROM_ABI auto format(_CharT __value, auto& __ctx) const -> decltype(__ctx.out()) {
+  _LIBCPP_HIDE_FROM_ABI constexpr auto format(_CharT __value, auto& __ctx) const -> decltype(__ctx.out()) {
     if (__parser_.__type_ == __format_spec::__type::__default || __parser_.__type_ == __format_spec::__type::__char)
       return __formatter::__format_char(__value, __ctx.out(), __parser_.__get_parsed_std_specifications(__ctx));
 
@@ -60,7 +60,7 @@ public:
       return __formatter::__format_integer(__value, __ctx, __parser_.__get_parsed_std_specifications(__ctx));
   }
 
-  _LIBCPP_HIDE_FROM_ABI auto format(char __value, auto& __ctx) const -> decltype(__ctx.out())
+  _LIBCPP_HIDE_FROM_ABI constexpr auto format(char __value, auto& __ctx) const -> decltype(__ctx.out())
     requires(same_as<_CharT, wchar_t>)
   {
     return format(static_cast<wchar_t>(__value), __ctx);

@@ -45,7 +45,7 @@ public:
     return __result;
   }
 
-  _LIBCPP_HIDE_FROM_ABI auto format(bool __value, auto& __ctx) const -> decltype(__ctx.out()) {
+  _LIBCPP_HIDE_FROM_ABI constexpr auto format(bool __value, auto& __ctx) const -> decltype(__ctx.out()) {
     switch (__parser_.__type_) {
     case __format_spec::__type::__default:
     case __format_spec::__type::__string:

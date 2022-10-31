@@ -154,7 +154,8 @@ template <class _Context, class _Tp>
 consteval __arg_t __determine_arg_t() = delete;
 
 template <class _Context, class _Tp>
-_LIBCPP_HIDE_FROM_ABI basic_format_arg<_Context> __create_format_arg(_Tp&& __value) noexcept {
+_LIBCPP_HIDE_FROM_ABI
+constexpr basic_format_arg<_Context> __create_format_arg(_Tp&& __value) noexcept {
   constexpr __arg_t __arg = __determine_arg_t<_Context, remove_cvref_t<_Tp>>();
   static_assert(__arg != __arg_t::__none);
 
@@ -193,7 +194,8 @@ _LIBCPP_HIDE_FROM_ABI basic_format_arg<_Context> __create_format_arg(_Tp&& __val
 }
 
 template <class _Context, class... _Args>
-_LIBCPP_HIDE_FROM_ABI void __create_packed_storage(uint64_t& __types, __basic_format_arg_value<_Context>* __values,
+_LIBCPP_HIDE_FROM_ABI
+constexpr void __create_packed_storage(uint64_t& __types, __basic_format_arg_value<_Context>* __values,
                                                    _Args&&... __args) noexcept {
   int __shift = 0;
   (
@@ -211,7 +213,8 @@ _LIBCPP_HIDE_FROM_ABI void __create_packed_storage(uint64_t& __types, __basic_fo
 }
 
 template <class _Context, class... _Args>
-_LIBCPP_HIDE_FROM_ABI void __store_basic_format_arg(basic_format_arg<_Context>* __data, _Args&&... __args) noexcept {
+_LIBCPP_HIDE_FROM_ABI
+constexpr void __store_basic_format_arg(basic_format_arg<_Context>* __data, _Args&&... __args) noexcept {
   ([&] { *__data++ = __create_format_arg<_Context>(__args); }(), ...);
 }
 
@@ -231,7 +234,7 @@ struct __unpacked_format_arg_store {
 template <class _Context, class... _Args>
 struct _LIBCPP_TEMPLATE_VIS __format_arg_store {
   _LIBCPP_HIDE_FROM_ABI
-  __format_arg_store(_Args&... __args) noexcept {
+  constexpr __format_arg_store(_Args&... __args) noexcept {
     if constexpr (sizeof...(_Args) != 0) {
       if constexpr (__format::__use_packed_format_arg_store(sizeof...(_Args)))
         __format::__create_packed_storage(__storage.__types_, __storage.__values_, __args...);

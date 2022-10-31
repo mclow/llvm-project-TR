@@ -67,13 +67,15 @@ using wformat_args = basic_format_args<wformat_context>;
 #endif
 
 template <class _Context = format_context, class... _Args>
-_LIBCPP_HIDE_FROM_ABI __format_arg_store<_Context, _Args...> make_format_args(_Args&&... __args) {
+_LIBCPP_HIDE_FROM_ABI constexpr
+__format_arg_store<_Context, _Args...> make_format_args(_Args&&... __args) {
   return _VSTD::__format_arg_store<_Context, _Args...>(__args...);
 }
 
 #ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
 template <class... _Args>
-_LIBCPP_HIDE_FROM_ABI __format_arg_store<wformat_context, _Args...> make_wformat_args(_Args&&... __args) {
+_LIBCPP_HIDE_FROM_ABI constexpr
+__format_arg_store<wformat_context, _Args...> make_wformat_args(_Args&&... __args) {
   return _VSTD::__format_arg_store<wformat_context, _Args...>(__args...);
 }
 #endif
@@ -386,7 +388,8 @@ using wformat_string = basic_format_string<wchar_t, type_identity_t<_Args>...>;
 #endif
 
 template <class _OutIt, class _CharT, class _FormatOutIt>
-requires(output_iterator<_OutIt, const _CharT&>) _LIBCPP_HIDE_FROM_ABI _OutIt
+requires(output_iterator<_OutIt, const _CharT&>) _LIBCPP_HIDE_FROM_ABI constexpr
+_OutIt
     __vformat_to(
         _OutIt __out_it, basic_string_view<_CharT> __fmt,
         basic_format_args<basic_format_context<_FormatOutIt, _CharT>> __args) {
@@ -405,21 +408,23 @@ requires(output_iterator<_OutIt, const _CharT&>) _LIBCPP_HIDE_FROM_ABI _OutIt
 // https://reviews.llvm.org/D110499#inline-1180704
 // TODO FMT Evaluate whether we want to file a Clang bug report regarding this.
 template <output_iterator<const char&> _OutIt>
-_LIBCPP_ALWAYS_INLINE _LIBCPP_HIDE_FROM_ABI _LIBCPP_AVAILABILITY_FORMAT _OutIt
+_LIBCPP_ALWAYS_INLINE _LIBCPP_HIDE_FROM_ABI _LIBCPP_AVAILABILITY_FORMAT constexpr _OutIt
 vformat_to(_OutIt __out_it, string_view __fmt, format_args __args) {
   return _VSTD::__vformat_to(_VSTD::move(__out_it), __fmt, __args);
 }
 
 #ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
 template <output_iterator<const wchar_t&> _OutIt>
-_LIBCPP_ALWAYS_INLINE _LIBCPP_HIDE_FROM_ABI _LIBCPP_AVAILABILITY_FORMAT _OutIt
+_LIBCPP_ALWAYS_INLINE _LIBCPP_HIDE_FROM_ABI _LIBCPP_AVAILABILITY_FORMAT constexpr
+_OutIt
 vformat_to(_OutIt __out_it, wstring_view __fmt, wformat_args __args) {
   return _VSTD::__vformat_to(_VSTD::move(__out_it), __fmt, __args);
 }
 #endif
 
 template <output_iterator<const char&> _OutIt, class... _Args>
-_LIBCPP_ALWAYS_INLINE _LIBCPP_HIDE_FROM_ABI _LIBCPP_AVAILABILITY_FORMAT _OutIt
+_LIBCPP_ALWAYS_INLINE _LIBCPP_HIDE_FROM_ABI _LIBCPP_AVAILABILITY_FORMAT constexpr
+_OutIt
 format_to(_OutIt __out_it, format_string<_Args...> __fmt, _Args&&... __args) {
   return _VSTD::vformat_to(_VSTD::move(__out_it), __fmt.get(),
                            _VSTD::make_format_args(__args...));
@@ -427,14 +432,16 @@ format_to(_OutIt __out_it, format_string<_Args...> __fmt, _Args&&... __args) {
 
 #ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
 template <output_iterator<const wchar_t&> _OutIt, class... _Args>
-_LIBCPP_ALWAYS_INLINE _LIBCPP_HIDE_FROM_ABI _LIBCPP_AVAILABILITY_FORMAT _OutIt
+_LIBCPP_ALWAYS_INLINE _LIBCPP_HIDE_FROM_ABI _LIBCPP_AVAILABILITY_FORMAT
+constexpr _OutIt
 format_to(_OutIt __out_it, wformat_string<_Args...> __fmt, _Args&&... __args) {
   return _VSTD::vformat_to(_VSTD::move(__out_it), __fmt.get(),
                            _VSTD::make_wformat_args(__args...));
 }
 #endif
 
-_LIBCPP_ALWAYS_INLINE inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_AVAILABILITY_FORMAT string
+_LIBCPP_ALWAYS_INLINE inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_AVAILABILITY_FORMAT
+constexpr string
 vformat(string_view __fmt, format_args __args) {
   string __res;
   _VSTD::vformat_to(_VSTD::back_inserter(__res), __fmt, __args);
@@ -442,7 +449,8 @@ vformat(string_view __fmt, format_args __args) {
 }
 
 #ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
-_LIBCPP_ALWAYS_INLINE inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_AVAILABILITY_FORMAT wstring
+_LIBCPP_ALWAYS_INLINE inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_AVAILABILITY_FORMAT
+constexpr wstring
 vformat(wstring_view __fmt, wformat_args __args) {
   wstring __res;
   _VSTD::vformat_to(_VSTD::back_inserter(__res), __fmt, __args);
@@ -451,21 +459,23 @@ vformat(wstring_view __fmt, wformat_args __args) {
 #endif
 
 template <class... _Args>
-_LIBCPP_ALWAYS_INLINE _LIBCPP_HIDE_FROM_ABI _LIBCPP_AVAILABILITY_FORMAT string format(format_string<_Args...> __fmt,
+_LIBCPP_ALWAYS_INLINE _LIBCPP_HIDE_FROM_ABI _LIBCPP_AVAILABILITY_FORMAT constexpr
+string format(format_string<_Args...> __fmt,
                                                                                       _Args&&... __args) {
   return _VSTD::vformat(__fmt.get(), _VSTD::make_format_args(__args...));
 }
 
 #ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
 template <class... _Args>
-_LIBCPP_ALWAYS_INLINE _LIBCPP_HIDE_FROM_ABI _LIBCPP_AVAILABILITY_FORMAT wstring
+_LIBCPP_ALWAYS_INLINE _LIBCPP_HIDE_FROM_ABI _LIBCPP_AVAILABILITY_FORMAT
+constexpr wstring
 format(wformat_string<_Args...> __fmt, _Args&&... __args) {
   return _VSTD::vformat(__fmt.get(), _VSTD::make_wformat_args(__args...));
 }
 #endif
 
 template <class _Context, class _OutIt, class _CharT>
-_LIBCPP_HIDE_FROM_ABI format_to_n_result<_OutIt> __vformat_to_n(_OutIt __out_it, iter_difference_t<_OutIt> __n,
+_LIBCPP_HIDE_FROM_ABI constexpr format_to_n_result<_OutIt> __vformat_to_n(_OutIt __out_it, iter_difference_t<_OutIt> __n,
                                                                 basic_string_view<_CharT> __fmt,
                                                                 basic_format_args<_Context> __args) {
   __format::__format_to_n_buffer<_OutIt, _CharT> __buffer{_VSTD::move(__out_it), __n};
@@ -475,14 +485,15 @@ _LIBCPP_HIDE_FROM_ABI format_to_n_result<_OutIt> __vformat_to_n(_OutIt __out_it,
 }
 
 template <output_iterator<const char&> _OutIt, class... _Args>
-_LIBCPP_ALWAYS_INLINE _LIBCPP_HIDE_FROM_ABI _LIBCPP_AVAILABILITY_FORMAT format_to_n_result<_OutIt>
+_LIBCPP_ALWAYS_INLINE _LIBCPP_HIDE_FROM_ABI _LIBCPP_AVAILABILITY_FORMAT constexpr
+format_to_n_result<_OutIt>
 format_to_n(_OutIt __out_it, iter_difference_t<_OutIt> __n, format_string<_Args...> __fmt, _Args&&... __args) {
   return _VSTD::__vformat_to_n<format_context>(_VSTD::move(__out_it), __n, __fmt.get(), _VSTD::make_format_args(__args...));
 }
 
 #ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
 template <output_iterator<const wchar_t&> _OutIt, class... _Args>
-_LIBCPP_HIDE_FROM_ABI _LIBCPP_AVAILABILITY_FORMAT format_to_n_result<_OutIt>
+_LIBCPP_HIDE_FROM_ABI _LIBCPP_AVAILABILITY_FORMAT constexpr format_to_n_result<_OutIt>
 format_to_n(_OutIt __out_it, iter_difference_t<_OutIt> __n, wformat_string<_Args...> __fmt,
             _Args&&... __args) {
   return _VSTD::__vformat_to_n<wformat_context>(_VSTD::move(__out_it), __n, __fmt.get(), _VSTD::make_wformat_args(__args...));
@@ -490,7 +501,7 @@ format_to_n(_OutIt __out_it, iter_difference_t<_OutIt> __n, wformat_string<_Args
 #endif
 
 template <class _CharT>
-_LIBCPP_HIDE_FROM_ABI size_t __vformatted_size(basic_string_view<_CharT> __fmt, auto __args) {
+_LIBCPP_HIDE_FROM_ABI constexpr size_t __vformatted_size(basic_string_view<_CharT> __fmt, auto __args) {
   __format::__formatted_size_buffer<_CharT> __buffer;
   _VSTD::__format::__vformat_to(basic_format_parse_context{__fmt, __args.__size()},
                                 _VSTD::__format_context_create(__buffer.__make_output_iterator(), __args));
@@ -498,14 +509,16 @@ _LIBCPP_HIDE_FROM_ABI size_t __vformatted_size(basic_string_view<_CharT> __fmt, 
 }
 
 template <class... _Args>
-_LIBCPP_ALWAYS_INLINE _LIBCPP_HIDE_FROM_ABI _LIBCPP_AVAILABILITY_FORMAT size_t
+_LIBCPP_ALWAYS_INLINE _LIBCPP_HIDE_FROM_ABI _LIBCPP_AVAILABILITY_FORMAT
+constexpr size_t
 formatted_size(format_string<_Args...> __fmt, _Args&&... __args) {
   return _VSTD::__vformatted_size(__fmt.get(), basic_format_args{_VSTD::make_format_args(__args...)});
 }
 
 #ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
 template <class... _Args>
-_LIBCPP_ALWAYS_INLINE _LIBCPP_HIDE_FROM_ABI _LIBCPP_AVAILABILITY_FORMAT size_t
+_LIBCPP_ALWAYS_INLINE _LIBCPP_HIDE_FROM_ABI _LIBCPP_AVAILABILITY_FORMAT
+constexpr size_t
 formatted_size(wformat_string<_Args...> __fmt, _Args&&... __args) {
   return _VSTD::__vformatted_size(__fmt.get(), basic_format_args{_VSTD::make_wformat_args(__args...)});
 }

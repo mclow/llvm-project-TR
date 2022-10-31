@@ -98,7 +98,7 @@ __padding_size(size_t __size, size_t __width, __format_spec::__alignment __align
 ///
 /// This uses a "mass output function" of __format::__output_buffer when possible.
 template <__fmt_char_type _CharT, __fmt_char_type _OutCharT = _CharT>
-_LIBCPP_HIDE_FROM_ABI auto __copy(basic_string_view<_CharT> __str, output_iterator<const _OutCharT&> auto __out_it)
+_LIBCPP_HIDE_FROM_ABI constexpr auto __copy(basic_string_view<_CharT> __str, output_iterator<const _OutCharT&> auto __out_it)
     -> decltype(__out_it) {
   if constexpr (_VSTD::same_as<decltype(__out_it), _VSTD::back_insert_iterator<__format::__output_buffer<_OutCharT>>>) {
     __out_it.__get_container()->__copy(__str);
@@ -109,14 +109,14 @@ _LIBCPP_HIDE_FROM_ABI auto __copy(basic_string_view<_CharT> __str, output_iterat
 }
 
 template <__fmt_char_type _CharT, __fmt_char_type _OutCharT = _CharT>
-_LIBCPP_HIDE_FROM_ABI auto
+_LIBCPP_HIDE_FROM_ABI constexpr auto
 __copy(const _CharT* __first, const _CharT* __last, output_iterator<const _OutCharT&> auto __out_it)
     -> decltype(__out_it) {
   return __formatter::__copy(basic_string_view{__first, __last}, _VSTD::move(__out_it));
 }
 
 template <__fmt_char_type _CharT, __fmt_char_type _OutCharT = _CharT>
-_LIBCPP_HIDE_FROM_ABI auto __copy(const _CharT* __first, size_t __n, output_iterator<const _OutCharT&> auto __out_it)
+_LIBCPP_HIDE_FROM_ABI constexpr auto __copy(const _CharT* __first, size_t __n, output_iterator<const _OutCharT&> auto __out_it)
     -> decltype(__out_it) {
   return __formatter::__copy(basic_string_view{__first, __n}, _VSTD::move(__out_it));
 }
@@ -125,7 +125,7 @@ _LIBCPP_HIDE_FROM_ABI auto __copy(const _CharT* __first, size_t __n, output_iter
 ///
 /// This uses a "mass output function" of __format::__output_buffer when possible.
 template <__fmt_char_type _CharT, __fmt_char_type _OutCharT = _CharT, class _UnaryOperation>
-_LIBCPP_HIDE_FROM_ABI auto
+_LIBCPP_HIDE_FROM_ABI constexpr auto
 __transform(const _CharT* __first,
             const _CharT* __last,
             output_iterator<const _OutCharT&> auto __out_it,
@@ -142,7 +142,7 @@ __transform(const _CharT* __first,
 ///
 /// This uses a "mass output function" of __format::__output_buffer when possible.
 template <__fmt_char_type _CharT, output_iterator<const _CharT&> _OutIt>
-_LIBCPP_HIDE_FROM_ABI _OutIt __fill(_OutIt __out_it, size_t __n, _CharT __value) {
+_LIBCPP_HIDE_FROM_ABI constexpr _OutIt __fill(_OutIt __out_it, size_t __n, _CharT __value) {
   if constexpr (_VSTD::same_as<decltype(__out_it), _VSTD::back_insert_iterator<__format::__output_buffer<_CharT>>>) {
     __out_it.__get_container()->__fill(__n, __value);
     return __out_it;
@@ -152,7 +152,7 @@ _LIBCPP_HIDE_FROM_ABI _OutIt __fill(_OutIt __out_it, size_t __n, _CharT __value)
 }
 
 template <class _OutIt, class _CharT>
-_LIBCPP_HIDE_FROM_ABI _OutIt __write_using_decimal_separators(_OutIt __out_it, const char* __begin, const char* __first,
+_LIBCPP_HIDE_FROM_ABI constexpr _OutIt __write_using_decimal_separators(_OutIt __out_it, const char* __begin, const char* __first,
                                                               const char* __last, string&& __grouping, _CharT __sep,
                                                               __format_spec::__parsed_specifications<_CharT> __specs) {
   int __size = (__first - __begin) +    // [sign][prefix]
@@ -160,7 +160,7 @@ _LIBCPP_HIDE_FROM_ABI _OutIt __write_using_decimal_separators(_OutIt __out_it, c
                (__grouping.size() - 1); // number of separator characters
 
   __padding_size_result __padding = {0, 0};
-  if (__specs.__alignment_ == __format_spec::__alignment::__zero_padding) {
+  if (__specs.__std_.__alignment_ == __format_spec::__alignment::__zero_padding) {
     // Write [sign][prefix].
     __out_it = __formatter::__copy(__begin, __first, _VSTD::move(__out_it));
 
@@ -172,7 +172,7 @@ _LIBCPP_HIDE_FROM_ABI _OutIt __write_using_decimal_separators(_OutIt __out_it, c
   } else {
     if (__specs.__width_ > __size) {
       // Determine padding and write padding.
-      __padding = __padding_size(__size, __specs.__width_, __specs.__alignment_);
+      __padding = __padding_size(__size, __specs.__width_, __specs.__std_.__alignment_);
 
       __out_it = __formatter::__fill(_VSTD::move(__out_it), __padding.__before_, __specs.__fill_);
     }
@@ -237,7 +237,7 @@ _LIBCPP_HIDE_FROM_ABI _OutIt __write_using_decimal_separators(_OutIt __out_it, c
 /// conversion, which means the [\a __first, \a __last) always contains elements
 /// of the type \c char.
 template <class _CharT, class _ParserCharT>
-_LIBCPP_HIDE_FROM_ABI auto
+_LIBCPP_HIDE_FROM_ABI constexpr auto
 __write(basic_string_view<_CharT> __str,
         output_iterator<const _CharT&> auto __out_it,
         __format_spec::__parsed_specifications<_ParserCharT> __specs,
@@ -252,7 +252,7 @@ __write(basic_string_view<_CharT> __str,
 }
 
 template <class _CharT, class _ParserCharT>
-_LIBCPP_HIDE_FROM_ABI auto
+_LIBCPP_HIDE_FROM_ABI constexpr auto
 __write(const _CharT* __first,
         const _CharT* __last,
         output_iterator<const _CharT&> auto __out_it,
@@ -266,7 +266,7 @@ __write(const _CharT* __first,
 ///
 /// Calls the function above where \a __size = \a __last - \a __first.
 template <class _CharT, class _ParserCharT>
-_LIBCPP_HIDE_FROM_ABI auto
+_LIBCPP_HIDE_FROM_ABI constexpr auto
 __write(const _CharT* __first,
         const _CharT* __last,
         output_iterator<const _CharT&> auto __out_it,
@@ -276,7 +276,7 @@ __write(const _CharT* __first,
 }
 
 template <class _CharT, class _ParserCharT, class _UnaryOperation>
-_LIBCPP_HIDE_FROM_ABI auto __write_transformed(const _CharT* __first, const _CharT* __last,
+_LIBCPP_HIDE_FROM_ABI constexpr auto __write_transformed(const _CharT* __first, const _CharT* __last,
                                                output_iterator<const _CharT&> auto __out_it,
                                                __format_spec::__parsed_specifications<_ParserCharT> __specs,
                                                _UnaryOperation __op) -> decltype(__out_it) {
@@ -286,7 +286,7 @@ _LIBCPP_HIDE_FROM_ABI auto __write_transformed(const _CharT* __first, const _Cha
   if (__size >= __specs.__width_)
     return __formatter::__transform(__first, __last, _VSTD::move(__out_it), __op);
 
-  __padding_size_result __padding = __padding_size(__size, __specs.__width_, __specs.__alignment_);
+  __padding_size_result __padding = __padding_size(__size, __specs.__width_, __specs.__std_.__alignment_);
   __out_it                        = __formatter::__fill(_VSTD::move(__out_it), __padding.__before_, __specs.__fill_);
   __out_it                        = __formatter::__transform(__first, __last, _VSTD::move(__out_it), __op);
   return __formatter::__fill(_VSTD::move(__out_it), __padding.__after_, __specs.__fill_);
@@ -301,7 +301,7 @@ _LIBCPP_HIDE_FROM_ABI auto __write_transformed(const _CharT* __first, const _Cha
 /// \param __num_trailing_zeros The number of 0's to write before the exponent
 ///                             character.
 template <class _CharT, class _ParserCharT>
-_LIBCPP_HIDE_FROM_ABI auto __write_using_trailing_zeros(
+_LIBCPP_HIDE_FROM_ABI constexpr auto __write_using_trailing_zeros(
     const _CharT* __first,
     const _CharT* __last,
     output_iterator<const _CharT&> auto __out_it,
@@ -313,7 +313,7 @@ _LIBCPP_HIDE_FROM_ABI auto __write_using_trailing_zeros(
   _LIBCPP_ASSERT(__num_trailing_zeros > 0, "The overload not writing trailing zeros should have been used");
 
   __padding_size_result __padding =
-      __padding_size(__size + __num_trailing_zeros, __specs.__width_, __specs.__alignment_);
+      __padding_size(__size + __num_trailing_zeros, __specs.__width_, __specs.__std_.__alignment_);
   __out_it = __formatter::__fill(_VSTD::move(__out_it), __padding.__before_, __specs.__fill_);
   __out_it = __formatter::__copy(__first, __exponent, _VSTD::move(__out_it));
   __out_it = __formatter::__fill(_VSTD::move(__out_it), __num_trailing_zeros, _CharT('0'));
@@ -328,7 +328,7 @@ _LIBCPP_HIDE_FROM_ABI auto __write_using_trailing_zeros(
 /// \note When \c _LIBCPP_HAS_NO_UNICODE is defined the function assumes the
 /// input is ASCII.
 template <class _CharT>
-_LIBCPP_HIDE_FROM_ABI auto __write_string_no_precision(
+_LIBCPP_HIDE_FROM_ABI constexpr auto __write_string_no_precision(
     basic_string_view<_CharT> __str,
     output_iterator<const _CharT&> auto __out_it,
     __format_spec::__parsed_specifications<_CharT> __specs) -> decltype(__out_it) {
@@ -348,7 +348,7 @@ _LIBCPP_HIDE_FROM_ABI auto __write_string_no_precision(
 }
 
 template <class _CharT>
-_LIBCPP_HIDE_FROM_ABI int __truncate(basic_string_view<_CharT>& __str, int __precision) {
+_LIBCPP_HIDE_FROM_ABI constexpr int __truncate(basic_string_view<_CharT>& __str, int __precision) {
   __format_spec::__column_width_result<_CharT> __result =
       __format_spec::__estimate_column_width(__str, __precision, __format_spec::__column_width_rounding::__down);
   __str = basic_string_view<_CharT>{__str.begin(), __result.__last_};
@@ -360,7 +360,7 @@ _LIBCPP_HIDE_FROM_ABI int __truncate(basic_string_view<_CharT>& __str, int __pre
 /// \note When \c _LIBCPP_HAS_NO_UNICODE is defined the function assumes the
 /// input is ASCII.
 template <class _CharT>
-_LIBCPP_HIDE_FROM_ABI auto __write_string(
+_LIBCPP_HIDE_FROM_ABI constexpr auto __write_string(
     basic_string_view<_CharT> __str,
     output_iterator<const _CharT&> auto __out_it,
     __format_spec::__parsed_specifications<_CharT> __specs) -> decltype(__out_it) {
@@ -377,12 +377,12 @@ _LIBCPP_HIDE_FROM_ABI auto __write_string(
 struct __null_sentinel {};
 
 template <class _CharT>
-_LIBCPP_HIDE_FROM_ABI bool operator==(const _CharT* __cstr, __null_sentinel) {
+_LIBCPP_HIDE_FROM_ABI constexpr bool operator==(const _CharT* __cstr, __null_sentinel) {
   return *__cstr == _CharT('\0');
 }
 
 template <class _CharT>
-_LIBCPP_HIDE_FROM_ABI void
+_LIBCPP_HIDE_FROM_ABI constexpr void
 __write_escaped_code_unit(basic_string<_CharT>& __str, char32_t __value, const _CharT* __prefix) {
   back_insert_iterator __out_it{__str};
   std::ranges::copy(__prefix, __null_sentinel{}, __out_it);
@@ -401,7 +401,7 @@ __write_escaped_code_unit(basic_string<_CharT>& __str, char32_t __value, const _
 // hex-digit-sequence is the shortest hexadecimal representation of C using
 // lower-case hexadecimal digits.
 template <class _CharT>
-_LIBCPP_HIDE_FROM_ABI void __write_well_formed_escaped_code_unit(basic_string<_CharT>& __str, char32_t __value) {
+_LIBCPP_HIDE_FROM_ABI constexpr void __write_well_formed_escaped_code_unit(basic_string<_CharT>& __str, char32_t __value) {
   __write_escaped_code_unit(__str, __value, _LIBCPP_STATICALLY_WIDEN(_CharT, "\\u{"));
 }
 
@@ -411,12 +411,13 @@ _LIBCPP_HIDE_FROM_ABI void __write_well_formed_escaped_code_unit(basic_string<_C
 // hex-digit-sequence is the shortest hexadecimal representation of U using
 // lower-case hexadecimal digits.
 template <class _CharT>
-_LIBCPP_HIDE_FROM_ABI void __write_escape_ill_formed_code_unit(basic_string<_CharT>& __str, char32_t __value) {
+_LIBCPP_HIDE_FROM_ABI constexpr void __write_escape_ill_formed_code_unit(basic_string<_CharT>& __str, char32_t __value) {
   __write_escaped_code_unit(__str, __value, _LIBCPP_STATICALLY_WIDEN(_CharT, "\\x{"));
 }
 
 template <class _CharT>
-[[nodiscard]] _LIBCPP_HIDE_FROM_ABI bool __is_escaped_sequence_written(basic_string<_CharT>& __str, char32_t __value) {
+[[nodiscard]] _LIBCPP_HIDE_FROM_ABI constexpr
+bool __is_escaped_sequence_written(basic_string<_CharT>& __str, char32_t __value) {
 #    ifdef _LIBCPP_HAS_NO_UNICODE
   // For ASCII assume everything above 127 is printable.
   if (__value > 127)
@@ -439,7 +440,8 @@ enum class _LIBCPP_ENUM_VIS __escape_quotation_mark { __apostrophe, __double_quo
 
 // [format.string.escaped]/2
 template <class _CharT>
-[[nodiscard]] _LIBCPP_HIDE_FROM_ABI bool
+[[nodiscard]] _LIBCPP_HIDE_FROM_ABI constexpr
+bool
 __is_escaped_sequence_written(basic_string<_CharT>& __str, char32_t __value, __escape_quotation_mark __mark) {
   // 2.2.1.1 - Mapped character in [tab:format.escape.sequences]
   switch (__value) {
@@ -486,7 +488,7 @@ __is_escaped_sequence_written(basic_string<_CharT>& __str, char32_t __value, __e
 }
 
 template <class _CharT>
-_LIBCPP_HIDE_FROM_ABI void
+_LIBCPP_HIDE_FROM_ABI constexpr void
 __escape(basic_string<_CharT>& __str, basic_string_view<_CharT> __values, __escape_quotation_mark __mark) {
   __unicode::__code_point_view<_CharT> __view{__values.begin(), __values.end()};
 
@@ -526,7 +528,7 @@ __escape(basic_string<_CharT>& __str, basic_string_view<_CharT> __values, __esca
 }
 
 template <class _CharT>
-_LIBCPP_HIDE_FROM_ABI auto
+_LIBCPP_HIDE_FROM_ABI constexpr auto
 __format_escaped_char(_CharT __value,
                       output_iterator<const _CharT&> auto __out_it,
                       __format_spec::__parsed_specifications<_CharT> __specs) -> decltype(__out_it) {
@@ -538,7 +540,7 @@ __format_escaped_char(_CharT __value,
 }
 
 template <class _CharT>
-_LIBCPP_HIDE_FROM_ABI auto
+_LIBCPP_HIDE_FROM_ABI constexpr auto
 __format_escaped_string(basic_string_view<_CharT> __values,
                         output_iterator<const _CharT&> auto __out_it,
                         __format_spec::__parsed_specifications<_CharT> __specs) -> decltype(__out_it) {

@@ -38,29 +38,6 @@ template <class _OutIt, class _CharT>
 requires output_iterator<_OutIt, const _CharT&>
 class _LIBCPP_TEMPLATE_VIS _LIBCPP_AVAILABILITY_FORMAT basic_format_context;
 
-#ifndef _LIBCPP_HAS_NO_LOCALIZATION
-/**
- * Helper to create a basic_format_context.
- *
- * This is needed since the constructor is private.
- */
-template <class _OutIt, class _CharT>
-_LIBCPP_HIDE_FROM_ABI basic_format_context<_OutIt, _CharT>
-__format_context_create(
-    _OutIt __out_it,
-    basic_format_args<basic_format_context<_OutIt, _CharT>> __args,
-    optional<_VSTD::locale>&& __loc = nullopt) {
-  return _VSTD::basic_format_context(_VSTD::move(__out_it), __args, _VSTD::move(__loc));
-}
-#else
-template <class _OutIt, class _CharT>
-_LIBCPP_HIDE_FROM_ABI basic_format_context<_OutIt, _CharT>
-__format_context_create(
-    _OutIt __out_it,
-    basic_format_args<basic_format_context<_OutIt, _CharT>> __args) {
-  return _VSTD::basic_format_context(_VSTD::move(__out_it), __args);
-}
-#endif
 
 using format_context =
     basic_format_context<back_insert_iterator<__format::__output_buffer<char>>,
@@ -86,10 +63,11 @@ public:
   template <class _Tp>
   using formatter_type = formatter<_Tp, _CharT>;
 
-  basic_format_context(const basic_format_context&) = delete;
-  basic_format_context& operator=(const basic_format_context&) = delete;
+  constexpr basic_format_context(const basic_format_context&) = delete;
+  constexpr basic_format_context& operator=(const basic_format_context&) = delete;
 
-  _LIBCPP_HIDE_FROM_ABI basic_format_arg<basic_format_context>
+  _LIBCPP_HIDE_FROM_ABI constexpr
+  basic_format_arg<basic_format_context>
   arg(size_t __id) const noexcept {
     return __args_.get(__id);
   }
@@ -100,8 +78,8 @@ public:
     return *__loc_;
   }
 #endif
-  _LIBCPP_HIDE_FROM_ABI iterator out() { return std::move(__out_it_); }
-  _LIBCPP_HIDE_FROM_ABI void advance_to(iterator __it) { __out_it_ = std::move(__it); }
+  _LIBCPP_HIDE_FROM_ABI constexpr iterator out() { return std::move(__out_it_); }
+  _LIBCPP_HIDE_FROM_ABI constexpr void advance_to(iterator __it) { __out_it_ = std::move(__it); }
 
 private:
   iterator __out_it_;
@@ -120,12 +98,13 @@ private:
   optional<_VSTD::locale> __loc_;
 
   template <class __OutIt, class __CharT>
-  friend _LIBCPP_HIDE_FROM_ABI basic_format_context<__OutIt, __CharT>
+  friend _LIBCPP_HIDE_FROM_ABI constexpr
+  basic_format_context<__OutIt, __CharT>
   __format_context_create(__OutIt, basic_format_args<basic_format_context<__OutIt, __CharT>>,
                           optional<_VSTD::locale>&&);
-
+public:
   // Note: the Standard doesn't specify the required constructors.
-  _LIBCPP_HIDE_FROM_ABI
+  _LIBCPP_HIDE_FROM_ABI constexpr
   explicit basic_format_context(_OutIt __out_it,
                                 basic_format_args<basic_format_context> __args,
                                 optional<_VSTD::locale>&& __loc)
@@ -133,16 +112,41 @@ private:
         __loc_(_VSTD::move(__loc)) {}
 #else
   template <class __OutIt, class __CharT>
-  friend _LIBCPP_HIDE_FROM_ABI basic_format_context<__OutIt, __CharT>
+  friend _LIBCPP_HIDE_FROM_ABI constexpr
+  basic_format_context<__OutIt, __CharT>
       __format_context_create(__OutIt, basic_format_args<basic_format_context<__OutIt, __CharT>>);
-
-  _LIBCPP_HIDE_FROM_ABI
+public:
+  _LIBCPP_HIDE_FROM_ABI constexpr
   explicit basic_format_context(_OutIt __out_it,
                                 basic_format_args<basic_format_context> __args)
       : __out_it_(_VSTD::move(__out_it)), __args_(__args) {}
 #endif
 };
 _LIBCPP_CTAD_SUPPORTED_FOR_TYPE(basic_format_context);
+
+#ifndef _LIBCPP_HAS_NO_LOCALIZATION
+/**
+ * Helper to create a basic_format_context.
+ *
+ * This is needed since the constructor is private.
+ */
+template <class _OutIt, class _CharT>
+_LIBCPP_HIDE_FROM_ABI constexpr basic_format_context<_OutIt, _CharT>
+__format_context_create(
+    _OutIt __out_it,
+    basic_format_args<basic_format_context<_OutIt, _CharT>> __args,
+    optional<_VSTD::locale>&& __loc = nullopt) {
+  return _VSTD::basic_format_context(_VSTD::move(__out_it), __args, _VSTD::move(__loc));
+}
+#else
+template <class _OutIt, class _CharT>
+_LIBCPP_HIDE_FROM_ABI constexpr basic_format_context<_OutIt, _CharT>
+__format_context_create(
+    _OutIt __out_it,
+    basic_format_args<basic_format_context<_OutIt, _CharT>> __args) {
+  return _VSTD::basic_format_context(_VSTD::move(__out_it), __args);
+}
+#endif
 
 #endif //_LIBCPP_STD_VER > 17
 

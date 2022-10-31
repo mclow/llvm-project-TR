@@ -86,7 +86,8 @@ constexpr __arg_t __get_packed_type(uint64_t __types, size_t __id) {
 } // namespace __format
 
 template <class _Visitor, class _Context>
-_LIBCPP_HIDE_FROM_ABI _LIBCPP_AVAILABILITY_FORMAT decltype(auto) visit_format_arg(_Visitor&& __vis,
+_LIBCPP_HIDE_FROM_ABI _LIBCPP_AVAILABILITY_FORMAT
+constexpr decltype(auto) visit_format_arg(_Visitor&& __vis,
                                                                                   basic_format_arg<_Context> __arg) {
   switch (__arg.__type_) {
   case __format::__arg_t::__none:
@@ -147,7 +148,8 @@ public:
   /// Contains the implementation for basic_format_arg::handle.
   struct __handle {
     template <class _Tp>
-    _LIBCPP_HIDE_FROM_ABI explicit __handle(_Tp&& __v) noexcept
+    _LIBCPP_HIDE_FROM_ABI
+    constexpr explicit __handle(_Tp&& __v) noexcept
         : __ptr_(_VSTD::addressof(__v)),
           __format_([](basic_format_parse_context<_CharT>& __parse_ctx, _Context& __ctx, const void* __ptr) {
             using _Dp = remove_cvref_t<_Tp>;
@@ -191,26 +193,26 @@ public:
   // These constructors contain the exact storage type used. If adjustments are
   // required, these will be done in __create_format_arg.
 
-  _LIBCPP_HIDE_FROM_ABI __basic_format_arg_value() noexcept : __monostate_() {}
-  _LIBCPP_HIDE_FROM_ABI __basic_format_arg_value(bool __value) noexcept : __boolean_(__value) {}
-  _LIBCPP_HIDE_FROM_ABI __basic_format_arg_value(_CharT __value) noexcept : __char_type_(__value) {}
-  _LIBCPP_HIDE_FROM_ABI __basic_format_arg_value(int __value) noexcept : __int_(__value) {}
-  _LIBCPP_HIDE_FROM_ABI __basic_format_arg_value(unsigned __value) noexcept : __unsigned_(__value) {}
-  _LIBCPP_HIDE_FROM_ABI __basic_format_arg_value(long long __value) noexcept : __long_long_(__value) {}
-  _LIBCPP_HIDE_FROM_ABI __basic_format_arg_value(unsigned long long __value) noexcept
+  _LIBCPP_HIDE_FROM_ABI constexpr __basic_format_arg_value() noexcept : __monostate_() {}
+  _LIBCPP_HIDE_FROM_ABI constexpr __basic_format_arg_value(bool __value) noexcept : __boolean_(__value) {}
+  _LIBCPP_HIDE_FROM_ABI constexpr __basic_format_arg_value(_CharT __value) noexcept : __char_type_(__value) {}
+  _LIBCPP_HIDE_FROM_ABI constexpr __basic_format_arg_value(int __value) noexcept : __int_(__value) {}
+  _LIBCPP_HIDE_FROM_ABI constexpr __basic_format_arg_value(unsigned __value) noexcept : __unsigned_(__value) {}
+  _LIBCPP_HIDE_FROM_ABI constexpr __basic_format_arg_value(long long __value) noexcept : __long_long_(__value) {}
+  _LIBCPP_HIDE_FROM_ABI constexpr __basic_format_arg_value(unsigned long long __value) noexcept
       : __unsigned_long_long_(__value) {}
 #  ifndef _LIBCPP_HAS_NO_INT128
-  _LIBCPP_HIDE_FROM_ABI __basic_format_arg_value(__int128_t __value) noexcept : __i128_(__value) {}
-  _LIBCPP_HIDE_FROM_ABI __basic_format_arg_value(__uint128_t __value) noexcept : __u128_(__value) {}
+  _LIBCPP_HIDE_FROM_ABI constexpr __basic_format_arg_value(__int128_t __value) noexcept : __i128_(__value) {}
+  _LIBCPP_HIDE_FROM_ABI constexpr __basic_format_arg_value(__uint128_t __value) noexcept : __u128_(__value) {}
 #  endif
-  _LIBCPP_HIDE_FROM_ABI __basic_format_arg_value(float __value) noexcept : __float_(__value) {}
-  _LIBCPP_HIDE_FROM_ABI __basic_format_arg_value(double __value) noexcept : __double_(__value) {}
-  _LIBCPP_HIDE_FROM_ABI __basic_format_arg_value(long double __value) noexcept : __long_double_(__value) {}
-  _LIBCPP_HIDE_FROM_ABI __basic_format_arg_value(const _CharT* __value) noexcept : __const_char_type_ptr_(__value) {}
-  _LIBCPP_HIDE_FROM_ABI __basic_format_arg_value(basic_string_view<_CharT> __value) noexcept
+  _LIBCPP_HIDE_FROM_ABI constexpr __basic_format_arg_value(float __value) noexcept : __float_(__value) {}
+  _LIBCPP_HIDE_FROM_ABI constexpr __basic_format_arg_value(double __value) noexcept : __double_(__value) {}
+  _LIBCPP_HIDE_FROM_ABI constexpr __basic_format_arg_value(long double __value) noexcept : __long_double_(__value) {}
+  _LIBCPP_HIDE_FROM_ABI constexpr __basic_format_arg_value(const _CharT* __value) noexcept : __const_char_type_ptr_(__value) {}
+  _LIBCPP_HIDE_FROM_ABI constexpr __basic_format_arg_value(basic_string_view<_CharT> __value) noexcept
       : __string_view_(__value) {}
-  _LIBCPP_HIDE_FROM_ABI __basic_format_arg_value(const void* __value) noexcept : __ptr_(__value) {}
-  _LIBCPP_HIDE_FROM_ABI __basic_format_arg_value(__handle __value) noexcept
+  _LIBCPP_HIDE_FROM_ABI constexpr __basic_format_arg_value(const void* __value) noexcept : __ptr_(__value) {}
+  _LIBCPP_HIDE_FROM_ABI constexpr __basic_format_arg_value(__handle __value) noexcept
       // TODO FMT Investigate why it doesn't work without the forward.
       : __handle_(std::forward<__handle>(__value)) {}
 };
@@ -220,10 +222,10 @@ class _LIBCPP_TEMPLATE_VIS _LIBCPP_AVAILABILITY_FORMAT basic_format_arg {
 public:
   class _LIBCPP_TEMPLATE_VIS handle;
 
-  _LIBCPP_HIDE_FROM_ABI basic_format_arg() noexcept
+  _LIBCPP_HIDE_FROM_ABI constexpr basic_format_arg() noexcept
       : __type_{__format::__arg_t::__none} {}
 
-  _LIBCPP_HIDE_FROM_ABI explicit operator bool() const noexcept {
+  _LIBCPP_HIDE_FROM_ABI constexpr explicit operator bool() const noexcept {
     return __type_ != __format::__arg_t::__none;
   }
 
@@ -245,7 +247,8 @@ public:
   __basic_format_arg_value<_Context> __value_;
   __format::__arg_t __type_;
 
-  _LIBCPP_HIDE_FROM_ABI explicit basic_format_arg(__format::__arg_t __type,
+  _LIBCPP_HIDE_FROM_ABI constexpr
+  explicit basic_format_arg(__format::__arg_t __type,
                                                   __basic_format_arg_value<_Context> __value) noexcept
       : __value_(__value), __type_(__type) {}
 };
@@ -254,11 +257,12 @@ template <class _Context>
 class _LIBCPP_TEMPLATE_VIS basic_format_arg<_Context>::handle {
 public:
   _LIBCPP_HIDE_FROM_ABI
-  void format(basic_format_parse_context<char_type>& __parse_ctx, _Context& __ctx) const {
+  constexpr void format(basic_format_parse_context<char_type>& __parse_ctx, _Context& __ctx) const {
     __handle_.__format_(__parse_ctx, __ctx, __handle_.__ptr_);
   }
 
-  _LIBCPP_HIDE_FROM_ABI explicit handle(typename __basic_format_arg_value<_Context>::__handle& __handle) noexcept
+  _LIBCPP_HIDE_FROM_ABI constexpr
+  explicit handle(typename __basic_format_arg_value<_Context>::__handle& __handle) noexcept
       : __handle_(__handle) {}
 
 private:

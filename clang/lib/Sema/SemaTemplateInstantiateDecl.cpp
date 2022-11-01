@@ -1426,9 +1426,15 @@ Decl *TemplateDeclInstantiator::VisitStaticAssertDecl(StaticAssertDecl *D) {
   if (InstantiatedAssertExpr.isInvalid())
     return nullptr;
 
+
+  ExprResult InstantiatedMessageExpr
+      = SemaRef.SubstExpr(D->getMessage(), TemplateArgs);
+  if (InstantiatedMessageExpr.isInvalid())
+    return nullptr;
+
   return SemaRef.BuildStaticAssertDeclaration(D->getLocation(),
                                               InstantiatedAssertExpr.get(),
-                                              D->getMessage(),
+                                              InstantiatedMessageExpr.get(),
                                               D->getRParenLoc(),
                                               D->isFailed());
 }

@@ -7616,13 +7616,14 @@ public:
   void UnmarkAsLateParsedTemplate(FunctionDecl *FD);
   bool IsInsideALocalClassWithinATemplateFunction();
 
+  bool EvaluateAsString(Expr *Message, std::string &Result, ASTContext &Ctx);
   Decl *ActOnStaticAssertDeclaration(SourceLocation StaticAssertLoc,
                                      Expr *AssertExpr,
                                      Expr *AssertMessageExpr,
                                      SourceLocation RParenLoc);
   Decl *BuildStaticAssertDeclaration(SourceLocation StaticAssertLoc,
                                      Expr *AssertExpr,
-                                     StringLiteral *AssertMessageExpr,
+                                     Expr *AssertMessageExpr,
                                      SourceLocation RParenLoc,
                                      bool Failed);
   void DiagnoseStaticAssertDetails(const Expr *E);

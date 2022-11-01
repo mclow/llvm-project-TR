@@ -16614,14 +16614,14 @@ Decl *Sema::ActOnStaticAssertDeclaration(SourceLocation StaticAssertLoc,
                                          Expr *AssertExpr,
                                          Expr *AssertMessageExpr,
                                          SourceLocation RParenLoc) {
-  StringLiteral *AssertMessage =
-      AssertMessageExpr ? cast<StringLiteral>(AssertMessageExpr) : nullptr;
+  //StringLiteral *AssertMessage =
+  //    AssertMessageExpr ? cast<StringLiteral>(AssertMessageExpr) : nullptr;
 
   if (DiagnoseUnexpandedParameterPack(AssertExpr, UPPC_StaticAssertExpression))
     return nullptr;
 
   return BuildStaticAssertDeclaration(StaticAssertLoc, AssertExpr,
-                                      AssertMessage, RParenLoc, false);
+                                      AssertMessageExpr, RParenLoc, false);
 }
 
 /// Convert \V to a string we can present to the user in a diagnostic
@@ -16755,9 +16755,92 @@ void Sema::DiagnoseStaticAssertDetails(const Expr *E) {
   }
 }
 
+bool Sema::EvaluateAsString(Expr *Message, std::string &Result, ASTContext &Ctx){
+  Expr::EvalStatus Status;
+  SourceLocation Loc = Message->getBeginLoc();
+  if(const StringLiteral* SL = dyn_cast<StringLiteral>(Message)) {
+    std::copy(SL->getString().begin(), SL->getString().end(), Result.begin());
+    return true;
+  }
+
+  QualType T = Message->getType().getNonReferenceType();
+  T.addConst();
+
+  ExprResult E = Message;
+  //if (!Message->getType()->isLValueReferenceType())
+  //  E = ImplicitCastExpr::Create(Context, E.get()->getType(), CK_NoOp,
+  //                               E.get(), nullptr, VK_XValue,
+  //                               FPOptionsOverride());
+  if (E.isInvalid())
+    return false;
+
+  if(Message->isTypeDependent() || Message->isValueDependent())
+    return false;
+  if (!isCompleteType(Message->getBeginLoc(), T)) {
+    return false;
+  }
+  auto *RD = T->getAsCXXRecordDecl();
+  if(!RD)
+    return false;
+
+  auto FindMember = [&](StringRef Member) -> llvm::Optional<LookupResult> {
+    DeclarationName DN = PP.getIdentifierInfo(Member);
+    LookupResult MemberLookup(*this, DN, Loc, Sema::LookupMemberName);
+    LookupQualifiedName(MemberLookup, RD);
+    if(MemberLookup.isAmbiguous())
+      return None;
+    for (NamedDecl *D : MemberLookup) {
+      if (FunctionDecl *FD =
+          dyn_cast<FunctionDecl>(D->getUnderlyingDecl()); FD && FD->getMinRequiredArguments() == 0 &&
+          FD->getType()->castAs<FunctionProtoType>()->isConst()) {
+          return MemberLookup;
+          break;
+      }
+    }
+    return None;
+  };
+
+  llvm::Optional<LookupResult> SizeMember = FindMember("size");
+  llvm::Optional<LookupResult> DataMember = FindMember("data");
+  if(!SizeMember || !DataMember)
+    return false;
+
+  auto BuildExpr = [&](LookupResult & LR) {
+    ExprResult Res = BuildMemberReferenceExpr(E.get(), T, Message->getBeginLoc(), false,
+                                   CXXScopeSpec(), SourceLocation(), nullptr,
+                                   LR, nullptr, nullptr);
+    if (Res.isInvalid())
+      return ExprError();
+    Res = BuildCallExpr(nullptr, Res.get(), Loc, None, Loc, nullptr, false, true);
+    if (Res.isInvalid())
+      return ExprError();
+    if(Res.get()->isTypeDependent() || Res.get()->isValueDependent())
+      return ExprError();
+    return Res;
+  };
+
+  ExprResult SizeE = BuildExpr(*SizeMember);
+  ExprResult DataE = BuildExpr(*DataMember);
+  if(SizeE.isInvalid() || DataE.isInvalid())
+    return false;
+  Expr::EvalResult SizeResult;
+  if(!SizeE.get()->EvaluateAsInt(SizeResult, Ctx, Expr::SE_NoSideEffects, true))
+    return false;
+
+  uint64_t Size = SizeResult.Val.getInt().getExtValue();
+
+  Expr* Data = DataE.get();
+  QualType CharTy = Data->getType()->getPointeeType();
+  if(!CharTy->isCharType())
+    return false;
+  if(!Data->EvaluateCharPointerAsString(Result, &Size, Ctx))
+    return false;
+  return true;
+}
+
 Decl *Sema::BuildStaticAssertDeclaration(SourceLocation StaticAssertLoc,
                                          Expr *AssertExpr,
-                                         StringLiteral *AssertMessage,
+                                         Expr *AssertMessage,
                                          SourceLocation RParenLoc,
                                          bool Failed) {
   assert(AssertExpr != nullptr && "Expected non-null condition");
@@ -16796,16 +16879,21 @@ Decl *Sema::BuildStaticAssertDeclaration(SourceLocation StaticAssertLoc,
       Failed = true;
 
     if (!Failed && !Cond) {
-      SmallString<256> MsgBuffer;
+      llvm::SmallString<256> MsgBuffer;
       llvm::raw_svector_ostream Msg(MsgBuffer);
       if (AssertMessage) {
-        const auto *MsgStr = cast<StringLiteral>(AssertMessage);
-        if (MsgStr->isOrdinary())
-          Msg << MsgStr->getString();
-        else
-          MsgStr->printPretty(Msg, nullptr, getPrintingPolicy());
+        if(const auto *MsgStr = llvm::dyn_cast<StringLiteral>(AssertMessage)) {
+          if (MsgStr->isOrdinary())
+            Msg << MsgStr->getString();
+          else
+            MsgStr->printPretty(Msg, nullptr, getPrintingPolicy());
+        }
+        else {
+          std::string Str;
+          EvaluateAsString(AssertMessage, Str, Context);
+          Msg << Str;
+        }
       }
-
       Expr *InnerCond = nullptr;
       std::string InnerCondDescription;
       std::tie(InnerCond, InnerCondDescription) =

@@ -761,6 +761,9 @@ public:
   /// strlen, false otherwise.
   bool tryEvaluateStrLen(uint64_t &Result, ASTContext &Ctx) const;
 
+
+  bool EvaluateCharPointerAsString(std::string &Result, uint64_t *Size, ASTContext &Ctx) const;
+
   /// Enumeration used to describe the kind of Null pointer constant
   /// returned from \c isNullPointerConstant().
   enum NullPointerConstantKind {

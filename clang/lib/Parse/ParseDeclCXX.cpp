@@ -1007,14 +1007,14 @@ Decl *Parser::ParseStaticAssertDeclaration(SourceLocation &DeclEnd) {
       return nullptr;
     }
 
-    if (!isTokenStringLiteral()) {
-      Diag(Tok, diag::err_expected_string_literal)
-          << /*Source='static_assert'*/ 1;
-      SkipMalformedDecl();
-      return nullptr;
-    }
+    //if (!isTokenStringLiteral()) {
+    ///  Diag(Tok, diag::err_expected_string_literal)
+    //      << /*Source='static_assert'*/ 1;
+    //  SkipMalformedDecl();
+    //  return nullptr;
+    //}
 
-    AssertMessage = ParseStringLiteralExpression();
+    AssertMessage = ParseAssignmentExpression();
     if (AssertMessage.isInvalid()) {
       SkipMalformedDecl();
       return nullptr;

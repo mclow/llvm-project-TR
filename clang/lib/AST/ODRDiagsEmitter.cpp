@@ -907,8 +907,8 @@ bool ODRDiagsEmitter::diagnoseMismatch(
       return true;
     }
 
-    const StringLiteral *FirstStr = FirstSA->getMessage();
-    const StringLiteral *SecondStr = SecondSA->getMessage();
+    const Expr *FirstStr = FirstSA->getMessage();
+    const Expr *SecondStr = SecondSA->getMessage();
     assert((FirstStr || SecondStr) && "Both messages cannot be empty");
     if ((FirstStr && !SecondStr) || (!FirstStr && SecondStr)) {
       SourceLocation FirstLoc, SecondLoc;
@@ -934,8 +934,8 @@ bool ODRDiagsEmitter::diagnoseMismatch(
       return true;
     }
 
-    if (FirstStr && SecondStr &&
-        FirstStr->getString() != SecondStr->getString()) {
+    if (FirstStr && SecondStr /*&&
+        FirstStr->getString() != SecondStr->getString()*/) {
       DiagError(FirstStr->getBeginLoc(), FirstStr->getSourceRange(),
                 StaticAssertMessage);
       DiagNote(SecondStr->getBeginLoc(), SecondStr->getSourceRange(),

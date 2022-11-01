@@ -2102,6 +2102,7 @@ static void NoteLValueLocation(EvalInfo &Info, APValue::LValueBase Base) {
       Info.Note((*Alloc)->AllocExpr->getExprLoc(),
                 diag::note_constexpr_dynamic_alloc_here);
   }
+
   // We have no information to show for a typeid(T) object.
 }
 
@@ -16347,6 +16348,37 @@ static bool EvaluateBuiltinStrLen(const Expr *E, uint64_t &Result,
     if (!HandleLValueArrayAdjustment(Info, E, String, CharTy, 1))
       return false;
   }
+}
+
+bool Expr::EvaluateCharPointerAsString(std::string &Result, uint64_t* Size, ASTContext &Ctx) const
+{
+  if (!getType()->hasPointerRepresentation() || !isPRValue())
+    return false;
+
+  LValue String;
+
+  Expr::EvalStatus Status;
+  EvalInfo Info(Ctx, Status, EvalInfo::EM_IgnoreSideEffects);
+  Info.InConstantContext = true;
+  if (!EvaluatePointer(this, String, Info))
+    return false;
+  QualType CharTy = getType()->getPointeeType();
+  uint64_t Strlen = 0;
+  for (; Size? Strlen < *Size : true; ++Strlen) {
+    APValue Char;
+    if (!handleLValueToRValueConversion(Info, this, CharTy, String, Char) ||
+        !Char.isInt())
+      return false;
+    APSInt C = Char.getInt();
+    if(!C)
+      break;
+    Result.push_back(static_cast<char>(C.getExtValue()));
+    if (!HandleLValueArrayAdjustment(Info, this, String, CharTy, 1))
+      return false;
+  }
+  if(Size)
+    *Size = Strlen;
+  return true;
 }
 
 bool Expr::tryEvaluateStrLen(uint64_t &Result, ASTContext &Ctx) const {

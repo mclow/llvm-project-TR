@@ -1649,7 +1649,7 @@ PackIndexingExpr *PackIndexingExpr::Create(ASTContext &Context,
                                            SourceLocation EllipsisLoc,
                                            SourceLocation RSquareLoc,
                                            Expr *PackIdExpr, Expr *IndexExpr,
-                                           Optional<int64_t> Index,
+                                           std::optional<int64_t> Index,
                                            ArrayRef<Expr *> SubstitutedExprs) {
   QualType Type;
   if (Index && !SubstitutedExprs.empty()) {

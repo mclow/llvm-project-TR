@@ -6463,8 +6463,8 @@ QualType TreeTransform<Derived>::TransformPackIndexingType(TypeLocBuilder &TLB, 
     // be expanded.
     bool ShouldExpand = true;
     bool RetainExpansion = false;
-    Optional<unsigned> OrigNumExpansions;
-    Optional<unsigned> NumExpansions = OrigNumExpansions;
+    std::optional<unsigned> OrigNumExpansions;
+    std::optional<unsigned> NumExpansions = OrigNumExpansions;
     if (getDerived().TryExpandParameterPacks(
             TL.getEllipsisLoc(), SourceRange(), Unexpanded,
             ShouldExpand, RetainExpansion, NumExpansions))
@@ -14072,8 +14072,8 @@ TreeTransform<Derived>::TransformPackIndexingExpr(PackIndexingExpr *E) {
     // be expanded.
     bool ShouldExpand = true;
     bool RetainExpansion = false;
-    Optional<unsigned> OrigNumExpansions;
-    Optional<unsigned> NumExpansions = OrigNumExpansions;
+    std::optional<unsigned> OrigNumExpansions;
+    std::optional<unsigned> NumExpansions = OrigNumExpansions;
     if (getDerived().TryExpandParameterPacks(
             E->getEllipsisLoc(), Pattern->getSourceRange(), Unexpanded,
             ShouldExpand, RetainExpansion, NumExpansions))
@@ -14085,7 +14085,7 @@ TreeTransform<Derived>::TransformPackIndexingExpr(PackIndexingExpr *E) {
         return ExprError();
       return getDerived().RebuildPackIndexingExpr(
           E->getEllipsisLoc(), E->getRSquareLoc(), Pack.get(), IndexExpr.get(),
-          None);
+          std::nullopt);
     }
     for (unsigned I = 0; I != *NumExpansions; ++I) {
       Sema::ArgumentPackSubstitutionIndexRAII SubstIndex(getSema(), I);

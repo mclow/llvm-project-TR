@@ -9489,7 +9489,7 @@ QualType Sema::BuildPackIndexingType(QualType Pattern, Expr *IndexExpr,
                                      bool FullyExpanded,
                                      ArrayRef<QualType> Expansions) {
 
-  llvm::Optional<int64_t> Index;
+  std::optional<int64_t> Index;
   if (FullyExpanded && !IndexExpr->isValueDependent() && !IndexExpr->isTypeDependent()) {
     llvm::APSInt Value(Context.getIntWidth(Context.getSizeType()));
     // TODO: do we need a new enumerator instead of CCEK_ArrayBound?

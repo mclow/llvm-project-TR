@@ -4331,13 +4331,13 @@ class PackIndexingExpr final
   Stmt *SubExprs[2];
 
   // The evaluated index
-  Optional<int64_t> Index;
+  std::optional<int64_t> Index;
 
   size_t TransformedExpressions;
 
   PackIndexingExpr(QualType Type, SourceLocation EllipsisLoc,
                    SourceLocation RSquareLoc, Expr *PackIdExpr, Expr *IndexExpr,
-                   Optional<int64_t> Index = None,
+                   std::optional<int64_t> Index = std::nullopt,
                    ArrayRef<Expr *> SubstitutedExprs = {})
       : Expr(PackIndexingExprClass, Type, VK_LValue, OK_Ordinary),
         EllipsisLoc(EllipsisLoc),
@@ -4374,7 +4374,7 @@ public:
                                   SourceLocation EllipsisLoc,
                                   SourceLocation RSquareLoc, Expr *PackIdExpr,
                                   Expr *IndexExpr,
-                                  Optional<int64_t> Index = None,
+                                  std::optional<int64_t> Index = std::nullopt,
                                   ArrayRef<Expr *> SubstitutedExprs = {});
   static PackIndexingExpr *CreateDeserialized(ASTContext &Context);
 

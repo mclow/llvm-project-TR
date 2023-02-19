@@ -1092,7 +1092,7 @@ Sema::BuildPackIndexingExpr(Expr *PackExpression, SourceLocation EllipsisLoc,
                             Expr *IndexExpr, SourceLocation RSquareLoc,
                             ArrayRef<Expr *> ExpandedExprs, bool EmptyPack) {
 
-  llvm::Optional<int64_t> Index;
+  std::optional<int64_t> Index;
   if (!IndexExpr->isValueDependent() && !IndexExpr->isTypeDependent()) {
     llvm::APSInt Value(Context.getIntWidth(Context.getSizeType()));
     // TODO: do we need a new enumerator instead of CCEK_ArrayBound?

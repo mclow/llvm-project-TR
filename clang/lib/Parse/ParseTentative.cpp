@@ -1325,7 +1325,8 @@ Parser::isCXXDeclarationSpecifier(ImplicitTypenameContext AllowImplicitTypename,
         return TPResult::Error;
       if(Tok.is(tok::identifier))
         return TPResult::False;
-      return isCXXDeclarationSpecifier(BracedCastResult, InvalidAsDeclSpec);
+      return isCXXDeclarationSpecifier(ImplicitTypenameContext::No,
+                                       BracedCastResult, InvalidAsDeclSpec);
     }
 
     // Check for need to substitute AltiVec __vector keyword

@@ -249,4 +249,6 @@ FIELD(HasDeclaredCopyAssignmentWithConstParam, 1, MERGE_OR)
 /// base classes or fields have a no-return destructor
 FIELD(IsAnyDestructorNoReturn, 1, NO_MERGE)
 
+FIELD(IsTriviallyRelocatable, 1, NO_MERGE)
+
 #undef FIELD

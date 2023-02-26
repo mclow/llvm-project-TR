@@ -754,7 +754,10 @@ static void InitializeCPlusPlusFeatureTestMacros(const LangOptions &LangOpts,
     Builder.defineMacro("__cpp_auto_cast", "202110L");
   }
 
-  // We provide those C++23 features as extensions in earlier language modes, so
+  // Experimental
+  Builder.defineMacro("__cpp_trivial_relocatability", "202302L");
+
+  // We provide those C++2b features as extensions in earlier language modes, so
   // we also define their feature test macros.
   if (LangOpts.CPlusPlus11)
     Builder.defineMacro("__cpp_static_call_operator", "202207L");

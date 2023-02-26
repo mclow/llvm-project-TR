@@ -5084,6 +5084,7 @@ static bool CheckUnaryTypeTraitTypeCompleteness(Sema &S, TypeTrait UTT,
   // impose the same constraints.
   case UTT_IsTriviallyRelocatable:
   case UTT_IsTriviallyEqualityComparable:
+  case UTT_IsCppTriviallyRelocatable:
   case UTT_CanPassInRegs:
   // Per the GCC type traits documentation, T shall be a complete type, cv void,
   // or an array of unknown bound. But GCC actually imposes the same constraints
@@ -5654,6 +5655,8 @@ static bool EvaluateUnaryTypeTrait(Sema &Self, TypeTrait UTT,
     return T.isTriviallyRelocatableType(C);
   case UTT_IsBitwiseCloneable:
     return T.isBitwiseCloneableType(C);
+  case UTT_IsCppTriviallyRelocatable:
+    return T.isCppTriviallyRelocatableType(C);
   case UTT_IsReferenceable:
     return T.isReferenceable();
   case UTT_CanPassInRegs:

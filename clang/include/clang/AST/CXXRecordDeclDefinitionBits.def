@@ -253,4 +253,6 @@ FIELD(IsAnyDestructorNoReturn, 1, NO_MERGE)
 /// type that is intangible). HLSL only.
 FIELD(IsHLSLIntangible, 1, NO_MERGE)
 
+FIELD(IsTriviallyRelocatable, 1, NO_MERGE)
+
 #undef FIELD

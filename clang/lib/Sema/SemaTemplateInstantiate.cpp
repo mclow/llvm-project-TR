@@ -3428,6 +3428,43 @@ namespace clang {
   }
 }
 
+static TriviallyRelocatableSpecifier InstantiateTriviallyRelocatableSpecifier(
+    Sema &S, const TriviallyRelocatableSpecifier &Pattern,
+    const MultiLevelTemplateArgumentList &TemplateArgs) {
+  if (Pattern.getKind() != TriviallyRelocatableSpecifier::TRK_Dependent)
+    return Pattern;
+  Expr *PatternE = Pattern.getCondition();
+  EnterExpressionEvaluationContext ConstantCtx(
+      S, Sema::ExpressionEvaluationContext::ConstantEvaluated);
+  ExprResult Res = S.SubstExpr(PatternE, TemplateArgs);
+  if (Res.isInvalid())
+    return TriviallyRelocatableSpecifier(
+        TriviallyRelocatableSpecifier::TRK_Invalid, Pattern.getLocation());
+  return S.ActOnTriviallyRelocatableSpecifier(Pattern.getLocation(), Res.get());
+}
+
+/// Instantiate the definition of a class from a given pattern.
+///
+/// \param PointOfInstantiation The point of instantiation within the
+/// source code.
+///
+/// \param Instantiation is the declaration whose definition is being
+/// instantiated. This will be either a class template specialization
+/// or a member class of a class template specialization.
+///
+/// \param Pattern is the pattern from which the instantiation
+/// occurs. This will be either the declaration of a class template or
+/// the declaration of a member class of a class template.
+///
+/// \param TemplateArgs The template arguments to be substituted into
+/// the pattern.
+///
+/// \param TSK the kind of implicit or explicit instantiation to perform.
+///
+/// \param Complain whether to complain if the class cannot be instantiated due
+/// to the lack of a definition.
+///
+/// \returns true if an error occurred, false otherwise.
 bool
 Sema::InstantiateClass(SourceLocation PointOfInstantiation,
                        CXXRecordDecl *Instantiation, CXXRecordDecl *Pattern,
@@ -3497,6 +3534,10 @@ Sema::InstantiateClass(SourceLocation PointOfInstantiation,
 
   // Start the definition of this instantiation.
   Instantiation->startDefinition();
+
+  TriviallyRelocatableSpecifier TRS = InstantiateTriviallyRelocatableSpecifier(
+      *this, Pattern->getTriviallyRelocatableSpecifier(), TemplateArgs);
+  Instantiation->setTriviallyRelocatableSpecifier(TRS);
 
   // The instantiation is visible here, even if it was first declared in an
   // unimported module.

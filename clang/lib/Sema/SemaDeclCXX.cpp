@@ -6920,6 +6920,8 @@ void Sema::CheckCompletedCXXClass(Scope *S, CXXRecordDecl *Record) {
     }
   }
 
+  CheckCXX2CTriviallyRelocatable(Record);
+
   // See if trivial_abi has to be dropped.
   if (Record->hasAttr<TrivialABIAttr>())
     checkIllFormedTrivialABIStruct(*Record);
@@ -7190,6 +7192,98 @@ void Sema::CheckCompletedCXXClass(Scope *S, CXXRecordDecl *Record) {
     else if (Record->hasAttr<CUDADeviceBuiltinTextureTypeAttr>())
       checkCUDADeviceBuiltinTextureClassTemplate(*this, Record);
   }
+}
+
+void Sema::CheckCXX2CTriviallyRelocatable(CXXRecordDecl *D) {
+  if (!D->hasDefinition() || D->isInvalidDecl())
+    return;
+
+  TriviallyRelocatableSpecifier::Kind TRK =
+      D->getTriviallyRelocatableSpecifier().getKind();
+  SourceLocation Loc = D->getTriviallyRelocatableSpecifier().getLocation();
+  if (TRK == TriviallyRelocatableSpecifier::TRK_Dependent)
+    return;
+  if (TRK == TriviallyRelocatableSpecifier::TRK_False) {
+    D->setIsTriviallyRelocatable(false);
+    return;
+  }
+  bool MarkedTriviallyRelocatable =
+      D->getTriviallyRelocatableSpecifier().isSet();
+  auto DiagnosticInvalidExplicitSpecifier = [&, NotedError = false]() mutable {
+    if (NotedError)
+      return;
+    Diag(Loc,
+         diag::err_trivially_relocatable_specifier_on_non_relocatable_class)
+        << D;
+    NotedError = true;
+  };
+  bool IsTriviallyRelocatable = true;
+  for (const CXXBaseSpecifier &B : D->bases()) {
+    const auto *BaseDecl = B.getType()->getAsCXXRecordDecl();
+    if (!BaseDecl)
+      continue;
+    if (B.isVirtual() ||
+        (!BaseDecl->isDependentType() && !BaseDecl->isTriviallyRelocatable())) {
+      if (MarkedTriviallyRelocatable) {
+        DiagnosticInvalidExplicitSpecifier();
+        Diag(B.getBeginLoc(), diag::note_trivially_relocatable)
+            << (B.isVirtual() ? 0 : 1) << BaseDecl << B.getSourceRange();
+      }
+      IsTriviallyRelocatable = false;
+    }
+  }
+
+  for (const FieldDecl *Field : D->fields()) {
+    if (Field->getType()->isDependentType())
+      continue;
+    if (Field->getType()->isReferenceType())
+      continue;
+    QualType T = getASTContext().getBaseElementType(Field->getType());
+    if (CXXRecordDecl *RD = T->getAsCXXRecordDecl()) {
+      if (RD->isTriviallyRelocatable())
+        continue;
+      if (MarkedTriviallyRelocatable) {
+        DiagnosticInvalidExplicitSpecifier();
+        Diag(Field->getBeginLoc(), diag::note_trivially_relocatable)
+            << /*member*/ 2 << Field << Field->getSourceRange();
+      }
+      IsTriviallyRelocatable = false;
+    }
+  }
+  if (!D->isDependentType() && !MarkedTriviallyRelocatable) {
+    bool HasSuitableMoveCtr = D->needsImplicitMoveConstructor();
+    bool HasSuitableCopyCtr = false;
+    if (D->hasUserDeclaredDestructor()) {
+      const auto *Dtr = D->getDestructor();
+      if (Dtr && (!Dtr->isDefaulted() || Dtr->isDeleted()))
+        IsTriviallyRelocatable = false;
+    }
+    if (IsTriviallyRelocatable && !HasSuitableMoveCtr) {
+      for (const CXXConstructorDecl *CD : D->ctors()) {
+        if (CD->isMoveConstructor() && CD->isDefaulted() &&
+            !CD->isIneligibleOrNotSelected()) {
+          HasSuitableMoveCtr = true;
+          break;
+        }
+      }
+    }
+    if (!HasSuitableMoveCtr && !D->hasMoveConstructor()) {
+      HasSuitableCopyCtr = D->needsImplicitCopyConstructor();
+      if (!HasSuitableCopyCtr) {
+        for (const CXXConstructorDecl *CD : D->ctors()) {
+          if (CD->isCopyConstructor() && CD->isDefaulted() &&
+              !CD->isIneligibleOrNotSelected()) {
+            HasSuitableCopyCtr = true;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!HasSuitableMoveCtr && !HasSuitableCopyCtr)
+      IsTriviallyRelocatable = false;
+  }
+  D->setIsTriviallyRelocatable(IsTriviallyRelocatable);
 }
 
 /// Look up the special member function that would be called by a special

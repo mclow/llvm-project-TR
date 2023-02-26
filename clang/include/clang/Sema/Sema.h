@@ -3983,19 +3983,24 @@ public:
   /// Invoked when we enter a tag definition that we're skipping.
   SkippedDefinitionContext ActOnTagStartSkippedDefinition(Scope *S, Decl *TD);
 
+  TriviallyRelocatableSpecifier
+  ActOnTriviallyRelocatableSpecifier(SourceLocation Loc, Expr *E);
+
   /// ActOnStartCXXMemberDeclarations - Invoked when we have parsed a
   /// C++ record definition's base-specifiers clause and are starting its
   /// member declarations.
-  void ActOnStartCXXMemberDeclarations(Scope *S, Decl *TagDecl,
-                                       SourceLocation FinalLoc,
-                                       bool IsFinalSpelledSealed,
-                                       bool IsAbstract,
-                                       SourceLocation LBraceLoc);
+  void ActOnStartCXXMemberDeclarations(
+      Scope *S, Decl *TagDecl, SourceLocation FinalLoc,
+      bool IsFinalSpelledSealed, bool IsAbstract,
+      TriviallyRelocatableSpecifier TriviallyRelocatable,
+      SourceLocation LBraceLoc);
 
   /// ActOnTagFinishDefinition - Invoked once we have finished parsing
   /// the definition of a tag (enumeration, class, struct, or union).
   void ActOnTagFinishDefinition(Scope *S, Decl *TagDecl,
                                 SourceRange BraceRange);
+
+  void CheckCXX2CTriviallyRelocatable(CXXRecordDecl *D);
 
   void ActOnTagFinishSkippedDefinition(SkippedDefinitionContext Context);
 
@@ -10039,6 +10044,8 @@ public:
                                   ///< message.
     CCEK_StaticAssertMessageData, ///< Call to data() in a static assert
                                   ///< message.
+                                  ///
+    CCEK_TriviallyRelocatable,
   };
 
   ExprResult BuildConvertedConstantExpression(Expr *From, QualType T,

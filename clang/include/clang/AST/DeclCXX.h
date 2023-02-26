@@ -127,6 +127,34 @@ public:
   static bool classofKind(Kind K) { return K == AccessSpec; }
 };
 
+class TriviallyRelocatableSpecifier {
+public:
+  enum Kind { TRK_Invalid, TRK_True, TRK_False, TRK_Dependent };
+  TriviallyRelocatableSpecifier() = default;
+  TriviallyRelocatableSpecifier(Kind TriviallyRelocatableKind,
+                                SourceLocation Begin, Expr *E = nullptr)
+      : ExprAndKind(E, TriviallyRelocatableKind), Loc(Begin) {}
+  void SetTriviallyRelocatable(Kind TriviallyRelocatableKind,
+                               SourceLocation Begin, Expr *E = nullptr) {
+    ExprAndKind.setPointerAndInt(E, TriviallyRelocatableKind);
+    Loc = Begin;
+  }
+
+  bool isSet() const { return !Loc.isInvalid(); }
+
+  bool isValid() const { return ExprAndKind.getInt() != TRK_Invalid; }
+
+  Kind getKind() const { return ExprAndKind.getInt(); }
+
+  SourceLocation getLocation() const { return Loc; }
+
+  Expr *getCondition() const { return ExprAndKind.getPointer(); }
+
+private:
+  llvm::PointerIntPair<Expr *, 2, Kind> ExprAndKind{nullptr, TRK_Invalid};
+  SourceLocation Loc;
+};
+
 /// Represents a base class of a C++ class.
 ///
 /// Each CXXBaseSpecifier represents a single, direct base class (or
@@ -348,6 +376,8 @@ private:
     ///
     /// This is actually currently stored in reverse order.
     LazyDeclPtr FirstFriend;
+
+    TriviallyRelocatableSpecifier TriviallyRelocatable;
 
     DefinitionData(CXXRecordDecl *D);
 
@@ -1464,6 +1494,16 @@ public:
     return isLiteral() && data().StructuralIfLiteral;
   }
 
+  TriviallyRelocatableSpecifier getTriviallyRelocatableSpecifier() const {
+    return data().TriviallyRelocatable;
+  }
+
+  bool isTriviallyRelocatable() const { return data().IsTriviallyRelocatable; }
+
+  void setIsTriviallyRelocatable(bool Set) {
+    data().IsTriviallyRelocatable = Set;
+  }
+
   /// Notify the class that this destructor is now selected.
   ///
   /// Important properties of the class depend on destructor properties. Since
@@ -1898,6 +1938,10 @@ public:
     return K >= firstCXXRecord && K <= lastCXXRecord;
   }
   void markAbstract() { data().Abstract = true; }
+
+  void setTriviallyRelocatableSpecifier(TriviallyRelocatableSpecifier TRS) {
+    data().TriviallyRelocatable = TRS;
+  }
 };
 
 /// Store information needed for an explicit specifier.

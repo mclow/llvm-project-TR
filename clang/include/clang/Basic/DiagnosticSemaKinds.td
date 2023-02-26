@@ -84,7 +84,8 @@ def err_typecheck_converted_constant_expression_indirect : Error<
 def err_expr_not_cce : Error<
   "%select{case value|enumerator value|non-type template argument|"
   "array size|explicit specifier argument|noexcept specifier argument|"
-  "call to 'size()'|call to 'data()'}0 is not a constant expression">;
+  "call to 'size()'|call to 'data()'|"
+  "trivially_relocatable specifier argument}0 is not a constant expression">;
 def ext_cce_narrowing : ExtWarn<
   "%select{case value|enumerator value|non-type template argument|"
   "array size|explicit specifier argument|noexcept specifier argument|"
@@ -2679,6 +2680,15 @@ def warn_final_dtor_non_final_class : Warning<
   InGroup<FinalDtorNonFinalClass>;
 def note_final_dtor_non_final_class_silence : Note<
   "mark %0 as '%select{final|sealed}1' to silence this warning">;
+
+def err_trivially_relocatable_specifier_on_non_relocatable_class : Error<
+  "invalid 'trivially_relocatable' specifier on non trivially-relocatable class %0">;
+
+def note_trivially_relocatable: Note<
+  "because it %select{"
+    "has a virtual base class|"
+    "inherits from a non trivially-relocatable class|"
+    "has a non trivially-relocatable member}0 %1">;
 
 // C++11 attributes
 def err_repeat_attribute : Error<"%0 attribute cannot be repeated">;

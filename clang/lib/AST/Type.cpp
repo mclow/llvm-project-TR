@@ -2807,6 +2807,17 @@ bool QualType::isTriviallyEqualityComparableType(
       CanonicalType, /*CheckIfTriviallyCopyable=*/false);
 }
 
+bool QualType::isCppTriviallyRelocatableType(const ASTContext &Context) const {
+  QualType BaseElementType = Context.getBaseElementType(*this);
+  if (BaseElementType->isIncompleteType())
+    return false;
+  else if (BaseElementType->isScalarType())
+    return true;
+  else if (const auto *RD = BaseElementType->getAsCXXRecordDecl())
+    return RD->isTriviallyRelocatable();
+  return false;
+}
+
 bool QualType::isNonWeakInMRRWithObjCWeak(const ASTContext &Context) const {
   return !Context.getLangOpts().ObjCAutoRefCount &&
          Context.getLangOpts().ObjCWeak &&

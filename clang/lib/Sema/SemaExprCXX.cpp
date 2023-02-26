@@ -4875,7 +4875,6 @@ static bool CheckUnaryTypeTraitTypeCompleteness(Sema &S, TypeTrait UTT,
   // By analogy, is_trivially_relocatable and is_trivially_equality_comparable
   // impose the same constraints.
   case UTT_IsTriviallyRelocatable:
-  case UTT_IsTriviallyEqualityComparable:
   case UTT_IsCppTriviallyRelocatable:
   case UTT_CanPassInRegs:
   // Per the GCC type traits documentation, T shall be a complete type, cv void,

@@ -2673,7 +2673,7 @@ bool QualType::isCppTriviallyRelocatableType(const ASTContext &Context) const {
     return false;
   else if (BaseElementType->isScalarType())
     return true;
-  else if (const auto *RD = BaseElementType->getAsCXXRecordDecl()) {
+  else if (const auto *RD = BaseElementType->getAsCXXRecordDecl())
     return RD->isTriviallyRelocatable();
   return false;
 }

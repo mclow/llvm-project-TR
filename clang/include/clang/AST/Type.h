@@ -901,6 +901,7 @@ public:
 
   /// Return true if this is a trivially equality comparable type.
   bool isTriviallyEqualityComparableType(const ASTContext &Context) const;
+
   bool isCppTriviallyRelocatableType(const ASTContext &Context) const;
 
   /// Returns true if it is a class and it might be dynamic.

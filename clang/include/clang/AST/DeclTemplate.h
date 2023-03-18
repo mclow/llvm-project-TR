@@ -26,6 +26,7 @@
 #include "clang/Basic/LLVM.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/Specifiers.h"
+#include "clang/Basic/TemplateKinds.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/FoldingSet.h"
 #include "llvm/ADT/PointerIntPair.h"
@@ -1592,15 +1593,20 @@ class TemplateTemplateParmDecl final
   /// The number of parameters in an expanded parameter pack.
   unsigned NumExpandedParams = 0;
 
-  TemplateTemplateParmDecl(DeclContext *DC, SourceLocation L,
-                           unsigned D, unsigned P, bool ParameterPack,
-                           IdentifierInfo *Id, TemplateParameterList *Params)
-      : TemplateDecl(TemplateTemplateParm, DC, L, Id, Params),
-        TemplateParmPosition(D, P), ParameterPack(ParameterPack) {}
+  TemplateNameKind ParameterKind = TemplateNameKind::TNK_Type_template;
 
-  TemplateTemplateParmDecl(DeclContext *DC, SourceLocation L,
-                           unsigned D, unsigned P,
-                           IdentifierInfo *Id, TemplateParameterList *Params,
+  TemplateTemplateParmDecl(DeclContext *DC, SourceLocation L, unsigned D,
+                           unsigned P, bool ParameterPack, IdentifierInfo *Id,
+                           TemplateNameKind ParameterKind,
+                           TemplateParameterList *Params)
+      : TemplateDecl(TemplateTemplateParm, DC, L, Id, Params),
+        TemplateParmPosition(D, P), ParameterPack(ParameterPack),
+        ParameterKind(ParameterKind) {}
+
+  TemplateTemplateParmDecl(DeclContext *DC, SourceLocation L, unsigned D,
+                           unsigned P, IdentifierInfo *Id,
+                           TemplateNameKind ParameterKind,
+                           TemplateParameterList *Params,
                            ArrayRef<TemplateParameterList *> Expansions);
 
   void anchor() override;
@@ -1610,17 +1616,15 @@ public:
   friend class ASTDeclWriter;
   friend TrailingObjects;
 
-  static TemplateTemplateParmDecl *Create(const ASTContext &C, DeclContext *DC,
-                                          SourceLocation L, unsigned D,
-                                          unsigned P, bool ParameterPack,
-                                          IdentifierInfo *Id,
-                                          TemplateParameterList *Params);
-  static TemplateTemplateParmDecl *Create(const ASTContext &C, DeclContext *DC,
-                                          SourceLocation L, unsigned D,
-                                          unsigned P,
-                                          IdentifierInfo *Id,
-                                          TemplateParameterList *Params,
-                                 ArrayRef<TemplateParameterList *> Expansions);
+  static TemplateTemplateParmDecl *
+  Create(const ASTContext &C, DeclContext *DC, SourceLocation L, unsigned D,
+         unsigned P, bool ParameterPack, IdentifierInfo *Id,
+         TemplateNameKind ParameterKind, TemplateParameterList *Params);
+  static TemplateTemplateParmDecl *
+  Create(const ASTContext &C, DeclContext *DC, SourceLocation L, unsigned D,
+         unsigned P, IdentifierInfo *Id, TemplateNameKind ParameterKind,
+         TemplateParameterList *Params,
+         ArrayRef<TemplateParameterList *> Expansions);
 
   static TemplateTemplateParmDecl *CreateDeserialized(ASTContext &C,
                                                       unsigned ID);
@@ -1724,6 +1728,10 @@ public:
     if (hasDefaultArgument() && !defaultArgumentWasInherited())
       End = getDefaultArgument().getSourceRange().getEnd();
     return SourceRange(getTemplateParameters()->getTemplateLoc(), End);
+  }
+
+  TemplateNameKind kind() const {
+      return ParameterKind;
   }
 
   // Implement isa/cast/dyncast/etc.

@@ -8277,16 +8277,12 @@ public:
                                       unsigned Position,
                                       SourceLocation EqualLoc,
                                       Expr *DefaultArg);
-  NamedDecl *ActOnTemplateTemplateParameter(Scope *S,
-                                       SourceLocation TmpLoc,
-                                       TemplateParameterList *Params,
-                                       SourceLocation EllipsisLoc,
-                                       IdentifierInfo *ParamName,
-                                       SourceLocation ParamNameLoc,
-                                       unsigned Depth,
-                                       unsigned Position,
-                                       SourceLocation EqualLoc,
-                                       ParsedTemplateArgument DefaultArg);
+  NamedDecl *ActOnTemplateTemplateParameter(
+      Scope *S, SourceLocation TmpLoc, TemplateNameKind Kind,
+      TemplateParameterList *Params, SourceLocation EllipsisLoc,
+      IdentifierInfo *ParamName, SourceLocation ParamNameLoc, unsigned Depth,
+      unsigned Position, SourceLocation EqualLoc,
+      ParsedTemplateArgument DefaultArg);
 
   TemplateParameterList *
   ActOnTemplateParameterList(unsigned Depth,
@@ -8380,7 +8376,7 @@ public:
   /// Get the specialization of the given variable template corresponding to
   /// the specified argument list, or a null-but-valid result if the arguments
   /// are dependent.
-  DeclResult CheckVarTemplateId(VarTemplateDecl *Template,
+  DeclResult CheckVarTemplateId(VarTemplateDecl  *Template,
                                 SourceLocation TemplateLoc,
                                 SourceLocation TemplateNameLoc,
                                 const TemplateArgumentListInfo &TemplateArgs);
@@ -8393,6 +8389,12 @@ public:
                                 VarTemplateDecl *Template,
                                 SourceLocation TemplateLoc,
                                 const TemplateArgumentListInfo *TemplateArgs);
+
+  ExprResult
+  CheckVarOrConceptTemplateTemplateId(const CXXScopeSpec &SS,
+                           const DeclarationNameInfo &NameInfo,
+                           TemplateTemplateParmDecl *Template, SourceLocation TemplateLoc,
+                           const TemplateArgumentListInfo *TemplateArgs);
 
   ExprResult
   CheckConceptTemplateId(const CXXScopeSpec &SS,
@@ -8559,6 +8561,10 @@ public:
   bool CheckTemplateTemplateArgument(TemplateTemplateParmDecl *Param,
                                      TemplateParameterList *Params,
                                      TemplateArgumentLoc &Arg);
+  bool CheckDeclCompatibleWithTemplateTemplate
+                                     (TemplateDecl *Template,
+                                      TemplateTemplateParmDecl *Param,
+                                      const TemplateArgumentLoc &Arg);
 
   void NoteTemplateLocation(const NamedDecl &Decl,
                             std::optional<SourceRange> ParamRange = {});

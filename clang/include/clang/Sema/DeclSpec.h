@@ -2814,6 +2814,7 @@ struct InventedTemplateParameterInfo {
   SmallVector<NamedDecl*, 4> TemplateParams;
 };
 
+
 } // end namespace clang
 
 #endif // LLVM_CLANG_SEMA_DECLSPEC_H

@@ -349,6 +349,16 @@ SourceLocation CXXPseudoDestructorExpr::getEndLoc() const {
   return End;
 }
 
+static bool UnresolvedLookupExprIsVariableOrConceptParameterPack(
+    UnresolvedSetIterator Begin, UnresolvedSetIterator End) {
+  if (std::distance(Begin, End) != 1)
+    return false;
+  NamedDecl *ND = *Begin;
+  if (auto *TTP = llvm::dyn_cast<TemplateTemplateParmDecl>(ND))
+    return TTP->isParameterPack();
+  return false;
+}
+
 // UnresolvedLookupExpr
 UnresolvedLookupExpr::UnresolvedLookupExpr(
     const ASTContext &Context, CXXRecordDecl *NamingClass,
@@ -358,7 +368,8 @@ UnresolvedLookupExpr::UnresolvedLookupExpr(
     UnresolvedSetIterator End, bool KnownDependent)
     : OverloadExpr(UnresolvedLookupExprClass, Context, QualifierLoc,
                    TemplateKWLoc, NameInfo, TemplateArgs, Begin, End,
-                   KnownDependent, false, false),
+                   KnownDependent, false, false,
+                   UnresolvedLookupExprIsVariableOrConceptParameterPack(Begin, End)),
       NamingClass(NamingClass) {
   UnresolvedLookupExprBits.RequiresADL = RequiresADL;
   UnresolvedLookupExprBits.Overloaded = Overloaded;

@@ -1684,7 +1684,7 @@ TypeSystemClang::CreateTemplateTemplateParmDecl(const char *template_name) {
   return TemplateTemplateParmDecl::Create(
       ast, decl_ctx, SourceLocation(),
       /*Depth*/ 0, /*Position*/ 0,
-      /*IsParameterPack*/ false, &identifier_info, template_param_list);
+      /*IsParameterPack*/ false, &identifier_info, TemplateNameKind::TNK_Type_template, template_param_list);
 }
 
 ClassTemplateSpecializationDecl *

@@ -2455,7 +2455,8 @@ bool Parser::ParseAsmAttributesAfterDeclarator(Declarator &D) {
 ///
 Decl *Parser::ParseDeclarationAfterDeclarator(
     Declarator &D, const ParsedTemplateInfo &TemplateInfo) {
-  if (ParseAsmAttributesAfterDeclarator(D))
+
+    if (ParseAsmAttributesAfterDeclarator(D))
     return nullptr;
 
   return ParseDeclarationAfterDeclaratorAndAttributes(D, TemplateInfo);

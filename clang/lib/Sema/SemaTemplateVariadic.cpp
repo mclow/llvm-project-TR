@@ -268,6 +268,16 @@ namespace {
 
       return inherited::TraverseLambdaCapture(Lambda, C, Init);
     }
+
+    bool TraverseUnresolvedLookupExpr(UnresolvedLookupExpr *E) {
+      if (E->getNumDecls() == 1) {
+        NamedDecl *ND = *E->decls_begin();
+        if (auto *TTP = llvm::dyn_cast<TemplateTemplateParmDecl>(ND);
+            TTP && TTP->isParameterPack())
+          addUnexpanded(ND, E->getBeginLoc());
+      }
+      return inherited::TraverseUnresolvedLookupExpr(E);
+    };
   };
 }
 

@@ -1893,7 +1893,7 @@ static bool IsStructurallyEquivalent(StructuralEquivalenceContext &Context,
   }
 
   // Check template parameter lists.
-  return IsStructurallyEquivalent(Context, D1->getTemplateParameters(),
+  return D1->kind() == D2->kind() && IsStructurallyEquivalent(Context, D1->getTemplateParameters(),
                                   D2->getTemplateParameters());
 }
 

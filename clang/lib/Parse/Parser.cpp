@@ -1876,38 +1876,26 @@ Parser::TryAnnotateName(CorrectionCandidateCallback *CCC,
       AnnotateScopeToken(SS, !WasScopeAnnotation);
     return ANK_Success;
 
-  case Sema::NC_TypeTemplate:
+  case Sema::NC_TypeTemplate: {
+    if (Next.isNot(tok::less)) {
+      // This may be a type template being used as a template template argument.
+      if (SS.isNotEmpty())
+        AnnotateScopeToken(SS, !WasScopeAnnotation);
+      return ANK_TemplateName;
+    }
+    [[fallthrough]];
+  }
+  case Sema::NC_Concept:
   case Sema::NC_VarTemplate:
   case Sema::NC_FunctionTemplate:
   case Sema::NC_UndeclaredTemplate: {
-    if (Next.isNot(tok::less)) {
-      // This may be a type template being used as a template template argument.
-      if (SS.isNotEmpty())
-        AnnotateScopeToken(SS, !WasScopeAnnotation);
-      return ANK_TemplateName;
-    }
-    // We have a type, variable or function template followed by '<'.
-    ConsumeToken();
+    bool IsConceptName = Classification.getKind() == Sema::NC_Concept;
+    // We have a template name followed by '<'. Consume the identifier token so
+    // we reach the '<' and annotate it.
+    if (Next.is(tok::less))
+      ConsumeToken();
     UnqualifiedId Id;
     Id.setIdentifier(Name, NameLoc);
-    if (AnnotateTemplateIdToken(
-            TemplateTy::make(Classification.getTemplateName()),
-            Classification.getTemplateNameKind(), SS, SourceLocation(), Id))
-      return ANK_Error;
-    return ANK_Success;
-  }
-  case Sema::NC_Concept: {
-    if (Next.isNot(tok::less)) {
-      // This may be a type template being used as a template template argument.
-      if (SS.isNotEmpty())
-        AnnotateScopeToken(SS, !WasScopeAnnotation);
-      return ANK_TemplateName;
-    }
-      // We have a concept name followed by '<'. Consume the identifier token so
-      // we reach the '<' and annotate it.
-    UnqualifiedId Id;
-    Id.setIdentifier(Name, NameLoc);
-    ConsumeToken();
     if (AnnotateTemplateIdToken(
             TemplateTy::make(Classification.getTemplateName()),
             Classification.getTemplateNameKind(), SS, SourceLocation(), Id,

@@ -1912,8 +1912,7 @@ Parser::TryAnnotateName(CorrectionCandidateCallback *CCC,
       AnnotateScopeToken(SS, !WasScopeAnnotation);
     return ANK_Success;
 
-  case Sema::NC_TypeTemplate:
-  case Sema::NC_VarTemplate: {
+  case Sema::NC_TypeTemplate: {
     if (Next.isNot(tok::less)) {
       // This may be a type or variable template being used as a template template argument.
       if (SS.isNotEmpty())
@@ -1922,6 +1921,7 @@ Parser::TryAnnotateName(CorrectionCandidateCallback *CCC,
     }
     [[fallthrough]];
   }
+  case Sema::NC_VarTemplate:
   case Sema::NC_Concept:
   case Sema::NC_FunctionTemplate:
   case Sema::NC_UndeclaredTemplate: {

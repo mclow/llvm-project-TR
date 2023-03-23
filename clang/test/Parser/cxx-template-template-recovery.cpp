@@ -24,13 +24,13 @@ auto V3 = true; //expected-note {{here}}
 template <template <typename T> typename C>
 constexpr bool test = true;
 
-static_assert(test<a::C1>); //expected-error {{too few template arguments for concept 'C1'}}
-static_assert(test<a::b::C2>); //expected-error {{too few template arguments for concept 'C2'}}
-static_assert(test<C3>); //expected-error {{too few template arguments for concept 'C3'}}
+static_assert(test<a::C1>); //expected-error {{template argument does not refer to a class or alias template, or template template parameter}}
+static_assert(test<a::b::C2>); //expected-error {{template argument does not refer to a class or alias template, or template template parameter}}
+static_assert(test<C3>); //expected-error {{template argument does not refer to a class or alias template, or template template parameter}}
 
-static_assert(test<a::V1>); //expected-error {{use of variable template 'V1' requires template arguments}}
-static_assert(test<a::b::V2>); //expected-error {{use of variable template 'V2' requires template arguments}}
-static_assert(test<V3>); //expected-error {{use of variable template 'V3' requires template arguments}}
+static_assert(test<a::V1>); //expected-error {{template argument does not refer to a class or alias template, or template template parameter}}
+static_assert(test<a::b::V2>); //expected-error {{template argument does not refer to a class or alias template, or template template parameter}}
+static_assert(test<V3>); //expected-error {{template argument does not refer to a class or alias template, or template template parameter}}
 
 
 void f() {

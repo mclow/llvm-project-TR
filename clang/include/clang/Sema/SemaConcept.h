@@ -143,11 +143,29 @@ struct NormalizedConstraint {
     return Constraint.get<AtomicConstraint *>();
   }
 
+  void dump() {
+    if (isAtomic()) {
+      llvm::outs() << getAtomicConstraint()->ConstraintExpr;
+      return;
+    }
+    getLHS().dump();
+    llvm::outs() << "\n";
+    llvm::outs() << (getCompoundKind() ==
+                             CompoundConstraintKind::CCK_Conjunction
+                         ? "&&"
+                         : "||")
+                 << "\n";
+    getRHS().dump();
+    llvm::outs() << "\n";
+  }
+
 private:
   static std::optional<NormalizedConstraint>
-  fromConstraintExprs(Sema &S, NamedDecl *D, ArrayRef<const Expr *> E);
+  fromConstraintExprs(Sema &S, NamedDecl *D, ArrayRef<const Expr *> E,
+                      TemplateArgumentList *TemplateArgs = nullptr);
   static std::optional<NormalizedConstraint>
-  fromConstraintExpr(Sema &S, NamedDecl *D, const Expr *E);
+  fromConstraintExpr(Sema &S, NamedDecl *D, const Expr *E,
+                     TemplateArgumentList *TemplateArgs = nullptr);
 };
 
 } // clang

@@ -84,5 +84,30 @@ void test () {
     S4<C> sE; // expected-error {{template template argument has different template parameters than its corresponding template template parameter}}
     S4<CI> s4;
     S3<CI> sE; // expected-error {{template template argument has different template parameters than its corresponding template template parameter}}
+}
+
+namespace subsumption {
+
+template <typename T>
+concept A = true;
+
+template <typename T>
+concept B = A<T> && true;
+
+template <typename T>
+concept C = true;
+
+template <typename T>
+concept D = C<T> && true;
+
+template <typename ABC, template <typename> concept... C>
+concept Apply = (C<ABC> && ...);
+
+constexpr int f(Apply<A, C> auto) {return 1;}
+constexpr int f(Apply<B, D> auto) {return 2;}
+
+int test() {
+   static_assert(f(1) == 2);
+}
 
 }

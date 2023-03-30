@@ -4975,7 +4975,9 @@ void Sema::InstantiateFunctionDefinition(SourceLocation PointOfInstantiation,
   Function->setInnerLocStart(PatternDecl->getInnerLocStart());
 
   EnterExpressionEvaluationContext EvalContext(
-      *this, Sema::ExpressionEvaluationContext::PotentiallyEvaluated);
+      *this, Function->isConsteval() ?
+                  Sema::ExpressionEvaluationContext::ImmediateFunctionContext
+                 :Sema::ExpressionEvaluationContext::PotentiallyEvaluated);
 
   // Introduce a new scope where local variable instantiations will be
   // recorded, unless we're actually a member function within a local

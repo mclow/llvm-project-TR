@@ -17727,6 +17727,9 @@ Sema::PushExpressionEvaluationContext(
   ExprEvalContexts.back().InDiscardedStatement =
       ExprEvalContexts[ExprEvalContexts.size() - 2]
           .isDiscardedStatementContext();
+
+  //if(NewContext==ExpressionEvaluationContext::PotentiallyEvaluated||
+  //    NewContext==ExpressionEvaluationContext::PotentiallyEvaluatedIfUsed)
   ExprEvalContexts.back().InImmediateFunctionContext =
       ExprEvalContexts[ExprEvalContexts.size() - 2]
           .isImmediateFunctionContext();
@@ -18228,12 +18231,12 @@ static OdrUseContext isOdrUseContext(Sema &SemaRef) {
       return OdrUseContext::None;
 
     case Sema::ExpressionEvaluationContext::ConstantEvaluated:
-    case Sema::ExpressionEvaluationContext::ImmediateFunctionContext:
     case Sema::ExpressionEvaluationContext::PotentiallyEvaluated:
       Result = OdrUseContext::Used;
       break;
 
     case Sema::ExpressionEvaluationContext::DiscardedStatement:
+    case Sema::ExpressionEvaluationContext::ImmediateFunctionContext:
       Result = OdrUseContext::FormallyOdrUsed;
       break;
 
@@ -20084,7 +20087,8 @@ void Sema::MarkDeclRefReferenced(DeclRefExpr *E, const Expr *Base) {
         !isCheckingDefaultArgumentOrInitializer() && FD->isConsteval() &&
         !RebuildingImmediateInvocation && !FD->isDependentContext())
       ExprEvalContexts.back().ReferenceToConsteval.insert(E);
-  MarkExprReferenced(*this, E->getLocation(), E->getDecl(), E, OdrUse,
+  if(!isImmediateFunctionContext())
+    MarkExprReferenced(*this, E->getLocation(), E->getDecl(), E, OdrUse,
                      RefsMinusAssignments);
 }
 

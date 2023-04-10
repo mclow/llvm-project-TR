@@ -128,7 +128,7 @@ protected:
   NamedDecl *FoundDecl;
 
   /// \brief The concept named.
-  NamedDecl *NamedConcept;
+  TemplateDecl *NamedConcept;
 
   /// \brief The template argument list source info used to specialize the
   /// concept.
@@ -137,7 +137,7 @@ protected:
 public:
   ConceptReference(NestedNameSpecifierLoc NNS, SourceLocation TemplateKWLoc,
                    DeclarationNameInfo ConceptNameInfo, NamedDecl *FoundDecl,
-                   NamedDecl *NamedConcept,
+                   TemplateDecl *NamedConcept,
                    const ASTTemplateArgumentListInfo *ArgsAsWritten)
       : NestedNameSpec(NNS), TemplateKWLoc(TemplateKWLoc),
         ConceptName(ConceptNameInfo), FoundDecl(FoundDecl),
@@ -162,7 +162,7 @@ public:
     return FoundDecl;
   }
 
-  NamedDecl *getNamedConcept() const { return NamedConcept; }
+  TemplateDecl *getNamedConcept() const { return NamedConcept; }
 
   const ASTTemplateArgumentListInfo *getTemplateArgsAsWritten() const {
     return ArgsAsWritten;
@@ -183,7 +183,7 @@ class TypeConstraint : public ConceptReference {
 public:
   TypeConstraint(NestedNameSpecifierLoc NNS,
                  DeclarationNameInfo ConceptNameInfo, NamedDecl *FoundDecl,
-                 NamedDecl *NamedConcept,
+                 TemplateDecl *NamedConcept,
                  const ASTTemplateArgumentListInfo *ArgsAsWritten,
                  Expr *ImmediatelyDeclaredConstraint)
       : ConceptReference(NNS, /*TemplateKWLoc=*/SourceLocation(),

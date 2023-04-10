@@ -1376,7 +1376,7 @@ public:
 
   void setTypeConstraint(NestedNameSpecifierLoc NNS,
                          DeclarationNameInfo NameInfo, NamedDecl *FoundDecl,
-                         ConceptDecl *CD,
+                         NamedDecl *CD,
                          const ASTTemplateArgumentListInfo *ArgsAsWritten,
                          Expr *ImmediatelyDeclaredConstraint);
 
@@ -1784,6 +1784,12 @@ public:
 
   TemplateNameKind kind() const {
       return ParameterKind;
+  }
+
+  bool isTypeConceptTemplateParam() const {
+    return kind() == TemplateNameKind::TNK_Concept_template &&
+           getTemplateParameters()->size() > 0 &&
+           isa<TemplateTypeParmDecl>(getTemplateParameters()->getParam(0));
   }
 
   // Implement isa/cast/dyncast/etc.
@@ -3438,7 +3444,12 @@ inline TemplateDecl *getAsTypeTemplateDecl(Decl *D) {
   return TD && (isa<ClassTemplateDecl>(TD) ||
                 isa<ClassTemplatePartialSpecializationDecl>(TD) ||
                 isa<TypeAliasTemplateDecl>(TD) ||
-                isa<TemplateTemplateParmDecl>(TD))
+                [&]() {
+                  if (TemplateTemplateParmDecl *TTP =
+                          dyn_cast<TemplateTemplateParmDecl>(TD))
+                    return TTP->kind() == TNK_Type_template;
+                  return false;
+                }())
              ? TD
              : nullptr;
 }

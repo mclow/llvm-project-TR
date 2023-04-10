@@ -5835,7 +5835,7 @@ QualType ASTContext::getUnaryTransformType(QualType BaseType,
 
 QualType ASTContext::getAutoTypeInternal(
     QualType DeducedType, AutoTypeKeyword Keyword, bool IsDependent,
-    bool IsPack, ConceptDecl *TypeConstraintConcept,
+    bool IsPack, TemplateDecl *TypeConstraintConcept,
     ArrayRef<TemplateArgument> TypeConstraintArgs, bool IsCanon) const {
   if (DeducedType.isNull() && Keyword == AutoTypeKeyword::Auto &&
       !TypeConstraintConcept && !IsDependent)
@@ -5890,7 +5890,7 @@ QualType ASTContext::getAutoTypeInternal(
 QualType
 ASTContext::getAutoType(QualType DeducedType, AutoTypeKeyword Keyword,
                         bool IsDependent, bool IsPack,
-                        ConceptDecl *TypeConstraintConcept,
+                        TemplateDecl *TypeConstraintConcept,
                         ArrayRef<TemplateArgument> TypeConstraintArgs) const {
   assert((!IsPack || IsDependent) && "only use IsPack for a dependent pack");
   assert((!IsDependent || DeducedType.isNull()) &&
@@ -13103,8 +13103,8 @@ static QualType getCommonSugarTypeNode(ASTContext &Ctx, const Type *X,
     if (KW != AY->getKeyword())
       return QualType();
 
-    ConceptDecl *CD = ::getCommonDecl(AX->getTypeConstraintConcept(),
-                                      AY->getTypeConstraintConcept());
+    TemplateDecl *CD = ::getCommonDecl(AX->getTypeConstraintConcept(),
+                                       AY->getTypeConstraintConcept());
     SmallVector<TemplateArgument, 8> As;
     if (CD &&
         getCommonTemplateArguments(Ctx, As, AX->getTypeConstraintArguments(),

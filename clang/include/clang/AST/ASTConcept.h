@@ -128,7 +128,7 @@ protected:
   NamedDecl *FoundDecl;
 
   /// \brief The concept named.
-  ConceptDecl *NamedConcept;
+  NamedDecl *NamedConcept;
 
   /// \brief The template argument list source info used to specialize the
   /// concept.
@@ -137,7 +137,7 @@ protected:
 public:
   ConceptReference(NestedNameSpecifierLoc NNS, SourceLocation TemplateKWLoc,
                    DeclarationNameInfo ConceptNameInfo, NamedDecl *FoundDecl,
-                   ConceptDecl *NamedConcept,
+                   NamedDecl *NamedConcept,
                    const ASTTemplateArgumentListInfo *ArgsAsWritten)
       : NestedNameSpec(NNS), TemplateKWLoc(TemplateKWLoc),
         ConceptName(ConceptNameInfo), FoundDecl(FoundDecl),
@@ -162,9 +162,7 @@ public:
     return FoundDecl;
   }
 
-  ConceptDecl *getNamedConcept() const {
-    return NamedConcept;
-  }
+  NamedDecl *getNamedConcept() const { return NamedConcept; }
 
   const ASTTemplateArgumentListInfo *getTemplateArgsAsWritten() const {
     return ArgsAsWritten;
@@ -185,12 +183,13 @@ class TypeConstraint : public ConceptReference {
 public:
   TypeConstraint(NestedNameSpecifierLoc NNS,
                  DeclarationNameInfo ConceptNameInfo, NamedDecl *FoundDecl,
-                 ConceptDecl *NamedConcept,
+                 NamedDecl *NamedConcept,
                  const ASTTemplateArgumentListInfo *ArgsAsWritten,
-                 Expr *ImmediatelyDeclaredConstraint) :
-      ConceptReference(NNS, /*TemplateKWLoc=*/SourceLocation(), ConceptNameInfo,
-                       FoundDecl, NamedConcept, ArgsAsWritten),
-      ImmediatelyDeclaredConstraint(ImmediatelyDeclaredConstraint) {}
+                 Expr *ImmediatelyDeclaredConstraint)
+      : ConceptReference(NNS, /*TemplateKWLoc=*/SourceLocation(),
+                         ConceptNameInfo, FoundDecl, NamedConcept,
+                         ArgsAsWritten),
+        ImmediatelyDeclaredConstraint(ImmediatelyDeclaredConstraint) {}
 
   /// \brief Get the immediately-declared constraint expression introduced by
   /// this type-constraint, that is - the constraint expression that is added to

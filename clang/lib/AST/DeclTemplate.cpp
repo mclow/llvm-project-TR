@@ -697,8 +697,9 @@ bool TemplateTypeParmDecl::isParameterPack() const {
   return getTypeForDecl()->castAs<TemplateTypeParmType>()->isParameterPack();
 }
 
-void TemplateTypeParmDecl::setTypeConstraint(NestedNameSpecifierLoc NNS,
-    DeclarationNameInfo NameInfo, NamedDecl *FoundDecl, ConceptDecl *CD,
+void TemplateTypeParmDecl::setTypeConstraint(
+    NestedNameSpecifierLoc NNS, DeclarationNameInfo NameInfo,
+    NamedDecl *FoundDecl, NamedDecl *CD,
     const ASTTemplateArgumentListInfo *ArgsAsWritten,
     Expr *ImmediatelyDeclaredConstraint) {
   assert(HasTypeConstraint &&

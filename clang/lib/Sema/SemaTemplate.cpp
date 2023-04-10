@@ -1167,7 +1167,7 @@ bool Sema::BuildTypeConstraint(const CXXScopeSpec &SS,
     return true;
 
   TemplateName TN = TypeConstr->Template.get();
-  ConceptDecl *CD = cast<ConceptDecl>(TN.getAsTemplateDecl());
+  TemplateDecl *CD = cast<TemplateDecl>(TN.getAsTemplateDecl());
 
   DeclarationNameInfo ConceptName(DeclarationName(TypeConstr->Name),
                                   TypeConstr->TemplateNameLoc);

@@ -3129,8 +3129,20 @@ public:
   /// Determines whether this expression had explicit template arguments.
   bool hasExplicitTemplateArgs() const {
     if (!hasTemplateKWAndArgsInfo())
-      return getTemplateKeywordLoc().isValid();
-    return getTrailingASTTemplateKWAndArgsInfo()->NumTemplateArgs;
+      return false;
+    // FIXME corentin: deduced function types can have "hidden" args and no <
+    // investigate that further, but ultiumately maybe we want to model concepts reference
+    // with another kind of expression.
+    return isConceptTemplateParameterReference() ?
+        getTrailingASTTemplateKWAndArgsInfo()->NumTemplateArgs : getLAngleLoc().isValid();
+  }
+
+  bool isConceptTemplateParameterReference() const {
+    return getNumDecls() == 1 && [&] () {
+      if(auto* TTP = llvm::dyn_cast_or_null<TemplateTemplateParmDecl>(getTrailingResults()->getDecl()))
+        return TTP->kind() == TNK_Concept_template;
+      return false;
+    }();
   }
 
   TemplateArgumentLoc const *getTemplateArgs() const {

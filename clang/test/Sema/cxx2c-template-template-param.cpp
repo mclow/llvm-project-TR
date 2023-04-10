@@ -111,3 +111,160 @@ int test() {
 }
 
 }
+
+namespace template_type_constraints {
+
+
+template <typename T>
+concept Unary = true;
+template <typename T, typename = int>
+concept BinaryDefaulted = true;
+
+template <typename T>
+concept UnaryFalse = false; // expected-note 3{{because 'false' evaluated to false}}
+template <typename T, typename = int>
+concept BinaryDefaultedFalse = false;
+
+template <template <typename...> concept C, typename T>
+struct S {
+    template <C TT> // expected-note {{because 'int' does not satisfy 'UnaryFalse'}}
+    void f(TT); // expected-note {{ignored}}
+    void g(C auto); // expected-note {{ignored}} \
+                    // expected-note {{because 'int' does not satisfy 'UnaryFalse'}}
+
+    auto h() -> C auto { // expected-error {{deduced type 'int' does not satisfy 'UnaryFalse'}}
+        return 0;
+    };
+
+    void test() {
+        C auto a = 0;
+    }
+};
+
+template <template <typename...> concept C, typename T>
+struct SArg {
+    template <C<int> TT>
+    void f(TT);
+    void g(C<int> auto);
+
+    auto h() -> C<int> auto {
+        return 0;
+    };
+    void test() {
+        C<int> auto a = 0;
+    }
+};
+
+void test() {
+    S<Unary, int> s;
+    s.f(0);
+    s.g(0);
+    s.h();
+    S<BinaryDefaulted, int> s2;
+    s2.f(0);
+    s2.g(0);
+    s2.h();
+
+    SArg<BinaryDefaulted, int> s3;
+    s3.f(0);
+    s3.g(0);
+    s3.h();
+}
+
+void test_errors() {
+    S<UnaryFalse, int> s;
+    s.f(0); // expected-error {{no matching member function for call to 'f'}}
+    s.g(0); // expected-error {{no matching member function for call to 'g'}}
+    s.h(); // expected-note {{in instantiation of member function 'S<UnaryFalse, int>::h'}}
+}
+
+}
+
+template <typename T>
+concept Unary = true;
+template <typename T, typename = int>
+concept BinaryDefaulted = true;
+
+template <typename T>
+concept UnaryFalse = false; // expected-note 3{{because 'false' evaluated to false}}
+template <typename T, typename = int>
+concept BinaryDefaultedFalse = false;
+
+template <template <typename...> concept C, typename T>
+struct S {
+    template <C TT> // expected-note {{because 'int' does not satisfy 'UnaryFalse'}}
+    void f(TT); // expected-note {{ignored}}
+    void g(C auto); // expected-note {{ignored}} \
+                    // expected-note {{because 'int' does not satisfy 'UnaryFalse'}}
+
+    auto h() -> C auto { // expected-error {{deduced type 'int' does not satisfy 'UnaryFalse'}}
+        return 0;
+    };
+
+    void test() {
+        C auto a = 0;
+    }
+};
+
+template <template <typename...> concept C, typename T>
+struct SArg {
+    template <C<int> TT>
+    void f(TT);
+    void g(C<int> auto);
+
+    auto h() -> C<int> auto {
+        return 0;
+    };
+    void test() {
+        C<int> auto a = 0;
+    }
+};
+
+void test() {
+    S<Unary, int> s;
+    s.f(0);
+    s.g(0);
+    s.h();
+    S<BinaryDefaulted, int> s2;
+    s2.f(0);
+    s2.g(0);
+    s2.h();
+
+    SArg<BinaryDefaulted, int> s3;
+    s3.f(0);
+    s3.g(0);
+    s3.h();
+}
+
+void test_errors() {
+    S<UnaryFalse, int> s;
+    s.f(0); // expected-error {{no matching member function for call to 'f'}}
+    s.g(0); // expected-error {{no matching member function for call to 'g'}}
+    s.h(); // expected-note {{in instantiation of member function 'S<UnaryFalse, int>::h'}}
+}
+
+namespace non_type {
+
+template <auto>
+concept Unary = true;
+
+template <template <auto> concept C> // expected-note {{template parameter is declared here}}
+struct S {
+    template <C Foo> // expected-error {{concept named in type constraint is not a type concept}}
+    void f();
+    // FIXME, bad diagnostic
+    void g(C auto);  // expected-error{{template argument for non-type template parameter must be an expression}}
+    // FIXME, missing diagnostics
+    auto h() -> C auto {
+    }
+    // FIXME, missing diagnostics
+    void i() {
+        C auto a = 0;
+    }
+};
+void test() {
+    S<Unary> s;
+}
+
+
+}

@@ -3127,7 +3127,11 @@ public:
   bool hasTemplateKeyword() const { return getTemplateKeywordLoc().isValid(); }
 
   /// Determines whether this expression had explicit template arguments.
-  bool hasExplicitTemplateArgs() const { return getLAngleLoc().isValid(); }
+  bool hasExplicitTemplateArgs() const {
+    if (!hasTemplateKWAndArgsInfo())
+      return getTemplateKeywordLoc().isValid();
+    return getTrailingASTTemplateKWAndArgsInfo()->NumTemplateArgs;
+  }
 
   TemplateArgumentLoc const *getTemplateArgs() const {
     if (!hasExplicitTemplateArgs())

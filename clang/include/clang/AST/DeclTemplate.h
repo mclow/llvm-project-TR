@@ -1753,6 +1753,12 @@ public:
       return ParameterKind;
   }
 
+  bool isTypeConceptTemplateParam() const {
+    return kind() == TemplateNameKind::TNK_Concept_template &&
+           getTemplateParameters()->size() > 0 &&
+           isa<TemplateTypeParmDecl>(getTemplateParameters()->getParam(0));
+  }
+
   // Implement isa/cast/dyncast/etc.
   static bool classof(const Decl *D) { return classofKind(D->getKind()); }
   static bool classofKind(Kind K) { return K == TemplateTemplateParm; }
@@ -3342,7 +3348,12 @@ inline TemplateDecl *getAsTypeTemplateDecl(Decl *D) {
   return TD && (isa<ClassTemplateDecl>(TD) ||
                 isa<ClassTemplatePartialSpecializationDecl>(TD) ||
                 isa<TypeAliasTemplateDecl>(TD) ||
-                isa<TemplateTemplateParmDecl>(TD))
+                [&]() {
+                  if (TemplateTemplateParmDecl *TTP =
+                          dyn_cast<TemplateTemplateParmDecl>(TD))
+                    return TTP->kind() == TNK_Type_template;
+                  return false;
+                }())
              ? TD
              : nullptr;
 }

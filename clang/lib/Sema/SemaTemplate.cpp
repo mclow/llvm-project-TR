@@ -1112,12 +1112,27 @@ makeTemplateArgumentListInfo(Sema &S, TemplateIdAnnotation &TemplateId) {
 bool Sema::CheckTypeConstraint(TemplateIdAnnotation *TypeConstr) {
 
   TemplateName TN = TypeConstr->Template.get();
-  ConceptDecl *CD = cast<ConceptDecl>(TN.getAsTemplateDecl());
+  NamedDecl *CD = nullptr;
+  bool IsTypeConcept = false;
+  bool RequiresArguments = false;
+  if (TemplateTemplateParmDecl *TTP =
+          llvm::dyn_cast<TemplateTemplateParmDecl>(TN.getAsTemplateDecl())) {
+    IsTypeConcept = TTP->isTypeConceptTemplateParam();
+    RequiresArguments =
+        TTP->getTemplateParameters()->getMinRequiredArguments() > 1;
+    CD = TTP;
+  } else {
+    CD = TN.getAsTemplateDecl();
+    IsTypeConcept = cast<ConceptDecl>(CD)->isTypeConcept();
+    RequiresArguments = cast<ConceptDecl>(CD)
+                            ->getTemplateParameters()
+                            ->getMinRequiredArguments() > 1;
+  }
 
   // C++2a [temp.param]p4:
   //     [...] The concept designated by a type-constraint shall be a type
   //     concept ([temp.concept]).
-  if (!CD->isTypeConcept()) {
+  if (!IsTypeConcept) {
     Diag(TypeConstr->TemplateNameLoc,
          diag::err_type_constraint_non_type_concept);
     return true;
@@ -1125,8 +1140,7 @@ bool Sema::CheckTypeConstraint(TemplateIdAnnotation *TypeConstr) {
 
   bool WereArgsSpecified = TypeConstr->LAngleLoc.isValid();
 
-  if (!WereArgsSpecified &&
-      CD->getTemplateParameters()->getMinRequiredArguments() > 1) {
+  if (!WereArgsSpecified && RequiresArguments) {
     Diag(TypeConstr->TemplateNameLoc,
          diag::err_type_constraint_missing_arguments)
         << CD;
@@ -1177,13 +1191,12 @@ bool Sema::BuildTypeConstraint(const CXXScopeSpec &SS,
       ConstrainedParameter, EllipsisLoc);
 }
 
-template<typename ArgumentLocAppender>
+template <typename ArgumentLocAppender>
 static ExprResult formImmediatelyDeclaredConstraint(
     Sema &S, NestedNameSpecifierLoc NS, DeclarationNameInfo NameInfo,
-    ConceptDecl *NamedConcept, SourceLocation LAngleLoc,
-    SourceLocation RAngleLoc, QualType ConstrainedType,
-    SourceLocation ParamNameLoc, ArgumentLocAppender Appender,
-    SourceLocation EllipsisLoc) {
+    NamedDecl *NamedConcept, SourceLocation LAngleLoc, SourceLocation RAngleLoc,
+    QualType ConstrainedType, SourceLocation ParamNameLoc,
+    ArgumentLocAppender Appender, SourceLocation EllipsisLoc) {
 
   TemplateArgumentListInfo ConstraintArgs;
   ConstraintArgs.addArgument(
@@ -1199,11 +1212,29 @@ static ExprResult formImmediatelyDeclaredConstraint(
   //     constraint of T. [...]
   CXXScopeSpec SS;
   SS.Adopt(NS);
-  ExprResult ImmediatelyDeclaredConstraint = S.CheckConceptTemplateId(
-      SS, /*TemplateKWLoc=*/SourceLocation(), NameInfo,
-      /*FoundDecl=*/NamedConcept, NamedConcept, &ConstraintArgs);
-  if (ImmediatelyDeclaredConstraint.isInvalid() || !EllipsisLoc.isValid())
-    return ImmediatelyDeclaredConstraint;
+  ExprResult ImmediatelyDeclaredConstraint;
+  if (auto *CD = dyn_cast<ConceptDecl>(NamedConcept)) {
+    ImmediatelyDeclaredConstraint = S.CheckConceptTemplateId(
+        SS, /*TemplateKWLoc=*/SourceLocation(), NameInfo,
+        /*FoundDecl=*/NamedConcept, CD, &ConstraintArgs);
+    if (ImmediatelyDeclaredConstraint.isInvalid() || !EllipsisLoc.isValid())
+      return ImmediatelyDeclaredConstraint;
+  }
+  // We have a template template parameter
+  else {
+    auto *CDT = dyn_cast<TemplateTemplateParmDecl>(NamedConcept);
+    ImmediatelyDeclaredConstraint = S.CheckVarOrConceptTemplateTemplateId(
+        SS, NameInfo, CDT, SourceLocation(), &ConstraintArgs);
+    if (ImmediatelyDeclaredConstraint.isInvalid())
+      return ImmediatelyDeclaredConstraint;
+    UnresolvedSet<1> R;
+    R.addDecl(CDT);
+    ImmediatelyDeclaredConstraint = UnresolvedLookupExpr::Create(
+        S.getASTContext(), nullptr, SS.getWithLocInContext(S.getASTContext()),
+        SourceLocation(), NameInfo, false, &ConstraintArgs, R.begin(), R.end());
+    if (ImmediatelyDeclaredConstraint.isInvalid() || !EllipsisLoc.isValid())
+      return ImmediatelyDeclaredConstraint;
+  }
 
   // C++2a [temp.param]p4:
   //     [...] If T is not a pack, then E is E', otherwise E is (E' && ...).
@@ -1231,7 +1262,7 @@ static ExprResult formImmediatelyDeclaredConstraint(
 /// of arguments for the named concept).
 bool Sema::AttachTypeConstraint(NestedNameSpecifierLoc NS,
                                 DeclarationNameInfo NameInfo,
-                                ConceptDecl *NamedConcept,
+                                NamedDecl *NamedConcept,
                                 const TemplateArgumentListInfo *TemplateArgs,
                                 TemplateTypeParmDecl *ConstrainedParameter,
                                 SourceLocation EllipsisLoc) {

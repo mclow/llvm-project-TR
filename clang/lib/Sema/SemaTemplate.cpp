@@ -1268,7 +1268,7 @@ static ExprResult formImmediatelyDeclaredConstraint(
 /// of arguments for the named concept).
 bool Sema::AttachTypeConstraint(NestedNameSpecifierLoc NS,
                                 DeclarationNameInfo NameInfo,
-                                NamedDecl *NamedConcept, NamedDecl *FoundDecl,
+                                TemplateDecl *NamedConcept, NamedDecl *FoundDecl,
                                 const TemplateArgumentListInfo *TemplateArgs,
                                 TemplateTypeParmDecl *ConstrainedParameter,
                                 SourceLocation EllipsisLoc) {

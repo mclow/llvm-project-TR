@@ -9041,7 +9041,7 @@ public:
 
   bool AttachTypeConstraint(NestedNameSpecifierLoc NS,
                             DeclarationNameInfo NameInfo,
-                            NamedDecl *NamedConcept,  NamedDecl *FoundDecl,
+                            TemplateDecl *NamedConcept,  NamedDecl *FoundDecl,
                             const TemplateArgumentListInfo *TemplateArgs,
                             TemplateTypeParmDecl *ConstrainedParameter,
                             SourceLocation EllipsisLoc);

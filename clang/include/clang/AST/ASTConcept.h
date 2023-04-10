@@ -143,7 +143,7 @@ class ConceptReference {
   NamedDecl *FoundDecl;
 
   /// \brief The concept named.
-  NamedDecl *NamedConcept;
+  TemplateDecl *NamedConcept;
 
   /// \brief The template argument list source info used to specialize the
   /// concept.
@@ -151,7 +151,7 @@ class ConceptReference {
 
   ConceptReference(NestedNameSpecifierLoc NNS, SourceLocation TemplateKWLoc,
                    DeclarationNameInfo ConceptNameInfo, NamedDecl *FoundDecl,
-                   NamedDecl *NamedConcept,
+                   TemplateDecl *NamedConcept,
                    const ASTTemplateArgumentListInfo *ArgsAsWritten)
       : NestedNameSpec(NNS), TemplateKWLoc(TemplateKWLoc),
         ConceptName(ConceptNameInfo), FoundDecl(FoundDecl),
@@ -200,7 +200,7 @@ public:
     return FoundDecl;
   }
 
-  NamedDecl *getNamedConcept() const { return NamedConcept; }
+  TemplateDecl *getNamedConcept() const { return NamedConcept; }
 
   const ASTTemplateArgumentListInfo *getTemplateArgsAsWritten() const {
     return ArgsAsWritten;

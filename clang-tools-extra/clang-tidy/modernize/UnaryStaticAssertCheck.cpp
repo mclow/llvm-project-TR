@@ -21,11 +21,12 @@ void UnaryStaticAssertCheck::registerMatchers(MatchFinder *Finder) {
 void UnaryStaticAssertCheck::check(const MatchFinder::MatchResult &Result) {
   const auto *MatchedDecl =
       Result.Nodes.getNodeAs<StaticAssertDecl>("static_assert");
-  const StringLiteral *AssertMessage = MatchedDecl->getMessage();
+  const Expr *AssertMessage = MatchedDecl->getMessage();
 
   SourceLocation Loc = MatchedDecl->getLocation();
 
-  if (!AssertMessage || AssertMessage->getLength() ||
+  if (!AssertMessage || !isa<StringLiteral>(AssertMessage)
+                     || !cast<StringLiteral>(AssertMessage)->getLength() ||
       AssertMessage->getBeginLoc().isMacroID() || Loc.isMacroID())
     return;
 

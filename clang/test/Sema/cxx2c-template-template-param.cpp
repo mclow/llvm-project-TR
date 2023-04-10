@@ -175,7 +175,7 @@ void test_errors() {
     S<UnaryFalse, int> s;
     s.f(0); // expected-error {{no matching member function for call to 'f'}}
     s.g(0); // expected-error {{no matching member function for call to 'g'}}
-    s.h(); // expected-note {{in instantiation of member function 'S<UnaryFalse, int>::h'}}
+    s.h(); // expected-note {{in instantiation of member function 'template_type_constraints::S<template_type_constraints::UnaryFalse, int>::h'}}
 }
 
 }
@@ -220,7 +220,7 @@ struct SArg {
     }
 };
 
-void test() {
+void test_args() {
     S<Unary, int> s;
     s.f(0);
     s.g(0);
@@ -248,23 +248,17 @@ namespace non_type {
 template <auto>
 concept Unary = true;
 
-template <template <auto> concept C> // expected-note {{template parameter is declared here}}
+template <template <auto> concept C>
 struct S {
     template <C Foo> // expected-error {{concept named in type constraint is not a type concept}}
     void f();
     // FIXME, bad diagnostic
-    void g(C auto);  // expected-error{{template argument for non-type template parameter must be an expression}}
-    // FIXME, missing diagnostics
-    auto h() -> C auto {
+    void g(C auto);  // expected-error{{concept named in type constraint is not a type concept}}
+    auto h() -> C auto {  // expected-error{{concept named in type constraint is not a type concept}}
     }
-    // FIXME, missing diagnostics
     void i() {
-        C auto a = 0;
+        C auto a = 0;  // expected-error{{concept named in type constraint is not a type concept}}
     }
 };
-void test() {
-    S<Unary> s;
-}
-
 
 }

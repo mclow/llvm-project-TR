@@ -1376,7 +1376,7 @@ public:
 
   void setTypeConstraint(NestedNameSpecifierLoc NNS,
                          DeclarationNameInfo NameInfo, NamedDecl *FoundDecl,
-                         NamedDecl *CD,
+                         TemplateDecl *CD,
                          const ASTTemplateArgumentListInfo *ArgsAsWritten,
                          Expr *ImmediatelyDeclaredConstraint);
 

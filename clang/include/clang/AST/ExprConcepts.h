@@ -152,6 +152,10 @@ public:
     return ConceptRef->getLocation();
   }
 
+  ConceptDecl *getNamedConcept() const {
+    return cast<ConceptDecl>(NamedConcept);
+  }
+
   // Iterators
   child_range children() {
     return child_range(child_iterator(), child_iterator());

@@ -1716,6 +1716,12 @@ NamedDecl *Sema::ActOnTemplateTemplateParameter(
       return Param;
     }
 
+    TemplateName Name = DefaultArg.getArgument().getAsTemplateOrTemplatePattern();
+    TemplateDecl *Template = Name.getAsTemplateDecl();
+    if(Template && !CheckDeclCompatibleWithTemplateTemplate(Template, Param, DefaultArg)) {
+      return Param;
+    }
+
     // Check for unexpanded parameter packs.
     if (DiagnoseUnexpandedParameterPack(DefaultArg.getLocation(),
                                         DefaultArg.getArgument().getAsTemplate(),
@@ -7926,17 +7932,25 @@ bool Sema::CheckDeclCompatibleWithTemplateTemplate(TemplateDecl *Template,
     //   partial specializations are not considered even if their
     //   parameter lists match that of the template template parameter.
     //
-    // Note that we also allow template template parameters here, which
-    // will happen when we are dealing with, e.g., class template
-    // partial specializations.
-    if(isa<TemplateTemplateParmDecl>(Template))
-            return true; // ??
-
 
     TemplateNameKind Kind = TNK_Non_template;
     unsigned DiagFoundKind = 0;
 
-    if(isa<ConceptDecl>(Template)) {
+    if(auto * TTP = llvm::dyn_cast<TemplateTemplateParmDecl>(Template)) {
+      switch(TTP->kind()) {
+        case TemplateNameKind::TNK_Concept_template:
+          DiagFoundKind = 3;
+          break;
+        case TemplateNameKind::TNK_Var_template:
+          DiagFoundKind = 2;
+          break;
+        default:
+          DiagFoundKind = 1;
+          break;
+      }
+      Kind = TTP->kind();
+    }
+    else if(isa<ConceptDecl>(Template)) {
         Kind = TemplateNameKind::TNK_Concept_template;
         DiagFoundKind = 3;
     }

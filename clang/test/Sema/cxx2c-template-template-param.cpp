@@ -262,3 +262,88 @@ struct S {
 };
 
 }
+
+namespace default_args {
+
+template <typename T>
+concept Concept = false; // expected-note 2{{template argument refers to a concept 'Concept', here}} \
+                         // expected-note 2{{because 'false' evaluated to false}}
+
+template <typename T>
+constexpr auto Var = false; // expected-note 2{{template argument refers to a variable template 'Var', here}}
+
+template <typename T>
+struct Type; // expected-note 2{{template argument refers to a class template 'Type', here}}
+
+
+template <template <typename> auto = Concept> // expected-error {{template argument does not refer to a variable template, or template template parameter}}
+struct E1;
+
+template <template <typename> auto  = Type> // expected-error {{template argument does not refer to a variable template, or template template parameter}}
+struct E2;
+
+template <template <typename> typename = Concept> // expected-error {{template argument does not refer to a class or alias template, or template template parameter}}
+struct E3;
+
+template <template <typename> typename  = Var> // expected-error {{template argument does not refer to a class or alias template, or template template parameter}}
+struct E4;
+
+template <template <typename> concept  = Var> // expected-error {{template argument does not refer to a concept, or template template parameter}}
+struct E4;
+
+template <template <typename> concept  = Type> // expected-error {{template argument does not refer to a concept, or template template parameter}}
+struct E4;
+
+template <
+    template <typename> concept TConcept, // expected-note 2{{template argument refers to a concept 'TConcept', here}}
+    template <typename> auto TVar, // expected-note 2{{template argument refers to a variable template 'TVar', here}}
+    template <typename> typename TType // expected-note 2{{template argument refers to a class template 'TType', here}}
+>
+struct Nested {
+    template <template <typename> auto = TConcept> // expected-error {{template argument does not refer to a variable template, or template template parameter}}
+    struct E1;
+
+    template <template <typename> auto  = TType> // expected-error {{template argument does not refer to a variable template, or template template parameter}}
+    struct E2;
+
+    template <template <typename> typename = TConcept> // expected-error {{template argument does not refer to a class or alias template, or template template parameter}}
+    struct E3;
+
+    template <template <typename> typename  = TVar> // expected-error {{template argument does not refer to a class or alias template, or template template parameter}}
+    struct E4;
+
+    template <template <typename> concept  = TVar> // expected-error {{template argument does not refer to a concept, or template template parameter}}
+    struct E4;
+
+    template <template <typename> concept  = TType> // expected-error {{template argument does not refer to a concept, or template template parameter}}
+    struct E4;
+};
+
+
+template <template <typename> concept C = Concept>
+struct TestDefaultConcept {
+    template <template <typename> concept CC = C>
+    void f() {
+        static_assert(C<int>); // expected-error {{static assertion failed}} \
+                               // expected-note {{because 'int' does not satisfy 'Concept'}}
+        static_assert(CC<int>);  // expected-error {{static assertion failed}} \
+                                 // expected-note {{because 'int' does not satisfy 'Concept'}}
+    }
+};
+void do_test_concept() {
+    TestDefaultConcept<>{}.f(); // expected-note {{in instantiation}}
+}
+
+template <template <typename> auto V = Var>
+struct TestDefaultVar {
+    template <template <typename> auto VV = V>
+    void f() {
+        static_assert(V<int>); // expected-error {{static assertion failed}}
+        static_assert(VV<int>); // expected-error {{static assertion failed}}
+    }
+};
+void do_test_var() {
+    TestDefaultVar<>{}.f(); // expected-note {{in instantiation}}
+}
+
+}

@@ -95,6 +95,7 @@ class ObjCProtocolDecl;
 class ObjCTypeParamDecl;
 class OMPTraitInfo;
 struct ParsedTargetAttr;
+class PartiallyAppliedConcept;
 class Preprocessor;
 class StoredDeclsMap;
 class TargetAttr;

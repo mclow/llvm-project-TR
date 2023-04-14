@@ -597,6 +597,10 @@ public:
                                  TemplateArgumentLoc &Output,
                                  bool Uneval = false);
 
+  TemplateArgument
+  TransformNamedTemplateTemplateArgument(CXXScopeSpec &SS, TemplateName Name,
+                                         SourceLocation NameLoc);
+
   /// Transform the given set of template arguments.
   ///
   /// By default, this operation transforms all of the template arguments
@@ -621,6 +625,11 @@ public:
                                   bool Uneval = false) {
     return TransformTemplateArguments(Inputs, Inputs + NumInputs, Outputs,
                                       Uneval);
+  }
+
+  bool InjectAdditionalArgumentsFromPartiallyAppliedConcept(
+      TemplateArgumentListInfo &, TemplateTemplateParmDecl *) {
+    return true;
   }
 
   /// Transform the given set of template arguments.
@@ -3861,6 +3870,7 @@ public:
     case TemplateArgument::Pack:
     case TemplateArgument::TemplateExpansion:
     case TemplateArgument::NullPtr:
+    case TemplateArgument::Concept:
       llvm_unreachable("Pack expansion pattern has no parameter packs");
 
     case TemplateArgument::Type:
@@ -4507,6 +4517,15 @@ TreeTransform<Derived>::TransformTemplateName(CXXScopeSpec &SS,
   llvm_unreachable("overloaded function decl survived to here");
 }
 
+template <typename Derived>
+TemplateArgument TreeTransform<Derived>::TransformNamedTemplateTemplateArgument(
+    CXXScopeSpec &SS, TemplateName Name, SourceLocation NameLoc) {
+  TemplateName TN = getDerived().TransformTemplateName(SS, Name, NameLoc);
+  if (TN.isNull())
+    return TemplateArgument();
+  return TemplateArgument(TN);
+}
+
 template<typename Derived>
 void TreeTransform<Derived>::InventTemplateArgumentLoc(
                                          const TemplateArgument &Arg,
@@ -4584,13 +4603,43 @@ bool TreeTransform<Derived>::TransformTemplateArgument(
 
     CXXScopeSpec SS;
     SS.Adopt(QualifierLoc);
-    TemplateName Template = getDerived().TransformTemplateName(
+
+    TemplateArgument Out = getDerived().TransformNamedTemplateTemplateArgument(
         SS, Arg.getAsTemplate(), Input.getTemplateNameLoc());
-    if (Template.isNull())
+    if (Out.isNull())
+      return true;
+    Output = TemplateArgumentLoc(SemaRef.Context, Out, QualifierLoc,
+                                 Input.getTemplateNameLoc());
+    return false;
+  }
+
+  case TemplateArgument::Concept: {
+    PartiallyAppliedConcept *C = Arg.getAsPartiallyAppliedConcept();
+    TemplateDecl *T = cast_or_null<TemplateDecl>(getDerived().TransformDecl(
+        C->getConceptNameLoc(), C->getNamedConcept()));
+    if (!T)
+      return true;
+    DeclarationNameInfo NameInfo = C->getConceptNameInfo();
+    if (NameInfo.getName()) {
+      NameInfo = getDerived().TransformDeclarationNameInfo(NameInfo);
+      if (!NameInfo.getName())
+        return true;
+    }
+
+    TemplateArgumentListInfo NewTemplateArgs;
+    getDerived().TransformTemplateArguments(
+        C->getTemplateArgsAsWritten()->getTemplateArgs(),
+        C->getTemplateArgsAsWritten()->getNumTemplateArgs(), NewTemplateArgs);
+
+    PartiallyAppliedConcept *Transformed = SemaRef.BuildPartiallyAppliedConcept(
+        C->getNestedNameSpecifierLoc(), C->getConceptKWLoc(), NameInfo, T,
+        NewTemplateArgs);
+    if (!Transformed)
       return true;
 
-    Output = TemplateArgumentLoc(SemaRef.Context, TemplateArgument(Template),
-                                 QualifierLoc, Input.getTemplateNameLoc());
+    Output = TemplateArgumentLoc(SemaRef.Context, TemplateArgument(Transformed),
+                                 C->getNestedNameSpecifierLoc(),
+                                 NameInfo.getLoc(), SourceLocation());
     return false;
   }
 
@@ -12645,6 +12694,11 @@ TreeTransform<Derived>::TransformUnresolvedLookupExpr(
                                               TransArgs)) {
     R.clear();
     return ExprError();
+  }
+
+  if (Old->isConceptTemplateParameterReference()) {
+    getDerived().InjectAdditionalArgumentsFromPartiallyAppliedConcept(
+        TransArgs, Old->getTemplateTemplateParameterDecl());
   }
 
   return getDerived().RebuildTemplateIdExpr(SS, TemplateKWLoc, R,

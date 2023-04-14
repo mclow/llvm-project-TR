@@ -397,6 +397,7 @@ public:
 
   typedef OpaquePtr<DeclGroupRef> DeclGroupPtrTy;
   typedef OpaquePtr<TemplateName> TemplateTy;
+  typedef OpaquePtr<PartiallyAppliedConcept> ConceptTy;
   typedef OpaquePtr<QualType> TypeTy;
 
   OpenCLOptions OpenCLFeatures;
@@ -8316,6 +8317,15 @@ public:
       const UnqualifiedId &Name, ParsedType ObjectType, bool EnteringContext,
       TemplateTy &Template, bool AllowInjectedClassName = false);
 
+  PartiallyAppliedConcept *BuildPartiallyAppliedConcept(
+      NestedNameSpecifierLoc NNS, SourceLocation ConceptKWLoc,
+      DeclarationNameInfo ConceptName, TemplateDecl *TD,
+      const TemplateArgumentListInfo &TemplateArgs);
+  PartiallyAppliedConcept *
+  ActOnPartiallyAppliedConcept(Scope *S, CXXScopeSpec &SS,
+                               SourceLocation ConceptKWLoc,
+                               TemplateIdAnnotation *TemplateId);
+
   DeclResult ActOnClassTemplateSpecialization(
       Scope *S, unsigned TagSpec, TagUseKind TUK, SourceLocation KWLoc,
       SourceLocation ModulePrivateLoc, CXXScopeSpec &SS,
@@ -8451,6 +8461,11 @@ public:
                                    TemplateArgument &SugaredConverted,
                                    TemplateArgument &CanonicalConverted,
                                    CheckTemplateArgumentKind CTAK);
+  bool
+  CheckPartiallyAppliedConceptTemplateArgument(TemplateTemplateParmDecl *Param,
+                                               TemplateParameterList *Params,
+                                               TemplateArgumentLoc &Arg);
+
   bool CheckTemplateTemplateArgument(TemplateTemplateParmDecl *Param,
                                      TemplateParameterList *Params,
                                      TemplateArgumentLoc &Arg);

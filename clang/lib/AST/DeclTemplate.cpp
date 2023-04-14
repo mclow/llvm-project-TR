@@ -1558,7 +1558,8 @@ BuiltinTemplateDecl::BuiltinTemplateDecl(const ASTContext &C, DeclContext *DC,
                    createBuiltinTemplateParameterList(C, DC, BTK)),
       BTK(BTK) {}
 
-void TypeConstraint::print(llvm::raw_ostream &OS, PrintingPolicy Policy) const {
+void ConceptReference::print(llvm::raw_ostream &OS,
+                             PrintingPolicy Policy) const {
   if (NestedNameSpec)
     NestedNameSpec.getNestedNameSpecifier()->print(OS, Policy);
   ConceptName.printName(OS, Policy);

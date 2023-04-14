@@ -173,6 +173,8 @@ public:
   bool hasExplicitTemplateArgs() const {
     return ArgsAsWritten != nullptr;
   }
+
+  void print(llvm::raw_ostream &OS, PrintingPolicy Policy) const;
 };
 
 class TypeConstraint : public ConceptReference {
@@ -197,8 +199,55 @@ public:
   Expr *getImmediatelyDeclaredConstraint() const {
     return ImmediatelyDeclaredConstraint;
   }
+};
 
-  void print(llvm::raw_ostream &OS, PrintingPolicy Policy) const;
+class PartiallyAppliedConcept : public ConceptReference,
+                                public llvm::FoldingSetNode {
+
+  SourceLocation ConceptKWLoc;
+  PartiallyAppliedConcept(NestedNameSpecifierLoc NNS,
+                          DeclarationNameInfo ConceptNameInfo,
+                          SourceLocation ConceptKWLoc, NamedDecl *FoundDecl,
+                          TemplateDecl *NamedConcept,
+                          const ASTTemplateArgumentListInfo *ArgsAsWritten)
+      : ConceptReference(NNS, /*TemplateKWLoc=*/SourceLocation(),
+                         ConceptNameInfo, FoundDecl, NamedConcept,
+                         ArgsAsWritten),
+        ConceptKWLoc(ConceptKWLoc) {}
+
+public:
+  static PartiallyAppliedConcept *
+  Create(const ASTContext &C, NestedNameSpecifierLoc NNS,
+         DeclarationNameInfo ConceptNameInfo, SourceLocation ConceptKWLoc,
+         NamedDecl *FoundDecl, TemplateDecl *NamedConcept,
+         const TemplateArgumentListInfo &TemplateArgs);
+
+  TemplateArgumentDependence getDependence() const;
+
+  bool isDependent() const {
+    return getDependence() & TemplateArgumentDependence::Dependent;
+  }
+
+  bool isInstantiationDependent() const {
+    return getDependence() & TemplateArgumentDependence::Instantiation;
+  }
+
+  void Profile(llvm::FoldingSetNodeID &ID, const ASTContext &C) const {
+    Profile(ID, C, getNamedConcept(), getTemplateArgsAsWritten());
+  }
+
+  static void Profile(llvm::FoldingSetNodeID &ID, const ASTContext &C,
+                      const TemplateDecl *NamedConcept,
+                      const ASTTemplateArgumentListInfo *ArgsAsWritten);
+
+  SourceLocation getConceptKWLoc() const { return ConceptKWLoc; }
+
+  SourceRange getSourceRange() const {
+    return {ConceptKWLoc, ArgsAsWritten->getRAngleLoc()};
+  }
+
+  friend const StreamingDiagnostic &operator<<(const StreamingDiagnostic &DB,
+                                               PartiallyAppliedConcept &C);
 };
 
 } // clang

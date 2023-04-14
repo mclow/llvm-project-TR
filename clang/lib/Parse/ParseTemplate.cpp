@@ -1552,14 +1552,9 @@ ParsedTemplateArgument Parser::ParseTemplateTemplateArgument() {
              return Result;
          Name.setIdentifier(TemplateId->Name, Tok.getLocation());
          ConsumeAnnotationToken();
-    }
-    //else if(Tok.isAnnotation()) {
-    //    Name.setIdentifier(getIdentifierAnnotation(Tok), Tok.getLocation());
-    //    ConsumeAnnotationToken();
-    //}
-    else {
-        Name.setIdentifier(Tok.getIdentifierInfo(), Tok.getLocation());
-        ConsumeToken(); // the identifier
+    } else {
+         Name.setIdentifier(Tok.getIdentifierInfo(), Tok.getLocation());
+         ConsumeToken(); // the identifier
     }
 
     TryConsumeToken(tok::ellipsis, EllipsisLoc);
@@ -1589,6 +1584,30 @@ ParsedTemplateArgument Parser::ParseTemplateTemplateArgument() {
   return Result;
 }
 
+///  partially-applied-concept:
+///    concept id-dexpression < arguments >
+ParsedTemplateArgument Parser::ParsePartiallyAppliedConceptTemplateArgument() {
+  if (Tok.isNot(tok::kw_concept))
+    return {};
+  SourceLocation ConceptLoc = ConsumeToken();
+  CXXScopeSpec SS; // nested-name-specifier, if present
+  ParseOptionalCXXScopeSpecifier(SS, /*ObjectType=*/nullptr,
+                                 /*ObjectHasErrors=*/false,
+                                 /*EnteringContext=*/false);
+  ParsedTemplateArgument Result;
+  if (Tok.is(tok::annot_template_id)) {
+    TemplateIdAnnotation *TemplateId = takeTemplateIdAnnotation(Tok);
+    ConsumeAnnotationToken();
+    PartiallyAppliedConcept *C = Actions.ActOnPartiallyAppliedConcept(
+        getCurScope(), SS, ConceptLoc, TemplateId);
+    if (!C)
+      return {};
+    Result = ParsedTemplateArgument(C, ConceptLoc);
+    return Result;
+  }
+  return {};
+}
+
 /// ParseTemplateArgument - Parse a C++ template argument (C++ [temp.names]).
 ///
 ///       template-argument: [C++ 14.2]
@@ -1616,8 +1635,6 @@ ParsedTemplateArgument Parser::ParseTemplateArgument() {
     return Actions.ActOnTemplateTypeArgument(TypeArg);
   }
 
-  //TryAnnotateOptionalCXXScopeToken();
-
   // Try to parse a template template argument.
   {
     TentativeParsingAction TPA(*this);
@@ -1629,6 +1646,13 @@ ParsedTemplateArgument Parser::ParseTemplateArgument() {
     }
     // Revert this tentative parse to parse a non-type template argument.
     TPA.Revert();
+  }
+
+  {
+    ParsedTemplateArgument Concept =
+        ParsePartiallyAppliedConceptTemplateArgument();
+    if (!Concept.isInvalid())
+      return Concept;
   }
 
   {

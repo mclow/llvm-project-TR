@@ -999,6 +999,11 @@ void TextNodeDumper::VisitTemplateTemplateArgument(const TemplateArgument &TA) {
   TA.getAsTemplate().dump(OS);
 }
 
+void TextNodeDumper::VisitConceptTemplateArgument(const TemplateArgument &TA) {
+  OS << " concept ";
+  OS << TA.getAsPartiallyAppliedConcept()->getConceptNameInfo().getName();
+}
+
 void TextNodeDumper::VisitTemplateExpansionTemplateArgument(
     const TemplateArgument &TA) {
   if (TA.getAsTemplateOrTemplatePattern().getKind() ==

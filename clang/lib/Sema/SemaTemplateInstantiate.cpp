@@ -1302,6 +1302,9 @@ namespace {
     /// this declaration.
     Decl *TransformDecl(SourceLocation Loc, Decl *D);
 
+    bool InjectAdditionalArgumentsFromPartiallyAppliedConcept(
+        TemplateArgumentListInfo &Args, TemplateTemplateParmDecl *D);
+
     void transformAttrs(Decl *Old, Decl *New) {
       SemaRef.InstantiateAttrs(TemplateArgs, Old, New);
     }
@@ -1381,6 +1384,10 @@ namespace {
                           QualType ObjectType = QualType(),
                           NamedDecl *FirstQualifierInScope = nullptr,
                           bool AllowInjectedClassName = false);
+
+    TemplateArgument
+    TransformNamedTemplateTemplateArgument(CXXScopeSpec &SS, TemplateName Name,
+                                           SourceLocation NameLoc);
 
     const LoopHintAttr *TransformLoopHintAttr(const LoopHintAttr *LH);
     const NoInlineAttr *TransformStmtNoInlineAttr(const Stmt *OrigS,
@@ -1625,6 +1632,10 @@ Decl *TemplateInstantiator::TransformDecl(SourceLocation Loc, Decl *D) {
         Arg = getPackSubstitutedTemplateArgument(getSema(), Arg);
       }
 
+      if (Arg.getKind() == clang::TemplateArgument::Concept) {
+        return Arg.getAsPartiallyAppliedConcept()->getNamedConcept();
+      }
+
       TemplateName Template = Arg.getAsTemplate().getNameToSubstitute();
       assert(!Template.isNull() && Template.getAsTemplateDecl() &&
              "Wrong kind of template template argument");
@@ -1636,6 +1647,22 @@ Decl *TemplateInstantiator::TransformDecl(SourceLocation Loc, Decl *D) {
   }
 
   return SemaRef.FindInstantiatedDecl(Loc, cast<NamedDecl>(D), TemplateArgs);
+}
+
+bool TemplateInstantiator::InjectAdditionalArgumentsFromPartiallyAppliedConcept(
+    TemplateArgumentListInfo &Args, TemplateTemplateParmDecl *D) {
+  if (D->getDepth() >= TemplateArgs.getNumLevels())
+    return false;
+  if (!TemplateArgs.hasTemplateArgument(D->getDepth(), D->getPosition()))
+    return false;
+  TemplateArgument Arg = TemplateArgs(D->getDepth(), D->getPosition());
+  if (Arg.getKind() != clang::TemplateArgument::Concept)
+    return false;
+  PartiallyAppliedConcept *C = Arg.getAsPartiallyAppliedConcept();
+  for (auto &Arg : C->getTemplateArgsAsWritten()->arguments()) {
+    Args.addArgument(Arg);
+  }
+  return true;
 }
 
 Decl *TemplateInstantiator::TransformDefinition(SourceLocation Loc, Decl *D) {
@@ -1828,6 +1855,61 @@ TemplateName TemplateInstantiator::TransformTemplateName(
   return inherited::TransformTemplateName(SS, Name, NameLoc, ObjectType,
                                           FirstQualifierInScope,
                                           AllowInjectedClassName);
+}
+
+TemplateArgument TemplateInstantiator::TransformNamedTemplateTemplateArgument(
+    CXXScopeSpec &SS, TemplateName Name, SourceLocation NameLoc) {
+  if (TemplateTemplateParmDecl *TTP =
+          dyn_cast_or_null<TemplateTemplateParmDecl>(
+              Name.getAsTemplateDecl())) {
+    if (TTP->getDepth() < TemplateArgs.getNumLevels()) {
+      // If the corresponding template argument is NULL or non-existent, it's
+      // because we are performing instantiation from explicitly-specified
+      // template arguments in a function template, but there were some
+      // arguments left unspecified.
+      if (!TemplateArgs.hasTemplateArgument(TTP->getDepth(),
+                                            TTP->getPosition()))
+        return TemplateArgument(Name);
+
+      TemplateArgument Arg = TemplateArgs(TTP->getDepth(), TTP->getPosition());
+      if (Arg.getKind() == TemplateArgument::Concept) {
+        PartiallyAppliedConcept *C = Arg.getAsPartiallyAppliedConcept();
+        TemplateDecl *T = cast_or_null<TemplateDecl>(getDerived().TransformDecl(
+            C->getConceptNameLoc(), C->getNamedConcept()));
+        if (!T)
+          return TemplateArgument();
+
+        if (T == C->getNamedConcept() && !getDerived().AlwaysRebuild())
+          return Arg;
+
+        DeclarationNameInfo NameInfo = C->getConceptNameInfo();
+        if (NameInfo.getName()) {
+          NameInfo = getDerived().TransformDeclarationNameInfo(NameInfo);
+          if (!NameInfo.getName())
+            return TemplateArgument();
+        }
+
+        TemplateArgumentListInfo NewTemplateArgs;
+        NewTemplateArgs.setLAngleLoc(
+            C->getTemplateArgsAsWritten()->getLAngleLoc());
+        NewTemplateArgs.setLAngleLoc(
+            C->getTemplateArgsAsWritten()->getRAngleLoc());
+        for (auto &Arg : C->getTemplateArgsAsWritten()->arguments())
+          NewTemplateArgs.addArgument(Arg);
+
+        PartiallyAppliedConcept *Transformed =
+            SemaRef.BuildPartiallyAppliedConcept(C->getNestedNameSpecifierLoc(),
+                                                 C->getConceptKWLoc(), NameInfo,
+                                                 T, NewTemplateArgs);
+        if (!Transformed)
+          return TemplateArgument(Transformed);
+      }
+    }
+  }
+  TemplateName TN = getDerived().TransformTemplateName(SS, Name, NameLoc);
+  if (!TN.isNull())
+    return TN;
+  return TemplateArgument();
 }
 
 ExprResult

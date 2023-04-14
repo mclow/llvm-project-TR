@@ -5108,6 +5108,14 @@ def err_template_arg_overload_type : Error<
 def err_template_arg_not_valid_template : Error<
   "template argument does not refer to a %select{class or alias template|variable template|concept}0, or template "
   "template parameter">;
+def err_partial_concept_valid_template : Error<
+  "name of template argument does not refer to concept, or concept "
+  "template parameter">;
+def err_partial_concept_param_must_have_one_arg : Error<
+  "The corresponding template parameter of a partially applied concept must have exactly one argument">;
+def note_concept_template_parameter_declared_here : Error<
+  "concept template parameter declared here">;
+
 def note_template_arg_refers_to_template_here : Note<
   "template argument refers to a %select{function template|class template|variable template|concept}0 %1, here">;
 def err_template_arg_template_params_mismatch : Error<

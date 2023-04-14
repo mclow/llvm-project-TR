@@ -5372,6 +5372,8 @@ std::string CGDebugInfo::GetName(const Decl *D, bool Qualified) const {
       [&](ArrayRef<TemplateArgument> Args) {
         return llvm::all_of(Args, [&](const TemplateArgument &TA) {
           switch (TA.getKind()) {
+          case clang::TemplateArgument::Concept:
+            return false;
           case TemplateArgument::Template:
             // Easy to reconstitute - the value of the parameter in the debug
             // info is the string name of the template. (so the template name

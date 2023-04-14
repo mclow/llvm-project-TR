@@ -230,6 +230,10 @@ TemplateArgumentDependence TemplateArgument::getDependence() const {
               TemplateArgumentDependence::Instantiation;
     return Deps;
 
+  case Concept: {
+    Deps = getAsPartiallyAppliedConcept()->getDependence();
+    return Deps;
+  }
   case Pack:
     for (const auto &P : pack_elements())
       Deps |= P.getDependence();
@@ -254,6 +258,7 @@ bool TemplateArgument::isPackExpansion() const {
   case Pack:
   case Template:
   case NullPtr:
+  case Concept:
     return false;
 
   case TemplateExpansion:
@@ -288,6 +293,7 @@ QualType TemplateArgument::getNonTypeTemplateArgumentType() const {
   case TemplateArgument::Template:
   case TemplateArgument::TemplateExpansion:
   case TemplateArgument::Pack:
+  case TemplateArgument::Concept:
     return QualType();
 
   case TemplateArgument::Integral:
@@ -333,6 +339,10 @@ void TemplateArgument::Profile(llvm::FoldingSetNodeID &ID,
     ID.AddPointer(TemplateArg.Name);
     break;
 
+  case Concept:
+    getAsPartiallyAppliedConcept()->Profile(ID, Context);
+    break;
+
   case Integral:
     getAsIntegral().Profile(ID);
     getIntegralType().Profile(ID);
@@ -363,6 +373,22 @@ bool TemplateArgument::structurallyEquals(const TemplateArgument &Other) const {
   case TemplateExpansion:
     return TemplateArg.Name == Other.TemplateArg.Name &&
            TemplateArg.NumExpansions == Other.TemplateArg.NumExpansions;
+
+  case Concept: {
+    PartiallyAppliedConcept *C = getAsPartiallyAppliedConcept();
+    PartiallyAppliedConcept *OC = Other.getAsPartiallyAppliedConcept();
+    if (C->getNamedConcept() != OC->getNamedConcept())
+      return false;
+    const ASTTemplateArgumentListInfo *Args = C->getTemplateArgsAsWritten();
+    const ASTTemplateArgumentListInfo *OArgs = OC->getTemplateArgsAsWritten();
+    if (Args->getNumTemplateArgs() != OArgs->getNumTemplateArgs())
+      return false;
+    for (unsigned I = 0; I < Args->getNumTemplateArgs(); I++)
+      if (!Args->arguments()[I].getArgument().structurallyEquals(
+              OArgs->arguments()[I].getArgument()))
+        return false;
+    return true;
+  }
 
   case Declaration:
     return getAsDecl() == Other.getAsDecl() &&
@@ -401,6 +427,7 @@ TemplateArgument TemplateArgument::getPackExpansionPattern() const {
   case Pack:
   case Null:
   case Template:
+  case Concept:
   case NullPtr:
     return TemplateArgument();
   }
@@ -447,6 +474,10 @@ void TemplateArgument::print(const PrintingPolicy &Policy, raw_ostream &Out,
 
   case Template:
     getAsTemplate().print(Out, Policy, TemplateName::Qualified::Fully);
+    break;
+
+  case Concept:
+    getAsPartiallyAppliedConcept()->print(Out, Policy);
     break;
 
   case TemplateExpansion:
@@ -514,6 +545,10 @@ SourceRange TemplateArgumentLoc::getSourceRange() const {
                          getTemplateNameLoc());
     return SourceRange(getTemplateNameLoc());
 
+    // Fixme ?
+  case TemplateArgument::Concept:
+    return getArgument().getAsPartiallyAppliedConcept()->getSourceRange();
+
   case TemplateArgument::TemplateExpansion:
     if (getTemplateQualifierLoc())
       return SourceRange(getTemplateQualifierLoc().getBeginLoc(),
@@ -553,6 +588,9 @@ static const T &DiagTemplateArg(const T &DB, const TemplateArgument &Arg) {
 
   case TemplateArgument::Template:
     return DB << Arg.getAsTemplate();
+
+  case TemplateArgument::Concept:
+    return DB << *Arg.getAsPartiallyAppliedConcept();
 
   case TemplateArgument::TemplateExpansion:
     return DB << Arg.getAsTemplateOrTemplatePattern() << "...";

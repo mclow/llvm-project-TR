@@ -3145,6 +3145,12 @@ public:
     }();
   }
 
+  TemplateTemplateParmDecl *getTemplateTemplateParameterDecl() {
+    assert(getNumDecls() == 1);
+    return llvm::dyn_cast_or_null<TemplateTemplateParmDecl>(
+        getTrailingResults()->getDecl());
+  }
+
   TemplateArgumentLoc const *getTemplateArgs() const {
     if (!hasExplicitTemplateArgs())
       return nullptr;

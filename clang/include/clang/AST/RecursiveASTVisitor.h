@@ -865,6 +865,15 @@ bool RecursiveASTVisitor<Derived>::TraverseTemplateArgument(
 
   case TemplateArgument::Pack:
     return getDerived().TraverseTemplateArguments(Arg.pack_elements());
+
+  case TemplateArgument::Concept: {
+    PartiallyAppliedConcept *C = Arg.getAsPartiallyAppliedConcept();
+    TRY_TO(getDerived().TraverseDecl(C->getNamedConcept()));
+    for (const TemplateArgumentLoc &Arg :
+         C->getTemplateArgsAsWritten()->arguments())
+      TRY_TO(TraverseTemplateArgument(Arg.getArgument()));
+    return true;
+  }
   }
 
   return true;
@@ -905,6 +914,15 @@ bool RecursiveASTVisitor<Derived>::TraverseTemplateArgumentLoc(
 
   case TemplateArgument::Pack:
     return getDerived().TraverseTemplateArguments(Arg.pack_elements());
+
+  case TemplateArgument::Concept: {
+    PartiallyAppliedConcept *C = Arg.getAsPartiallyAppliedConcept();
+    TRY_TO(getDerived().TraverseDecl(C->getNamedConcept()));
+    for (const TemplateArgumentLoc &Arg :
+         C->getTemplateArgsAsWritten()->arguments())
+      TRY_TO(TraverseTemplateArgument(Arg.getArgument()));
+    return true;
+  }
   }
 
   return true;

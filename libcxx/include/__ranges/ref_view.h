@@ -70,6 +70,11 @@ public:
     { return ranges::size(*__range_); }
 
     _LIBCPP_HIDE_FROM_ABI
+    constexpr auto size_hint() const
+      requires approximately_sized_range<_Range>
+    { return ranges::size_hint(*__range_); }
+
+    _LIBCPP_HIDE_FROM_ABI
     constexpr auto data() const
       requires contiguous_range<_Range>
     { return ranges::data(*__range_); }

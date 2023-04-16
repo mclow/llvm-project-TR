@@ -201,6 +201,51 @@ public:
         },
         ranges::__tuple_transform(ranges::size, __views_));
   }
+
+  template <typename _CT>
+  struct __res {
+      bool __has_value = false;
+      _CT __value = {};
+  };
+  template <typename _CT, typename _V>
+  auto __extract_size_hint (_V&v) {
+    if constexpr(approximately_sized_range<_V>) {
+      return __res<_CT>{true, size_hint(v)};
+    }
+    return __res<_CT>{false};
+  }
+  template <typename _CT>
+  _CT __min_non_null(const std::inititializer_list<_CT> & values) {
+    _CT __min = 0;
+    for (const auto & __v : values) {
+      if(__v.__has_value)
+        __min = std::min(__min, __v.__value)
+    }
+    return __min;
+  }
+
+  _LIBCPP_HIDE_FROM_ABI
+  constexpr auto size_hint()
+    requires(approximately_sized_range<_Views> && ...) {
+    using _CT = make_unsigned_t<common_type_t<decltype(__sizes)...>>;
+    return std::apply(
+        [](auto... __sizes) {
+          return __min_non_null(__sizes...);
+        },
+        ranges::__tuple_transform(__extract_size_hint<_CT>, __views_));
+  }
+
+  _LIBCPP_HIDE_FROM_ABI
+  constexpr auto size_hint() const
+    requires(approximately_sized_range<const _Views> && ...) {
+    using _CT = make_unsigned_t<common_type_t<decltype(__sizes)...>>;
+    return std::apply(
+        [](auto... __sizes) {
+          return __min_non_null(__sizes...);
+        },
+        ranges::__tuple_transform(__extract_size_hint<_CT>, __views_));
+  }
+
 };
 
 template <class... _Ranges>

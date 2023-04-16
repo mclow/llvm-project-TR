@@ -146,6 +146,18 @@ public:
     auto __n = ranges::size(__base_);
     return ranges::min(__n, static_cast<decltype(__n)>(__count_));
   }
+
+  _LIBCPP_HIDE_FROM_ABI
+  constexpr auto size() requires approximately_sized_range<_View> {
+    auto __n = ranges::size_hint(__base_);
+    return ranges::min(__n, static_cast<decltype(__n)>(__count_));
+  }
+
+  _LIBCPP_HIDE_FROM_ABI
+  constexpr auto size_hint() const requires approximately_sized_range<const _View> {
+    auto __n = ranges::size_hint(__base_);
+    return ranges::min(__n, static_cast<decltype(__n)>(__count_));
+  }
 };
 
 template<view _View>

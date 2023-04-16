@@ -124,6 +124,13 @@ public:
     }
 
     _LIBCPP_HIDE_FROM_ABI
+    static constexpr auto __size_hint(auto& __self) {
+      const auto __s = ranges::size_hint(__self.__base_);
+      const auto __c = static_cast<decltype(__s)>(__self.__count_);
+      return __s < __c ? 0 : __s - __c;
+    }
+
+    _LIBCPP_HIDE_FROM_ABI
     constexpr auto size()
       requires sized_range<_View>
     { return __size(*this); }
@@ -132,6 +139,15 @@ public:
     constexpr auto size() const
       requires sized_range<const _View>
     { return __size(*this); }
+
+    _LIBCPP_HIDE_FROM_ABI
+  constexpr auto size_hint() requires approximately_sized_range<_View>
+    { return __size_hint(*this); }
+
+  _LIBCPP_HIDE_FROM_ABI
+  constexpr auto size_hint() const requires approximately_sized_range<const _View>
+    { return __size_hint(*this); }
+
   };
 
 template<class _Range>

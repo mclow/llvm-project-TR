@@ -80,8 +80,15 @@ namespace ranges {
   template <class _Tp>
   concept sized_range = range<_Tp> && requires(_Tp& __t) { ranges::size(__t); };
 
+  template <class _Tp>
+  concept approximately_sized_range =
+    range<_Tp> && requires(_Tp& __t) { ranges::size_hint(__t); };
+
   template<sized_range _Rp>
   using range_size_t = decltype(ranges::size(std::declval<_Rp&>()));
+
+  template<sized_range _Rp>
+  using __range_size_hint_t = decltype(ranges::size_hint(std::declval<_Rp&>()));
 
   // `disable_sized_range` defined in `<__ranges/size.h>`
 

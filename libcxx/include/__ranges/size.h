@@ -143,6 +143,52 @@ inline namespace __cpo {
 
 #endif // _LIBCPP_STD_VER >= 20
 
+#if _LIBCPP_STD_VER >= 20
+
+namespace ranges {
+namespace __size_hint {
+  template <typename R>
+  concept __member_size_hint = requires(R & r) { { _LIBCPP_AUTO_CAST(r.size_hint()) } -> std::integral; };
+  template <typename R>
+  concept __adl_size_hint = requires(R & r) { { _LIBCPP_AUTO_CAST(size_hint(r)) } -> std::integral; };
+  template <typename R>
+  concept __sized_range = requires(R& __t) { ranges::size(__t); };
+
+  void size_hint(auto&) = delete;
+  void size_hint(const auto&) = delete;
+
+  struct __size_int_cpo {
+      template <typename R>
+      requires __sized_range<std::remove_cvref_t<R>>
+      constexpr auto operator()(R &&r) const noexcept(noexcept(ranges::size(r))) {
+          return ranges::size(r);
+      }
+
+      template <typename R>
+      requires (__member_size_hint<std::remove_cvref_t<R>>
+            && !__sized_range<std::remove_cvref_t<R>>)
+      constexpr auto operator()(R &&r) const noexcept(noexcept(_LIBCPP_AUTO_CAST(r.size_hint()))) {
+          return _LIBCPP_AUTO_CAST(r.size_int());
+      }
+
+      template <typename R>
+      requires (__adl_size_hint<std::remove_cvref_t<R>>
+            && !__sized_range<std::remove_cvref_t<R>>
+            && !__member_size_hint<std::remove_cvref_t<R>>)
+      constexpr auto operator()(R &&r) const noexcept(noexcept(_LIBCPP_AUTO_CAST(size_hint(r)))) {
+          return _LIBCPP_AUTO_CAST(size_hint(r));
+      }
+  };
+}
+
+inline namespace __cpo {
+  inline constexpr auto size_hint = __size_hint::__size_int_cpo{};
+} // namespace __cpo
+
+}
+
+#endif
+
 _LIBCPP_END_NAMESPACE_STD
 
 #endif // _LIBCPP___RANGES_SIZE_H

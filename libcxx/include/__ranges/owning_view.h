@@ -64,6 +64,11 @@ public:
     _LIBCPP_HIDE_FROM_ABI constexpr auto size() const requires sized_range<const _Rp>
       { return ranges::size(__r_); }
 
+    _LIBCPP_HIDE_FROM_ABI constexpr auto size() requires approximately_sized_range<_Rp>
+      { return ranges::size_hint(__r_); }
+    _LIBCPP_HIDE_FROM_ABI constexpr auto size() const requires approximately_sized_range<const _Rp>
+      { return ranges::size_hint(__r_); }
+
     _LIBCPP_HIDE_FROM_ABI constexpr auto data() requires contiguous_range<_Rp>
       { return ranges::data(__r_); }
     _LIBCPP_HIDE_FROM_ABI constexpr auto data() const requires contiguous_range<const _Rp>

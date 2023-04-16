@@ -94,6 +94,14 @@ public:
   constexpr auto size() const requires sized_range<const _View> {
     return ranges::size(__base_);
   }
+
+  _LIBCPP_HIDE_FROM_ABI
+  constexpr auto size_hint() requires approximately_sized_range<_View>
+    { return ranges::size_hint(__base_); }
+
+  _LIBCPP_HIDE_FROM_ABI
+  constexpr auto size_hint() const requires approximately_sized_range<const _View>
+    { return ranges::size_hint(__base_); }
 };
 
 template<class _Range>

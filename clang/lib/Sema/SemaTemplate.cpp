@@ -5869,6 +5869,13 @@ bool Sema::CheckTemplateArgument(
           Context.getCanonicalTemplateArgument(Arg.getArgument()));
       break;
 
+    // TODO support non-type concepts
+    case TemplateArgument::Concept:
+      Diag(Arg.getLocation(), diag::err_template_arg_must_be_expr)
+          << Arg.getSourceRange();
+      Diag(Param->getLocation(), diag::note_template_param_here);
+      return true;
+
     case TemplateArgument::Template:
     case TemplateArgument::TemplateExpansion:
       // We were given a template template argument. It may not be ill-formed;
@@ -5942,9 +5949,6 @@ bool Sema::CheckTemplateArgument(
       NoteTemplateParameterLocation(*Param);
       return true;
     }
-
-    case TemplateArgument::Concept:
-      llvm_unreachable("We should not have a concept here?");
     case TemplateArgument::Pack:
       llvm_unreachable("Caller must expand template argument packs");
     }
@@ -8186,11 +8190,12 @@ bool Sema::CheckPartiallyAppliedConceptTemplateArgument(
         << Param;
     return true;
   }
-  auto MinArguments =
+  unsigned MinArguments =
       Template->getTemplateParameters()->getMinRequiredArguments();
+
   auto Passed = C->getTemplateArgsAsWritten()->getNumTemplateArgs();
-  bool TooFew = Passed < MinArguments - 1;
-  bool TooMany = Passed > Template->getTemplateParameters()->size() - 1 &&
+  bool TooFew  = MinArguments > Passed + 1;
+  bool TooMany = Passed +1 > Template->getTemplateParameters()->size() &&
                  !Template->getTemplateParameters()->hasParameterPack();
 
   if (TooFew || TooMany) {

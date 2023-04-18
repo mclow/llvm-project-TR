@@ -347,3 +347,16 @@ void do_test_var() {
 }
 
 }
+
+namespace TTPDependence {
+template <template <typename... > concept C>
+concept A = C<>;
+template <template <typename... > concept C>
+concept B = C<int>;
+
+template <template <typename... > auto Var>
+concept C = C<>;
+template <template <typename... > auto Var>
+concept D = C<int>;
+
+}

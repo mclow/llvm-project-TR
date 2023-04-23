@@ -1143,7 +1143,7 @@ void Sema::DiagnoseUnsatisfiedConstraint(
 
 const NormalizedConstraint *Sema::getNormalizedAssociatedConstraints(
     NamedDecl *ConstrainedDecl, ArrayRef<const Expr *> AssociatedConstraints,
-    TemplateArgumentList *TemplateArgs) {
+    TemplateArgumentList *TemplateArgs, bool TopLevel) {
 
   llvm::SmallVector<void *, 1> Key = {ConstrainedDecl};
 
@@ -1155,7 +1155,20 @@ const NormalizedConstraint *Sema::getNormalizedAssociatedConstraints(
     }
   };
 
-  if (TemplateArgs) {
+  if (TopLevel || isa<BinaryOperator, ParenExpr>(AssociatedConstraints[0]))
+    return new (Context)
+        NormalizedConstraint(*NormalizedConstraint::fromConstraintExprs(
+            *this, ConstrainedDecl, AssociatedConstraints, TemplateArgs));
+
+  bool IsConcept = isa<ConceptSpecializationExpr>(AssociatedConstraints[0]);
+  if (!IsConcept) {
+    if (const UnresolvedLookupExpr *ULE =
+            llvm::dyn_cast<UnresolvedLookupExpr>(AssociatedConstraints[0])) {
+      IsConcept = ULE->isConceptTemplateParameterReference();
+    }
+  }
+
+  if (!TopLevel && TemplateArgs && IsConcept) {
     for (auto &&Arg : TemplateArgs->asArray()) {
       if (Arg.getKind() == TemplateArgument::Template)
         AddTemplateArgument(Arg);
@@ -1329,6 +1342,32 @@ NormalizedConstraint::fromConstraintExprs(Sema &S, NamedDecl *D,
   return Conjunction;
 }
 
+static ExprResult
+substituteConceptArguments(Sema &S, ConceptDecl *Concept,
+                           const ConceptSpecializationExpr *CSE,
+                           const TemplateArgumentList &Args) {
+
+  const auto *ArgsAsWritten = CSE->getTemplateArgsAsWritten();
+  if (llvm::none_of(
+          ArgsAsWritten->arguments(), [&](const TemplateArgumentLoc &ArgLoc) {
+            return ArgLoc.getArgument().isConceptOrConceptTemplateParameter();
+          })) {
+    return Concept->getConstraintExpr();
+  }
+
+  MultiLevelTemplateArgumentList MLTAL =
+      S.getTemplateInstantiationArgs(Concept, /*Final=*/false, &Args,
+                                     /*RelativeToPrimary=*/true,
+                                     /*Pattern=*/nullptr,
+                                     /*ForConstraintInstantiation=*/true);
+  Sema::InstantiatingTemplate Inst(
+      S, ArgsAsWritten->arguments().front().getSourceRange().getBegin(),
+      Sema::InstantiatingTemplate::ParameterMappingSubstitution{}, Concept,
+      ArgsAsWritten->arguments().front().getSourceRange());
+  return S.SubstConceptTemplateArguments(CSE, Concept->getConstraintExpr(),
+                                         MLTAL, Args);
+}
+
 std::optional<NormalizedConstraint>
 NormalizedConstraint::fromConstraintExpr(Sema &S, NamedDecl *D, const Expr *E,
                                          TemplateArgumentList *TemplateArgs) {
@@ -1374,8 +1413,11 @@ NormalizedConstraint::fromConstraintExpr(Sema &S, NamedDecl *D, const Expr *E,
       ConceptDecl *CD = CSE->getNamedConcept();
       TemplateArgumentList Args(TemplateArgumentList::OnStack,
                                 CSE->getTemplateArguments());
-      SubNF = S.getNormalizedAssociatedConstraints(
-          CD, {CD->getConstraintExpr()}, &Args);
+      ExprResult Res = substituteConceptArguments(S, CD, CSE, Args);
+      if (Res.isInvalid())
+        return std::nullopt;
+
+      SubNF = S.getNormalizedAssociatedConstraints(CD, {Res.get()}, &Args);
       if (!SubNF)
         return std::nullopt;
     }
@@ -1508,12 +1550,14 @@ static bool subsumes(Sema &S, NamedDecl *DP, ArrayRef<const Expr *> P,
   //   In order to determine if a constraint P subsumes a constraint Q, P is
   //   transformed into disjunctive normal form, and Q is transformed into
   //   conjunctive normal form. [...]
-  auto *PNormalized = S.getNormalizedAssociatedConstraints(DP, P);
+  auto *PNormalized =
+      S.getNormalizedAssociatedConstraints(DP, P, nullptr, /*TopLevel=*/true);
   if (!PNormalized)
     return true;
   const NormalForm PDNF = makeDNF(*PNormalized);
 
-  auto *QNormalized = S.getNormalizedAssociatedConstraints(DQ, Q);
+  auto *QNormalized =
+      S.getNormalizedAssociatedConstraints(DQ, Q, nullptr, /*TopLevel=*/true);
   if (!QNormalized)
     return true;
   const NormalForm QCNF = makeCNF(*QNormalized);

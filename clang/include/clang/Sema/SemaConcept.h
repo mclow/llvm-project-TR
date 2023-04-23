@@ -44,6 +44,10 @@ struct AtomicConstraint {
 
     for (unsigned I = 0, S = ParameterMapping->size(); I < S; ++I) {
       llvm::FoldingSetNodeID IDA, IDB;
+      if ((*ParameterMapping)[I]
+              .getArgument()
+              .isConceptOrConceptTemplateParameter())
+        continue;
       C.getCanonicalTemplateArgument((*ParameterMapping)[I].getArgument())
           .Profile(IDA, C);
       C.getCanonicalTemplateArgument((*Other.ParameterMapping)[I].getArgument())

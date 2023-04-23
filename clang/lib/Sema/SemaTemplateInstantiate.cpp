@@ -4192,6 +4192,118 @@ bool Sema::SubstTemplateArguments(
 }
 
 ExprResult
+Sema::SubstConceptTemplateArguments(const ConceptSpecializationExpr *CSE,
+                                    const Expr *ConstraintExpr,
+                                    const MultiLevelTemplateArgumentList &MLTAL,
+                                    const TemplateArgumentList &Args) {
+  TemplateInstantiator Instantiator(*this, MLTAL, SourceLocation(),
+                                    DeclarationName());
+  auto *ArgsAsWritten = CSE->getTemplateArgsAsWritten();
+  TemplateArgumentListInfo SubstArgs(ArgsAsWritten->getLAngleLoc(),
+                                     ArgsAsWritten->getRAngleLoc());
+
+  Sema::InstantiatingTemplate Inst(
+      *this, ArgsAsWritten->arguments().front().getSourceRange().getBegin(),
+      Sema::InstantiatingTemplate::ParameterMappingSubstitution{},
+      CSE->getNamedConcept(),
+      ArgsAsWritten->arguments().front().getSourceRange());
+
+  if (Instantiator.TransformConceptTemplateArguments(
+          ArgsAsWritten->getTemplateArgs(),
+          ArgsAsWritten->getTemplateArgs() +
+              ArgsAsWritten->getNumTemplateArgs(),
+          SubstArgs))
+    return true;
+
+  llvm::SmallVector<TemplateArgument, 4> NewArgList;
+  NewArgList.reserve(SubstArgs.arguments().size());
+  for (const auto &ArgLoc : SubstArgs.arguments())
+    NewArgList.push_back(ArgLoc.getArgument());
+
+  TemplateArgumentList Rewritten =
+      TemplateArgumentList(TemplateArgumentList::OnStack, NewArgList);
+  Sema::SFINAETrap Trap(*this);
+  MultiLevelTemplateArgumentList MLTALForConstraint =
+      getTemplateInstantiationArgs(CSE->getNamedConcept(), /*Final=*/false,
+                                   &Rewritten,
+                                   /*RelativeToPrimary=*/true,
+                                   /*Pattern=*/nullptr,
+                                   /*ForConstraintInstantiation=*/true);
+
+  struct ConstraintExprTransformer : TreeTransform<ConstraintExprTransformer> {
+    using Base = TreeTransform<ConstraintExprTransformer>;
+    MultiLevelTemplateArgumentList &MLTAL;
+
+    ConstraintExprTransformer(Sema &SemaRef,
+                              MultiLevelTemplateArgumentList &MLTAL)
+        : TreeTransform(SemaRef), MLTAL(MLTAL) {}
+
+    ExprResult TransformExpr(Expr *E) {
+      if (!E)
+        return E;
+      switch (E->getStmtClass()) {
+      case Stmt::BinaryOperatorClass:
+      case Stmt::ConceptSpecializationExprClass:
+      case Stmt::ParenExprClass:
+      case Stmt::UnresolvedLookupExprClass:
+        return Base::TransformExpr(E);
+      default:
+        break;
+      }
+      return E;
+    }
+
+    ExprResult
+    TransformConceptSpecializationExpr(ConceptSpecializationExpr *E) {
+      return SemaRef.SubstConstraintExpr(E, MLTAL);
+    }
+
+    ExprResult TransformBinaryOperator(BinaryOperator *E) {
+      if (!(E->getOpcode() == BinaryOperatorKind::BO_LAnd ||
+            E->getOpcode() == BinaryOperatorKind::BO_LOr))
+        return E;
+
+      ExprResult LHS = TransformExpr(E->getLHS());
+      if (LHS.isInvalid())
+        return ExprError();
+
+      ExprResult RHS = TransformExpr(E->getRHS());
+      if (RHS.isInvalid())
+        return ExprError();
+
+      if (LHS.get() == E->getLHS() && RHS.get() == E->getRHS())
+        return E;
+
+      return BinaryOperator::Create(SemaRef.Context, LHS.get(), RHS.get(),
+                                    E->getOpcode(), SemaRef.Context.BoolTy,
+                                    VK_PRValue, OK_Ordinary,
+                                    E->getOperatorLoc(), FPOptionsOverride{});
+    }
+
+    ExprResult TransformUnresolvedLookupExpr(UnresolvedLookupExpr *E) {
+      if (E->isConceptTemplateParameterReference())
+        return Base::TransformUnresolvedLookupExpr(E);
+      return E;
+    }
+
+    bool TransformTemplateArgument(const TemplateArgumentLoc &Input,
+                                   TemplateArgumentLoc &Output,
+                                   bool Uneval = false) {
+      if (Input.getArgument().isConceptOrConceptTemplateParameter())
+        return Base::TransformTemplateArgument(Input, Output, Uneval);
+
+      Output = Input;
+      return false;
+    }
+  };
+
+  ConstraintExprTransformer Transformer(*this, MLTALForConstraint);
+  ExprResult Res =
+      Transformer.TransformExpr(const_cast<Expr *>(ConstraintExpr));
+  return Res;
+}
+
+ExprResult
 Sema::SubstExpr(Expr *E, const MultiLevelTemplateArgumentList &TemplateArgs) {
   if (!E)
     return E;

@@ -653,6 +653,12 @@ public:
                                   TemplateArgumentListInfo &Outputs,
                                   bool Uneval = false);
 
+  template <typename InputIterator>
+  bool TransformConceptTemplateArguments(InputIterator First,
+                                         InputIterator Last,
+                                         TemplateArgumentListInfo &Outputs,
+                                         bool Uneval = false);
+
   /// Fakes up a TemplateArgumentLoc for a given TemplateArgument.
   void InventTemplateArgumentLoc(const TemplateArgument &Arg,
                                  TemplateArgumentLoc &ArgLoc);
@@ -4899,6 +4905,56 @@ bool TreeTransform<Derived>::TransformTemplateArguments(
 
   return false;
 
+}
+
+template <typename Derived>
+template <typename InputIterator>
+bool TreeTransform<Derived>::TransformConceptTemplateArguments(
+    InputIterator First, InputIterator Last, TemplateArgumentListInfo &Outputs,
+    bool Uneval) {
+
+  auto isConcept = [](const TemplateArgument &Arg) {
+    bool isConcept = Arg.getKind() == TemplateArgument::Concept;
+    if (!isConcept && Arg.getKind() == TemplateArgument::Template)
+      if (auto *TTP = dyn_cast_if_present<TemplateTemplateParmDecl>(
+              Arg.getAsTemplate().getAsTemplateDecl()))
+        isConcept = TTP->kind() == TNK_Concept_template;
+    return isConcept;
+  };
+
+  for (; First != Last; ++First) {
+    TemplateArgumentLoc Out;
+    TemplateArgumentLoc In = *First;
+
+    if (In.getArgument().getKind() == TemplateArgument::Pack) {
+      // if(In.getArgument().pack_size() == 00  ||
+      // !isConcept(In.getArgument().pack_elements()[0])) {
+      //   Outputs.addArgument(In);
+      //   continue;
+      // }
+      typedef TemplateArgumentLocInventIterator<Derived,
+                                                TemplateArgument::pack_iterator>
+          PackLocIterator;
+      if (TransformConceptTemplateArguments(
+              PackLocIterator(*this, In.getArgument().pack_begin()),
+              PackLocIterator(*this, In.getArgument().pack_end()), Outputs,
+              Uneval))
+        return true;
+      continue;
+    }
+
+    if (!isConcept(In.getArgument())) {
+      Outputs.addArgument(In);
+      continue;
+    }
+
+    if (getDerived().TransformTemplateArgument(In, Out, Uneval))
+      return true;
+
+    Outputs.addArgument(Out);
+  }
+
+  return false;
 }
 
 //===----------------------------------------------------------------------===//

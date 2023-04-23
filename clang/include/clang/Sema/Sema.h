@@ -11417,6 +11417,7 @@ public:
   // the purposes of [temp.friend] p9.
   bool FriendConstraintsDependOnEnclosingTemplate(const FunctionDecl *FD);
 
+<<<<<<< HEAD
   /// \brief Ensure that the given template arguments satisfy the constraints
   /// associated with the given template, emitting a diagnostic if they do not.
   ///
@@ -11434,6 +11435,16 @@ public:
       TemplateDecl *Template,
       const MultiLevelTemplateArgumentList &TemplateArgs,
       SourceRange TemplateIDRange);
+=======
+  ExprResult
+  SubstConceptTemplateArguments(const ConceptSpecializationExpr *CSE,
+                                const Expr *ConstraintExpr,
+                                const MultiLevelTemplateArgumentList &MLTAL,
+                                const TemplateArgumentList &Args);
+
+  Decl *SubstDecl(Decl *D, DeclContext *Owner,
+                  const MultiLevelTemplateArgumentList &TemplateArgs);
+>>>>>>> 1eadba3fe0c8 (Fix subsumption for concept template parameters)
 
   bool CheckInstantiatedFunctionTemplateConstraints(
       SourceLocation PointOfInstantiation, FunctionDecl *Decl,
@@ -11455,7 +11466,7 @@ public:
 
    const NormalizedConstraint *getNormalizedAssociatedConstraints(
       NamedDecl *ConstrainedDecl, ArrayRef<const Expr *> AssociatedConstraints,
-      TemplateArgumentList *TemplateArgs = nullptr);
+      TemplateArgumentList *TemplateArgs = nullptr, bool TopLevel = false);
 
   /// \brief Check whether the given declaration's associated constraints are
   /// at least as constrained than another declaration's according to the

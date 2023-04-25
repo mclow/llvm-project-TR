@@ -8294,6 +8294,8 @@ static bool MatchTemplateParameterKind(
   else if (TemplateTemplateParmDecl *OldTTP
                                     = dyn_cast<TemplateTemplateParmDecl>(Old)) {
     TemplateTemplateParmDecl *NewTTP = cast<TemplateTemplateParmDecl>(New);
+    if(OldTTP->kind() != NewTTP->kind())
+      return false;
     if (!S.TemplateParameterListsAreEqual(
             NewInstFrom, NewTTP->getTemplateParameters(), OldInstFrom,
             OldTTP->getTemplateParameters(), Complain,

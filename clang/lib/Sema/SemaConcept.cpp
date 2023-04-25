@@ -1183,50 +1183,38 @@ const NormalizedConstraint *Sema::getNormalizedAssociatedConstraints(
 
   llvm::SmallVector<void *, 1> Key = {ConstrainedDecl};
 
-  auto AddTemplateArgument = [&](const TemplateArgument &Arg) {
-    if (Arg.getKind() == TemplateArgument::Template) {
-      TemplateName TN = Arg.getAsTemplate();
-      if (isa<ConceptDecl>(TN.getAsTemplateDecl()))
-        Key.push_back((void *)&Arg);
-    }
+  auto ExprDenotesConcept = [](const Expr* E) {
+    if (const UnresolvedLookupExpr *ULE = llvm::dyn_cast<UnresolvedLookupExpr>(E))
+      return ULE->isConceptTemplateParameterReference();
+    return isa<ConceptSpecializationExpr>(E);
   };
 
-  if (TopLevel || isa<BinaryOperator, ParenExpr>(AssociatedConstraints[0]))
-    return new (Context)
-        NormalizedConstraint(*NormalizedConstraint::fromConstraintExprs(
-            *this, ConstrainedDecl, AssociatedConstraints, TemplateArgs));
-
-  bool IsConcept = isa<ConceptSpecializationExpr>(AssociatedConstraints[0]);
-  if (!IsConcept) {
-    if (const UnresolvedLookupExpr *ULE =
-            llvm::dyn_cast<UnresolvedLookupExpr>(AssociatedConstraints[0])) {
-      IsConcept = ULE->isConceptTemplateParameterReference();
-    }
-  }
-
-  if (!TopLevel && TemplateArgs && IsConcept) {
-    for (auto &&Arg : TemplateArgs->asArray()) {
-      if (Arg.getKind() == TemplateArgument::Template)
-        AddTemplateArgument(Arg);
+  llvm::FoldingSetNodeID ID;
+  ID.AddPointer(ConstrainedDecl);
+  if(TemplateArgs && AssociatedConstraints.size() == 1 && ExprDenotesConcept(AssociatedConstraints[0])) {
+    for(auto &&Arg : TemplateArgs->asArray()) {
+      if(Arg.isConceptOrConceptTemplateParameter())
+        Arg.Profile(ID, getASTContext());
       else if (Arg.getKind() == TemplateArgument::Pack) {
-        for (auto &PArg : Arg.pack_elements())
-          AddTemplateArgument(PArg);
+        for (auto &PArg : Arg.pack_elements()) {
+          if(PArg.isConceptOrConceptTemplateParameter())
+            PArg.Profile(ID, getASTContext());
+        }
       }
     }
   }
+  void* InsertPos;
+  CachedNormalizedConstraint* CacheEntry = NormalizationCache.FindNodeOrInsertPos(ID, InsertPos);
+  if(CacheEntry)
+    return CacheEntry;
 
-  auto CacheEntry = NormalizationCache.find(Key);
-  if (CacheEntry == NormalizationCache.end()) {
-    auto Normalized = NormalizedConstraint::fromConstraintExprs(
-        *this, ConstrainedDecl, AssociatedConstraints, TemplateArgs);
-    CacheEntry =
-        NormalizationCache
-            .try_emplace(Key, Normalized ? new (Context) NormalizedConstraint(
-                                               std::move(*Normalized))
-                                         : nullptr)
-            .first;
-  }
-  return CacheEntry->second;
+  auto Normalized = NormalizedConstraint::fromConstraintExprs(
+      *this, ConstrainedDecl, AssociatedConstraints, TemplateArgs);
+  if(!Normalized)
+    return nullptr;
+  CacheEntry = new (Context) CachedNormalizedConstraint(ID, std::move(*Normalized));
+  NormalizationCache.InsertNode(CacheEntry, InsertPos);
+  return CacheEntry;
 }
 
 static bool
@@ -1299,15 +1287,6 @@ static bool substituteParameterMappings(Sema &S, NormalizedConstraint &N,
                                      CSE->getTemplateArgsAsWritten());
 }
 
-static bool isUnresolvedConceptSpecialization(const UnresolvedLookupExpr *ULE) {
-
-  if (llvm::size(ULE->decls()) != 1)
-    return false;
-  NamedDecl *ND = *(ULE->decls().begin());
-  auto *Param = llvm::dyn_cast<TemplateTemplateParmDecl>(ND);
-  return Param && Param->kind() == TemplateNameKind::TNK_Concept_template;
-}
-
 static ExprResult
 substituteConceptTemplateParameter(Sema &S, NamedDecl *D,
                                    const UnresolvedLookupExpr *ULE,
@@ -1340,7 +1319,7 @@ substituteConceptTemplateParameter(Sema &S, NamedDecl *D, const CXXFoldExpr *FE,
     IsConceptExpansion = true;
   else if (UnresolvedLookupExpr *ULE =
                llvm::dyn_cast<UnresolvedLookupExpr>(Pattern)) {
-    IsConceptExpansion = isUnresolvedConceptSpecialization(ULE);
+    IsConceptExpansion = ULE->isConceptTemplateParameterReference();
   }
 
   if (!IsConceptExpansion)
@@ -1467,7 +1446,7 @@ NormalizedConstraint::fromConstraintExpr(Sema &S, NamedDecl *D, const Expr *E,
 
     return New;
   } else if (auto *ULE = dyn_cast<const UnresolvedLookupExpr>(E);
-             ULE && isUnresolvedConceptSpecialization(ULE)) {
+             ULE && ULE->isConceptTemplateParameterReference()) {
     ExprResult Res =
         substituteConceptTemplateParameter(S, D, ULE, TemplateArgs);
     if (Res.isInvalid()) {

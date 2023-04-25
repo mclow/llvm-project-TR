@@ -4281,16 +4281,24 @@ Sema::SubstConceptTemplateArguments(const ConceptSpecializationExpr *CSE,
     }
 
     ExprResult TransformUnresolvedLookupExpr(UnresolvedLookupExpr *E) {
-      if (E->isConceptTemplateParameterReference())
-        return Base::TransformUnresolvedLookupExpr(E);
+      if (E->isConceptTemplateParameterReference()) {
+        TemplateInstantiator Instantiator(SemaRef, MLTAL,
+                                          SourceLocation(),
+                                          DeclarationName());
+        return Instantiator.TransformUnresolvedLookupExpr(E);
+      }
       return E;
     }
 
     bool TransformTemplateArgument(const TemplateArgumentLoc &Input,
                                    TemplateArgumentLoc &Output,
                                    bool Uneval = false) {
-      if (Input.getArgument().isConceptOrConceptTemplateParameter())
-        return Base::TransformTemplateArgument(Input, Output, Uneval);
+      if (Input.getArgument().isConceptOrConceptTemplateParameter()) {
+        TemplateInstantiator Instantiator(SemaRef, MLTAL,
+                                          SourceLocation(),
+                                          DeclarationName());
+        return Instantiator.TransformTemplateArgument(Input, Output, Uneval);
+      }
 
       Output = Input;
       return false;

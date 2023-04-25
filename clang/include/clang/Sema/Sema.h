@@ -7394,8 +7394,7 @@ private:
   /// constrained declarations). If an error occurred while normalizing the
   /// associated constraints of the template or concept, nullptr will be cached
   /// here.
-  std::map<llvm::SmallVector<void *, 1>, NormalizedConstraint *>
-      NormalizationCache;
+  llvm::FoldingSet<CachedNormalizedConstraint> NormalizationCache;
 
   llvm::ContextualFoldingSet<ConstraintSatisfaction, const ASTContext &>
       SatisfactionCache;

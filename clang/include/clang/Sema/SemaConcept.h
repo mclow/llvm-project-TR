@@ -172,6 +172,15 @@ private:
                      TemplateArgumentList *TemplateArgs = nullptr);
 };
 
+struct CachedNormalizedConstraint : public llvm::FastFoldingSetNode,
+                                    public NormalizedConstraint {
+  NormalizedConstraint* Constraint = nullptr;
+  CachedNormalizedConstraint(const llvm::FoldingSetNodeID &ID, NormalizedConstraint &&Other)
+      : FastFoldingSetNode(ID), NormalizedConstraint(std::move(Other))
+  {}
+};
+
+
 } // clang
 
 #endif // LLVM_CLANG_SEMA_SEMACONCEPT_H

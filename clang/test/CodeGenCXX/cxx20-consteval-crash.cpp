@@ -17,7 +17,7 @@ namespace PR51484 {
 // This code would previously cause a crash.
 struct X { int val; };
 consteval X g() { return {0}; }
-void f() { g(); }
+void f() { (void)g(); }
 
 // CHECK: define dso_local void @_ZN7PR514841fEv() #1 {
 // CHECK: entry:

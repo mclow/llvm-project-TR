@@ -242,7 +242,7 @@ bool Parser::ParseOptionalCXXScopeSpecifier(
     SourceLocation EndLoc = ParseIndexedTypeNamePack(DS);
     if(DS.getTypeSpecType() == DeclSpec::TST_error)
       return false;
-    QualType Type = Actions.BuildPackIndexingType(DS.getRepAsType().get(),
+    QualType Type = Actions.ActOnPackIndexingType(DS.getRepAsType().get(),
                                                           DS.getPackIndexingExpr(),
                                                           DS.getBeginLoc(), DS.getEllipsisLoc());
     if(Type.isNull())

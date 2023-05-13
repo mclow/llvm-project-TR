@@ -1186,7 +1186,7 @@ const NormalizedConstraint *Sema::getNormalizedAssociatedConstraints(
   auto ExprDenotesConcept = [](const Expr* E) {
     if (const UnresolvedLookupExpr *ULE = llvm::dyn_cast<UnresolvedLookupExpr>(E))
       return ULE->isConceptTemplateParameterReference();
-    return isa<ConceptSpecializationExpr>(E);
+    return isa<ConceptSpecializationExpr, BinaryOperator, ParenExpr, CXXFoldExpr>(E);
   };
 
   llvm::FoldingSetNodeID ID;

@@ -2733,7 +2733,6 @@ Sema::ActOnIdExpression(Scope *S, CXXScopeSpec &SS,
 
     return BuildTemplateIdExpr(SS, TemplateKWLoc, R, ADL, TemplateArgs);
   }
-
   return BuildDeclarationNameExpr(SS, R, ADL);
 }
 

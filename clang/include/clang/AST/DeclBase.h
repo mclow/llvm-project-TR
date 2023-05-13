@@ -337,6 +337,10 @@ protected:
   /// Otherwise, it is the linkage + 1.
   mutable unsigned CacheValidAndLinkage : 3;
 
+  // Whether this declaration denotes a placeholder that can be
+  // redefined in the same scope.
+  unsigned IsPlaceholder : 1;
+
   /// Allocate memory for a deserialized declaration.
   ///
   /// This routine must be used to allocate memory for any declaration that is
@@ -383,18 +387,20 @@ protected:
       : NextInContextAndBits(nullptr, getModuleOwnershipKindForChildOf(DC)),
         DeclCtx(DC), Loc(L), DeclKind(DK), InvalidDecl(false), HasAttrs(false),
         Implicit(false), Used(false), Referenced(false),
-        TopLevelDeclInObjCContainer(false), Access(AS_none), FromASTFile(0),
-        IdentifierNamespace(getIdentifierNamespaceForKind(DK)),
-        CacheValidAndLinkage(0) {
+        TopLevelDeclInObjCContainer(false),
+        Access(AS_none), FromASTFile(0), IdentifierNamespace(getIdentifierNamespaceForKind(DK)),
+        CacheValidAndLinkage(0),
+        IsPlaceholder(false) {
     if (StatisticsEnabled) add(DK);
   }
 
   Decl(Kind DK, EmptyShell Empty)
       : DeclKind(DK), InvalidDecl(false), HasAttrs(false), Implicit(false),
         Used(false), Referenced(false), TopLevelDeclInObjCContainer(false),
-        Access(AS_none), FromASTFile(0),
-        IdentifierNamespace(getIdentifierNamespaceForKind(DK)),
-        CacheValidAndLinkage(0) {
+        Access(AS_none),
+        FromASTFile(0), IdentifierNamespace(getIdentifierNamespaceForKind(DK)),
+        CacheValidAndLinkage(0),
+        IsPlaceholder(false) {
     if (StatisticsEnabled) add(DK);
   }
 

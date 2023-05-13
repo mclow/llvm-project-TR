@@ -117,6 +117,17 @@ public:
     /// @endcode
     AmbiguousReference,
 
+    /// Name lookup results in an ambiguity because multiple placeholder
+    /// variables were found in the same scope
+    /// @code
+    /// void f() {
+    ///    int _ = 0;
+    ///    int _ = 0;
+    ///    return _; // ambiguous use of placeholder variable
+    /// }
+    /// @endcode
+    AmbiguousReferenceToPlaceholderVariable,
+
     /// Name lookup results in an ambiguity because an entity with a
     /// tag name was hidden by an entity with an ordinary name from
     /// a different context.
@@ -285,10 +296,7 @@ public:
 
   /// Sets whether tag declarations should be hidden by non-tag
   /// declarations during resolution.  The default is true.
-  void setHideTags(bool Hide) {
-    HideTags = Hide;
-  }
-
+  void setHideTags(bool Hide) { HideTags = Hide; }
   /// Sets whether this is a template-name lookup. For template-name lookups,
   /// injected-class-names are treated as naming a template rather than a
   /// template specialization.
@@ -388,7 +396,6 @@ public:
 
     if (isAvailableForLookup(getSema(), D) || isHiddenDeclarationVisible(D))
       return D;
-
     return getAcceptableDeclSlow(D);
   }
 

@@ -6589,6 +6589,16 @@ def warn_atomic_member_access : Warning<
   InGroup<DiagGroup<"atomic-access">>, DefaultError;
 
 // Expressions.
+def err_using_placeholder_variable : Error<
+  "referring to placeholder '_' is not allowed">;
+def note_reference_placeholder : Note<
+  "placeholder declared here">;
+def warn_placeholder_variable_has_no_side_effect : Warning<
+  "placeholder variable has no side effect">, InGroup<UnusedValue>;
+def warn_placeholder_definition : Extension<
+  "placeholder variables are a Clang extension">,
+  InGroup<DiagGroup<"placeholder-variable-extension">>;
+
 def ext_sizeof_alignof_function_type : Extension<
   "invalid application of '%0' to a function type">, InGroup<PointerArith>;
 def ext_sizeof_alignof_void_type : Extension<

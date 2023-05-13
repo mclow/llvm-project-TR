@@ -452,6 +452,14 @@ public:
     return hasCachedLinkage();
   }
 
+  bool isPlaceholderVar() const {
+    return Decl::IsPlaceholder;
+  }
+
+  void setIsPlaceholderVar(bool Set) {
+    Decl::IsPlaceholder = Set;
+  }
+
   /// Looks through UsingDecls and ObjCCompatibleAliasDecls for
   /// the underlying named decl.
   NamedDecl *getUnderlyingDecl() {

@@ -1993,6 +1993,9 @@ static bool ShouldDiagnoseUnusedDecl(const NamedDecl *D) {
     return false;
   }
 
+  if(D->isPlaceholderVar())
+    return false;
+
   if (D->hasAttr<UnusedAttr>() || D->hasAttr<ObjCPreciseLifetimeAttr>())
     return false;
 
@@ -2018,6 +2021,8 @@ static bool ShouldDiagnoseUnusedDecl(const NamedDecl *D) {
 
   // Types of valid local variables should be complete, so this should succeed.
   if (const VarDecl *VD = dyn_cast<VarDecl>(D)) {
+    if (D->isPlaceholderVar())
+      return !VD->hasInit();
 
     const Expr *Init = VD->getInit();
     if (const auto *Cleanups = dyn_cast_or_null<ExprWithCleanups>(Init))
@@ -2084,7 +2089,6 @@ static bool ShouldDiagnoseUnusedDecl(const NamedDecl *D) {
         }
       }
     }
-
     // TODO: __attribute__((unused)) templates?
   }
 
@@ -2144,7 +2148,9 @@ void Sema::DiagnoseUnusedDecl(const NamedDecl *D, DiagReceiverTy DiagReceiver) {
   GenerateFixForUnusedDecl(D, Context, Hint);
 
   unsigned DiagID;
-  if (isa<VarDecl>(D) && cast<VarDecl>(D)->isExceptionVariable())
+  if (D->isPlaceholderVar()) {
+    DiagID = diag::warn_placeholder_variable_has_no_side_effect;
+  } else if (isa<VarDecl>(D) && cast<VarDecl>(D)->isExceptionVariable())
     DiagID = diag::warn_unused_exception_param;
   else if (isa<LabelDecl>(D))
     DiagID = diag::warn_unused_label;
@@ -2160,6 +2166,9 @@ void Sema::DiagnoseUnusedButSetDecl(const VarDecl *VD,
   // it's not really unused.
   if (!VD->isReferenced() || !VD->getDeclName() || VD->hasAttr<UnusedAttr>() ||
       VD->hasAttr<CleanupAttr>())
+    return;
+
+  if (VD->isPlaceholderVar())
     return;
 
   const auto *Ty = VD->getType().getTypePtr()->getBaseElementTypeUnsafe();
@@ -7430,6 +7439,7 @@ NamedDecl *Sema::ActOnVariableDeclarator(
   DeclarationName Name = GetNameForDeclarator(D).getName();
 
   IdentifierInfo *II = Name.getAsIdentifierInfo();
+  bool IsPlaceholderVariable = false;
 
   if (D.isDecompositionDeclarator()) {
     // Take the name of the first declarator as our name for diagnostic
@@ -7447,6 +7457,19 @@ NamedDecl *Sema::ActOnVariableDeclarator(
 
   DeclSpec::SCS SCSpec = D.getDeclSpec().getStorageClassSpec();
   StorageClass SC = StorageClassSpecToVarDeclStorageClass(D.getDeclSpec());
+
+  if (LangOpts.CPlusPlus && (DC->isClosure() || DC->isFunctionOrMethod()) && SC != SC_Static &&
+      SC != SC_Extern && II && II->isPlaceholder()) {
+          IsPlaceholderVariable = true;
+    if(!Previous.empty()) {
+      auto Decl = *Previous.begin();
+      const bool sameDC =
+          Decl->getDeclContext()->getRedeclContext()->Equals(DC->getRedeclContext());
+      if (sameDC && isDeclInScope(Decl, CurContext, S, false)) {
+        Diag(D.getIdentifierLoc(), diag::warn_placeholder_definition);
+      }
+    }
+  }
 
   // dllimport globals without explicit storage class are treated as extern. We
   // have to change the storage class this early to get the right DeclContext.
@@ -7660,10 +7683,10 @@ NamedDecl *Sema::ActOnVariableDeclarator(
       NewVD = DecompositionDecl::Create(Context, DC, D.getBeginLoc(),
                                         D.getIdentifierLoc(), R, TInfo, SC,
                                         Bindings);
-    } else
+    } else {
       NewVD = VarDecl::Create(Context, DC, D.getBeginLoc(),
                               D.getIdentifierLoc(), II, R, TInfo, SC);
-
+    }
     // If this is supposed to be a variable template, create it as such.
     if (IsVariableTemplate) {
       NewTemplate =
@@ -7718,6 +7741,7 @@ NamedDecl *Sema::ActOnVariableDeclarator(
   // Set the lexical context. If the declarator has a C++ scope specifier, the
   // lexical context will be different from the semantic context.
   NewVD->setLexicalDeclContext(CurContext);
+  NewVD->setIsPlaceholderVar(IsPlaceholderVariable);
   if (NewTemplate)
     NewTemplate->setLexicalDeclContext(CurContext);
 
@@ -8004,7 +8028,7 @@ NamedDecl *Sema::ActOnVariableDeclarator(
       NewVD->setInvalidDecl();
     }
 
-    if (!IsVariableTemplateSpecialization)
+    if (!IsVariableTemplateSpecialization && !IsPlaceholderVariable)
       D.setRedeclaration(CheckVariableDeclaration(NewVD, Previous));
 
     if (NewTemplate) {
@@ -8035,7 +8059,7 @@ NamedDecl *Sema::ActOnVariableDeclarator(
   }
 
   // Diagnose shadowed variables iff this isn't a redeclaration.
-  if (ShadowedDecl && !D.isRedeclaration())
+  if (!IsPlaceholderVariable && ShadowedDecl && !D.isRedeclaration())
     CheckShadow(NewVD, ShadowedDecl, Previous);
 
   ProcessPragmaWeak(S, NewVD);
@@ -8268,6 +8292,10 @@ void Sema::CheckShadow(NamedDecl *D, NamedDecl *ShadowedDecl,
       }
     }
   }
+
+  // Never warn about shadowing placeholder variable
+  if(ShadowedDecl->isPlaceholderVar())
+    return;
 
   // Only warn about certain kinds of shadowing for class members.
   if (NewDC && NewDC->isRecord()) {
@@ -14686,25 +14714,31 @@ Decl *Sema::ActOnParamDeclarator(Scope *S, Declarator &D) {
 
   // Check for redeclaration of parameters, e.g. int foo(int x, int x);
   IdentifierInfo *II = D.getIdentifier();
+  bool IsPlaceholder = false;
   if (II) {
+    IsPlaceholder = LangOpts.CPlusPlus && II->isPlaceholder();
     LookupResult R(*this, II, D.getIdentifierLoc(), LookupOrdinaryName,
                    ForVisibleRedeclaration);
     LookupName(R, S);
-    if (R.isSingleResult()) {
-      NamedDecl *PrevDecl = R.getFoundDecl();
-      if (PrevDecl->isTemplateParameter()) {
+    if (!R.empty()) {
+      NamedDecl *PrevDecl = *R.begin();
+      if (R.isSingleResult() && PrevDecl->isTemplateParameter()) {
         // Maybe we will complain about the shadowed template parameter.
         DiagnoseTemplateParameterShadow(D.getIdentifierLoc(), PrevDecl);
         // Just pretend that we didn't see the previous declaration.
         PrevDecl = nullptr;
-      } else if (S->isDeclScope(PrevDecl)) {
-        Diag(D.getIdentifierLoc(), diag::err_param_redefinition) << II;
-        Diag(PrevDecl->getLocation(), diag::note_previous_declaration);
-
-        // Recover by removing the name
-        II = nullptr;
-        D.SetIdentifier(nullptr, D.getIdentifierLoc());
-        D.setInvalidType(true);
+      }
+      if (PrevDecl && S->isDeclScope(PrevDecl)) {
+        if (IsPlaceholder) {
+          Diag(D.getIdentifierLoc(), diag::warn_placeholder_definition);
+        } else {
+          Diag(D.getIdentifierLoc(), diag::err_param_redefinition) << II;
+          Diag(PrevDecl->getLocation(), diag::note_previous_declaration);
+          // Recover by removing the name
+          II = nullptr;
+          D.SetIdentifier(nullptr, D.getIdentifierLoc());
+          D.setInvalidType(true);
+        }
       }
     }
   }
@@ -14718,6 +14752,8 @@ Decl *Sema::ActOnParamDeclarator(Scope *S, Declarator &D) {
 
   if (D.isInvalidType())
     New->setInvalidDecl();
+
+  New->setIsPlaceholderVar(IsPlaceholder);
 
   assert(S->isFunctionPrototypeScope());
   assert(S->getFunctionPrototypeDepth() >= 1);
@@ -14769,7 +14805,7 @@ void Sema::DiagnoseUnusedParameters(ArrayRef<ParmVarDecl *> Parameters) {
 
   for (const ParmVarDecl *Parameter : Parameters) {
     if (!Parameter->isReferenced() && Parameter->getDeclName() &&
-        !Parameter->hasAttr<UnusedAttr>()) {
+        !Parameter->hasAttr<UnusedAttr>() && !Parameter->isPlaceholderVar()) {
       Diag(Parameter->getLocation(), diag::warn_unused_parameter)
         << Parameter->getDeclName();
     }
@@ -18148,10 +18184,15 @@ FieldDecl *Sema::CheckFieldDecl(DeclarationName Name, QualType T,
   if (InvalidDecl)
     NewFD->setInvalidDecl();
 
+  NewFD->setIsPlaceholderVar(LangOpts.CPlusPlus && II && II->isPlaceholder());
   if (PrevDecl && !isa<TagDecl>(PrevDecl)) {
-    Diag(Loc, diag::err_duplicate_member) << II;
-    Diag(PrevDecl->getLocation(), diag::note_previous_declaration);
-    NewFD->setInvalidDecl();
+    if (isa<FieldDecl>(PrevDecl) && PrevDecl->isPlaceholderVar()) {
+      Diag(Loc, diag::warn_placeholder_definition);
+    } else {
+      Diag(Loc, diag::err_duplicate_member) << II;
+      Diag(PrevDecl->getLocation(), diag::note_previous_declaration);
+      NewFD->setInvalidDecl();
+    }
   }
 
   if (!InvalidDecl && getLangOpts().CPlusPlus) {

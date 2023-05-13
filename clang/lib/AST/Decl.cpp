@@ -1837,9 +1837,9 @@ bool NamedDecl::declarationReplaces(NamedDecl *OldD, bool IsKnownNewer) const {
   if (isa<ObjCMethodDecl>(this))
     return false;
 
-  // For parameters, pick the newer one. This is either an error or (in
-  // Objective-C) permitted as an extension.
-  if (isa<ParmVarDecl>(this))
+  // For parameters, pick the newer one in
+  // Objective-C as an extension.
+  if (isa<ParmVarDecl>(this) && getLangOpts().ObjC)
     return true;
 
   // Inline namespaces can give us two declarations with the same

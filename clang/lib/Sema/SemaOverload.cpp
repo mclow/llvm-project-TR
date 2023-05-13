@@ -5948,6 +5948,9 @@ static ExprResult CheckConvertedConstantExpression(Sema &S, Expr *From,
     return Result;
   }
 
+  if (isa<ConstantExpr>(Result.get()))
+    return Result;
+
   // Check the expression is a constant expression.
   SmallVector<PartialDiagnosticAt, 8> Notes;
   Expr::EvalResult Eval;

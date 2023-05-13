@@ -14,6 +14,7 @@
 #include "clang/AST/ASTConcept.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Decl.h"
+#include "clang/AST/DeclTemplate.h"
 #include "clang/AST/TemplateBase.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/FoldingSet.h"
@@ -88,4 +89,55 @@ void ConstraintSatisfaction::Profile(
   ID.AddInteger(TemplateArgs.size());
   for (auto &Arg : TemplateArgs)
     Arg.Profile(ID, C);
+}
+
+PartiallyAppliedConcept *PartiallyAppliedConcept::Create(
+    const ASTContext &C, NestedNameSpecifierLoc NNS,
+    DeclarationNameInfo ConceptNameInfo, SourceLocation ConceptKWLoc,
+    NamedDecl *FoundDecl, TemplateDecl *NamedConcept,
+    const TemplateArgumentListInfo &TemplateArgs) {
+
+  return new (C) PartiallyAppliedConcept(
+      NNS, ConceptNameInfo, ConceptKWLoc, FoundDecl, NamedConcept,
+      ASTTemplateArgumentListInfo::Create(C, TemplateArgs));
+}
+
+TemplateArgumentDependence PartiallyAppliedConcept::getDependence() const {
+  auto TA = TemplateArgumentDependence::None;
+  if (isa<TemplateTemplateParmDecl>(getNamedConcept())) {
+    TA |= TemplateArgumentDependence::DependentInstantiation;
+  }
+  const auto InterestingDeps = TemplateArgumentDependence::Instantiation |
+                               TemplateArgumentDependence::UnexpandedPack;
+  for (const TemplateArgumentLoc &ArgLoc :
+       getTemplateArgsAsWritten()->arguments()) {
+    TA |= ArgLoc.getArgument().getDependence() & InterestingDeps;
+    if (TA == InterestingDeps)
+      break;
+  }
+  return TA;
+}
+
+void PartiallyAppliedConcept::Profile(
+    llvm::FoldingSetNodeID &ID, const ASTContext &C,
+    const TemplateDecl *NamedConcept,
+    const ASTTemplateArgumentListInfo *ArgsAsWritten) {
+  ID.AddPointer(NamedConcept);
+  ID.AddInteger(ArgsAsWritten->getNumTemplateArgs());
+  for (auto &Arg : ArgsAsWritten->arguments())
+    Arg.getArgument().Profile(ID, C);
+}
+
+const StreamingDiagnostic &clang::operator<<(const StreamingDiagnostic &DB,
+                                             PartiallyAppliedConcept &C) {
+  std::string NameStr;
+  llvm::raw_string_ostream OS(NameStr);
+  LangOptions LO;
+  LO.CPlusPlus = true;
+  LO.Bool = true;
+  OS << '\'';
+  C.print(OS, PrintingPolicy(LO));
+  OS << '\'';
+  OS.flush();
+  return DB << NameStr;
 }

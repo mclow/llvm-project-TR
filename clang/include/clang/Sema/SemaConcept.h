@@ -44,6 +44,10 @@ struct AtomicConstraint {
 
     for (unsigned I = 0, S = ParameterMapping->size(); I < S; ++I) {
       llvm::FoldingSetNodeID IDA, IDB;
+      if ((*ParameterMapping)[I]
+              .getArgument()
+              .isConceptOrConceptTemplateParameter())
+        continue;
       C.getCanonicalTemplateArgument((*ParameterMapping)[I].getArgument())
           .Profile(IDA, C);
       C.getCanonicalTemplateArgument((*Other.ParameterMapping)[I].getArgument())
@@ -143,12 +147,39 @@ struct NormalizedConstraint {
     return Constraint.get<AtomicConstraint *>();
   }
 
+  void dump() {
+    if (isAtomic()) {
+      llvm::outs() << getAtomicConstraint()->ConstraintExpr;
+      return;
+    }
+    getLHS().dump();
+    llvm::outs() << "\n";
+    llvm::outs() << (getCompoundKind() ==
+                             CompoundConstraintKind::CCK_Conjunction
+                         ? "&&"
+                         : "||")
+                 << "\n";
+    getRHS().dump();
+    llvm::outs() << "\n";
+  }
+
 private:
   static std::optional<NormalizedConstraint>
-  fromConstraintExprs(Sema &S, NamedDecl *D, ArrayRef<const Expr *> E);
+  fromConstraintExprs(Sema &S, NamedDecl *D, ArrayRef<const Expr *> E,
+                      TemplateArgumentList *TemplateArgs = nullptr);
   static std::optional<NormalizedConstraint>
-  fromConstraintExpr(Sema &S, NamedDecl *D, const Expr *E);
+  fromConstraintExpr(Sema &S, NamedDecl *D, const Expr *E,
+                     TemplateArgumentList *TemplateArgs = nullptr);
 };
+
+struct CachedNormalizedConstraint : public llvm::FastFoldingSetNode,
+                                    public NormalizedConstraint {
+  NormalizedConstraint* Constraint = nullptr;
+  CachedNormalizedConstraint(const llvm::FoldingSetNodeID &ID, NormalizedConstraint &&Other)
+      : FastFoldingSetNode(ID), NormalizedConstraint(std::move(Other))
+  {}
+};
+
 
 } // clang
 

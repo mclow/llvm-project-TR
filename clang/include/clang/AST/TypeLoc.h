@@ -2199,7 +2199,7 @@ public:
     getLocalData()->FoundDecl = D;
   }
 
-  ConceptDecl *getNamedConcept() const {
+  TemplateDecl *getNamedConcept() const {
     return getTypePtr()->getTypeConstraintConcept();
   }
 

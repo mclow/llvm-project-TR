@@ -2954,6 +2954,7 @@ addAssociatedClassesAndNamespaces(AssociatedLookup &Result,
       break;
     }
 
+    case TemplateArgument::Concept:
     case TemplateArgument::Declaration:
     case TemplateArgument::Integral:
     case TemplateArgument::Expression:

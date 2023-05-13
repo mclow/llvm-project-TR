@@ -1627,7 +1627,7 @@ Parser::isCXXDeclarationSpecifier(ImplicitTypenameContext AllowImplicitTypename,
               if (TryAnnotateTypeOrScopeToken())
                 return TPResult::Error;
               if (Tok.isNot(tok::identifier))
-                break;
+                return TPResult::False;
             }
 
             // A bare type template-name which can't be a template template

@@ -305,6 +305,7 @@ TemplateNameKind Sema::isTemplateName(Scope *S,
              isa<TypeAliasTemplateDecl>(TD) || isa<VarTemplateDecl>(TD) ||
              isa<BuiltinTemplateDecl>(TD) || isa<ConceptDecl>(TD));
       TemplateKind =
+          isa<TemplateTemplateParmDecl>(TD) ? dyn_cast<TemplateTemplateParmDecl>(TD)->kind() :
           isa<VarTemplateDecl>(TD) ? TNK_Var_template :
           isa<ConceptDecl>(TD) ? TNK_Concept_template :
           TNK_Type_template;
@@ -950,8 +951,15 @@ static TemplateArgumentLoc translateTemplateArgument(Sema &SemaRef,
         Arg.getScopeSpec().getWithLocInContext(SemaRef.Context),
         Arg.getLocation(), Arg.getEllipsisLoc());
   }
+  case clang::ParsedTemplateArgument::PartiallyAppliedConcept: {
+    PartiallyAppliedConcept *C = Arg.getAsConcept();
+    TemplateArgument TArg(C);
+    return TemplateArgumentLoc(
+        SemaRef.Context, TArg,
+        Arg.getScopeSpec().getWithLocInContext(SemaRef.Context),
+        Arg.getLocation());
   }
-
+  }
   llvm_unreachable("Unhandled parsed template argument");
 }
 
@@ -1110,12 +1118,27 @@ makeTemplateArgumentListInfo(Sema &S, TemplateIdAnnotation &TemplateId) {
 bool Sema::CheckTypeConstraint(TemplateIdAnnotation *TypeConstr) {
 
   TemplateName TN = TypeConstr->Template.get();
-  ConceptDecl *CD = cast<ConceptDecl>(TN.getAsTemplateDecl());
+  NamedDecl *CD = nullptr;
+  bool IsTypeConcept = false;
+  bool RequiresArguments = false;
+  if (TemplateTemplateParmDecl *TTP =
+          llvm::dyn_cast<TemplateTemplateParmDecl>(TN.getAsTemplateDecl())) {
+    IsTypeConcept = TTP->isTypeConceptTemplateParam();
+    RequiresArguments =
+        TTP->getTemplateParameters()->getMinRequiredArguments() > 1;
+    CD = TTP;
+  } else {
+    CD = TN.getAsTemplateDecl();
+    IsTypeConcept = cast<ConceptDecl>(CD)->isTypeConcept();
+    RequiresArguments = cast<ConceptDecl>(CD)
+                            ->getTemplateParameters()
+                            ->getMinRequiredArguments() > 1;
+  }
 
   // C++2a [temp.param]p4:
   //     [...] The concept designated by a type-constraint shall be a type
   //     concept ([temp.concept]).
-  if (!CD->isTypeConcept()) {
+  if (!IsTypeConcept) {
     Diag(TypeConstr->TemplateNameLoc,
          diag::err_type_constraint_non_type_concept);
     return true;
@@ -1123,8 +1146,7 @@ bool Sema::CheckTypeConstraint(TemplateIdAnnotation *TypeConstr) {
 
   bool WereArgsSpecified = TypeConstr->LAngleLoc.isValid();
 
-  if (!WereArgsSpecified &&
-      CD->getTemplateParameters()->getMinRequiredArguments() > 1) {
+  if (!WereArgsSpecified && RequiresArguments) {
     Diag(TypeConstr->TemplateNameLoc,
          diag::err_type_constraint_missing_arguments)
         << CD;
@@ -1151,7 +1173,7 @@ bool Sema::BuildTypeConstraint(const CXXScopeSpec &SS,
     return true;
 
   TemplateName TN = TypeConstr->Template.get();
-  ConceptDecl *CD = cast<ConceptDecl>(TN.getAsTemplateDecl());
+  TemplateDecl *CD = cast<TemplateDecl>(TN.getAsTemplateDecl());
 
   DeclarationNameInfo ConceptName(DeclarationName(TypeConstr->Name),
                                   TypeConstr->TemplateNameLoc);
@@ -1175,13 +1197,12 @@ bool Sema::BuildTypeConstraint(const CXXScopeSpec &SS,
       ConstrainedParameter, EllipsisLoc);
 }
 
-template<typename ArgumentLocAppender>
+template <typename ArgumentLocAppender>
 static ExprResult formImmediatelyDeclaredConstraint(
     Sema &S, NestedNameSpecifierLoc NS, DeclarationNameInfo NameInfo,
-    ConceptDecl *NamedConcept, SourceLocation LAngleLoc,
-    SourceLocation RAngleLoc, QualType ConstrainedType,
-    SourceLocation ParamNameLoc, ArgumentLocAppender Appender,
-    SourceLocation EllipsisLoc) {
+    NamedDecl *NamedConcept, SourceLocation LAngleLoc, SourceLocation RAngleLoc,
+    QualType ConstrainedType, SourceLocation ParamNameLoc,
+    ArgumentLocAppender Appender, SourceLocation EllipsisLoc) {
 
   TemplateArgumentListInfo ConstraintArgs;
   ConstraintArgs.addArgument(
@@ -1197,11 +1218,29 @@ static ExprResult formImmediatelyDeclaredConstraint(
   //     constraint of T. [...]
   CXXScopeSpec SS;
   SS.Adopt(NS);
-  ExprResult ImmediatelyDeclaredConstraint = S.CheckConceptTemplateId(
-      SS, /*TemplateKWLoc=*/SourceLocation(), NameInfo,
-      /*FoundDecl=*/NamedConcept, NamedConcept, &ConstraintArgs);
-  if (ImmediatelyDeclaredConstraint.isInvalid() || !EllipsisLoc.isValid())
-    return ImmediatelyDeclaredConstraint;
+  ExprResult ImmediatelyDeclaredConstraint;
+  if (auto *CD = dyn_cast<ConceptDecl>(NamedConcept)) {
+    ImmediatelyDeclaredConstraint = S.CheckConceptTemplateId(
+        SS, /*TemplateKWLoc=*/SourceLocation(), NameInfo,
+        /*FoundDecl=*/NamedConcept, CD, &ConstraintArgs);
+    if (ImmediatelyDeclaredConstraint.isInvalid() || !EllipsisLoc.isValid())
+      return ImmediatelyDeclaredConstraint;
+  }
+  // We have a template template parameter
+  else {
+    auto *CDT = dyn_cast<TemplateTemplateParmDecl>(NamedConcept);
+    ImmediatelyDeclaredConstraint = S.CheckVarOrConceptTemplateTemplateId(
+        SS, NameInfo, CDT, SourceLocation(), &ConstraintArgs);
+    if (ImmediatelyDeclaredConstraint.isInvalid())
+      return ImmediatelyDeclaredConstraint;
+    UnresolvedSet<1> R;
+    R.addDecl(CDT);
+    ImmediatelyDeclaredConstraint = UnresolvedLookupExpr::Create(
+        S.getASTContext(), nullptr, SS.getWithLocInContext(S.getASTContext()),
+        SourceLocation(), NameInfo, false, &ConstraintArgs, R.begin(), R.end());
+    if (ImmediatelyDeclaredConstraint.isInvalid() || !EllipsisLoc.isValid())
+      return ImmediatelyDeclaredConstraint;
+  }
 
   // C++2a [temp.param]p4:
   //     [...] If T is not a pack, then E is E', otherwise E is (E' && ...).
@@ -1229,7 +1268,7 @@ static ExprResult formImmediatelyDeclaredConstraint(
 /// of arguments for the named concept).
 bool Sema::AttachTypeConstraint(NestedNameSpecifierLoc NS,
                                 DeclarationNameInfo NameInfo,
-                                ConceptDecl *NamedConcept,
+                                TemplateDecl *NamedConcept,
                                 const TemplateArgumentListInfo *TemplateArgs,
                                 TemplateTypeParmDecl *ConstrainedParameter,
                                 SourceLocation EllipsisLoc) {
@@ -1619,26 +1658,21 @@ NamedDecl *Sema::ActOnNonTypeTemplateParameter(Scope *S, Declarator &D,
 /// ActOnTemplateTemplateParameter - Called when a C++ template template
 /// parameter (e.g. T in template <template \<typename> class T> class array)
 /// has been parsed. S is the current scope.
-NamedDecl *Sema::ActOnTemplateTemplateParameter(Scope* S,
-                                           SourceLocation TmpLoc,
-                                           TemplateParameterList *Params,
-                                           SourceLocation EllipsisLoc,
-                                           IdentifierInfo *Name,
-                                           SourceLocation NameLoc,
-                                           unsigned Depth,
-                                           unsigned Position,
-                                           SourceLocation EqualLoc,
-                                           ParsedTemplateArgument Default) {
+NamedDecl *Sema::ActOnTemplateTemplateParameter(
+    Scope *S, SourceLocation TmpLoc, TemplateNameKind Kind,
+    TemplateParameterList *Params, SourceLocation EllipsisLoc,
+    IdentifierInfo *Name, SourceLocation NameLoc, unsigned Depth,
+    unsigned Position, SourceLocation EqualLoc,
+    ParsedTemplateArgument Default) {
   assert(S->isTemplateParamScope() &&
          "Template template parameter not in template parameter scope!");
 
   // Construct the parameter object.
   bool IsParameterPack = EllipsisLoc.isValid();
-  TemplateTemplateParmDecl *Param =
-    TemplateTemplateParmDecl::Create(Context, Context.getTranslationUnitDecl(),
-                                     NameLoc.isInvalid()? TmpLoc : NameLoc,
-                                     Depth, Position, IsParameterPack,
-                                     Name, Params);
+  TemplateTemplateParmDecl *Param = TemplateTemplateParmDecl::Create(
+      Context, Context.getTranslationUnitDecl(),
+      NameLoc.isInvalid() ? TmpLoc : NameLoc, Depth, Position, IsParameterPack,
+      Name, Kind, Params);
   Param->setAccess(AS_public);
 
   if (Param->isParameterPack())
@@ -1681,6 +1715,12 @@ NamedDecl *Sema::ActOnTemplateTemplateParameter(Scope* S,
     if (DefaultArg.getArgument().getAsTemplate().isNull()) {
       Diag(DefaultArg.getLocation(), diag::err_template_arg_not_valid_template)
         << DefaultArg.getSourceRange();
+      return Param;
+    }
+
+    TemplateName Name = DefaultArg.getArgument().getAsTemplateOrTemplatePattern();
+    TemplateDecl *Template = Name.getAsTemplateDecl();
+    if(Template && !CheckDeclCompatibleWithTemplateTemplate(Template, Param, DefaultArg)) {
       return Param;
     }
 
@@ -3854,10 +3894,12 @@ QualType Sema::CheckTemplateIdType(TemplateName Name,
       return Context.getTemplateSpecializationType(Name,
                                                    TemplateArgs.arguments());
 
-    Diag(TemplateLoc, diag::err_template_id_not_a_type)
-      << Name;
-    NoteAllFoundTemplates(Name);
-    return QualType();
+    //if(isa<FunctionTemplateDecl>(Template)) {
+        Diag(TemplateLoc, diag::err_template_id_not_a_type)
+          << Name;
+        NoteAllFoundTemplates(Name);
+        return QualType();
+    //}
   }
 
   // Check that the template argument list is well-formed for this
@@ -4858,6 +4900,31 @@ Sema::CheckVarTemplateId(const CXXScopeSpec &SS,
                                   /*FoundD=*/nullptr, TemplateArgs);
 }
 
+ExprResult
+Sema::CheckVarOrConceptTemplateTemplateId(const CXXScopeSpec &,
+                         const DeclarationNameInfo &,
+                         TemplateTemplateParmDecl *Template, SourceLocation TemplateLoc,
+                         const TemplateArgumentListInfo *TemplateArgs)
+{
+    assert(Template && "A variable template id without template?");
+
+    if(Template->kind() != TemplateNameKind::TNK_Var_template
+            && Template->kind() != TemplateNameKind::TNK_Concept_template)
+        return ExprResult();
+
+
+    // Check that the template argument list is well-formed for this template.
+    SmallVector<TemplateArgument, 4> SugaredConverted, CanonicalConverted;
+    if (CheckTemplateArgumentList(
+            Template, TemplateLoc,
+            const_cast<TemplateArgumentListInfo &>(*TemplateArgs), false,
+            SugaredConverted, CanonicalConverted, /*UpdateArgsWithConversion=*/true))
+      return true;
+
+    return ExprResult();
+}
+
+
 void Sema::diagnoseMissingTemplateArguments(TemplateName Name,
                                             SourceLocation Loc) {
   Diag(Loc, diag::err_template_missing_args)
@@ -4919,7 +4986,7 @@ ExprResult Sema::BuildTemplateIdExpr(const CXXScopeSpec &SS,
                                      SourceLocation TemplateKWLoc,
                                      LookupResult &R,
                                      bool RequiresADL,
-                                 const TemplateArgumentListInfo *TemplateArgs) {
+                                     const TemplateArgumentListInfo *TemplateArgs) {
   // FIXME: Can we do any checking at this point? I guess we could check the
   // template arguments that we have against the template name, if the template
   // name refers to a single template. That's not a terribly common case,
@@ -4957,16 +5024,23 @@ ExprResult Sema::BuildTemplateIdExpr(const CXXScopeSpec &SS,
                                   R.getAsSingle<ConceptDecl>(), TemplateArgs);
   }
 
+  // In C++1y, check variable template ids.
+  if (R.getAsSingle<TemplateTemplateParmDecl>()) {
+    ExprResult Res = CheckVarOrConceptTemplateTemplateId(SS, R.getLookupNameInfo(),
+                                        R.getAsSingle<TemplateTemplateParmDecl>(),
+                                        TemplateKWLoc, TemplateArgs);
+    if (Res.isInvalid() || Res.isUsable())
+      return Res;
+    // Result is dependent. Carry on to build an UnresolvedLookupEpxr.
+  }
+
   // We don't want lookup warnings at this point.
   R.suppressDiagnostics();
 
-  UnresolvedLookupExpr *ULE
-    = UnresolvedLookupExpr::Create(Context, R.getNamingClass(),
-                                   SS.getWithLocInContext(Context),
-                                   TemplateKWLoc,
-                                   R.getLookupNameInfo(),
-                                   RequiresADL, TemplateArgs,
-                                   R.begin(), R.end());
+  UnresolvedLookupExpr *ULE = UnresolvedLookupExpr::Create(
+      Context, R.getNamingClass(), SS.getWithLocInContext(Context),
+      TemplateKWLoc, R.getLookupNameInfo(), RequiresADL, TemplateArgs,
+      R.begin(), R.end());
 
   return ULE;
 }
@@ -5151,6 +5225,45 @@ TemplateNameKind Sema::ActOnTemplateName(Scope *S,
       << GetNameFromUnqualifiedId(Name).getName() << Name.getSourceRange()
       << TemplateKWLoc.isValid() << TemplateKWLoc;
   return TNK_Non_template;
+}
+
+PartiallyAppliedConcept *Sema::BuildPartiallyAppliedConcept(
+    NestedNameSpecifierLoc NNS, SourceLocation ConceptKWLoc,
+    DeclarationNameInfo ConceptName, TemplateDecl *TD,
+    const TemplateArgumentListInfo &TemplateArgs) {
+
+  return PartiallyAppliedConcept::Create(getASTContext(), NNS, ConceptName,
+                                         ConceptKWLoc, TD, TD, TemplateArgs);
+}
+
+PartiallyAppliedConcept *
+Sema::ActOnPartiallyAppliedConcept(Scope *S, CXXScopeSpec &SS,
+                                   SourceLocation ConceptKWLoc,
+                                   TemplateIdAnnotation *TemplateId) {
+
+  if (TemplateId->isInvalid())
+    return nullptr;
+  TemplateName TN = TemplateId->Template.get();
+  if (TN.isNull())
+    return nullptr;
+  bool IsConcept = false;
+  TemplateDecl *TD = TN.getAsTemplateDecl();
+  if (TemplateTemplateParmDecl *TTP = dyn_cast<TemplateTemplateParmDecl>(TD))
+    IsConcept = TTP->kind() == TNK_Concept_template;
+  else
+    IsConcept = isa<ConceptDecl>(TD);
+  if (!IsConcept) {
+    Diag(TemplateId->TemplateNameLoc, diag::err_partial_concept_valid_template);
+    return nullptr;
+  }
+
+  DeclarationNameInfo ConceptName(DeclarationName(TemplateId->Name),
+                                  TemplateId->TemplateNameLoc);
+  TemplateArgumentListInfo TemplateArgs =
+      makeTemplateArgumentListInfo(*this, *TemplateId);
+  NestedNameSpecifierLoc NNS = SS.getWithLocInContext(Context);
+  return BuildPartiallyAppliedConcept(NNS, ConceptKWLoc, ConceptName, TD,
+                                      TemplateArgs);
 }
 
 bool Sema::CheckTemplateTypeArgument(
@@ -5637,6 +5750,13 @@ bool Sema::CheckTemplateArgument(
           Context.getCanonicalTemplateArgument(Arg.getArgument()));
       break;
 
+    // TODO support non-type concepts
+    case TemplateArgument::Concept:
+      Diag(Arg.getLocation(), diag::err_template_arg_must_be_expr)
+          << Arg.getSourceRange();
+      Diag(Param->getLocation(), diag::note_template_param_here);
+      return true;
+
     case TemplateArgument::Template:
     case TemplateArgument::TemplateExpansion:
       // We were given a template template argument. It may not be ill-formed;
@@ -5710,7 +5830,6 @@ bool Sema::CheckTemplateArgument(
       Diag(Param->getLocation(), diag::note_template_param_here);
       return true;
     }
-
     case TemplateArgument::Pack:
       llvm_unreachable("Caller must expand template argument packs");
     }
@@ -5764,6 +5883,15 @@ bool Sema::CheckTemplateArgument(
   case TemplateArgument::Null:
     llvm_unreachable("Should never see a NULL template argument here");
 
+  case TemplateArgument::Concept:
+    if (CheckPartiallyAppliedConceptTemplateArgument(TempParm, Params, Arg))
+      return true;
+
+    SugaredConverted.push_back(Arg.getArgument());
+    CanonicalConverted.push_back(
+        Context.getCanonicalTemplateArgument(Arg.getArgument()));
+    break;
+
   case TemplateArgument::Template:
   case TemplateArgument::TemplateExpansion:
     if (CheckTemplateTemplateArgument(TempParm, Params, Arg))
@@ -5775,12 +5903,26 @@ bool Sema::CheckTemplateArgument(
     break;
 
   case TemplateArgument::Expression:
-  case TemplateArgument::Type:
+  case TemplateArgument::Type: {
+    auto Kind = 0;
+    switch(TempParm->kind()) {
+      case TemplateNameKind::TNK_Var_template:
+        Kind = 1;
+        break;
+      case TemplateNameKind::TNK_Concept_template:
+        Kind = 2;
+        break;
+      default:
+        break;
+    }
+
     // We have a template template parameter but the template
     // argument does not refer to a template.
     Diag(Arg.getLocation(), diag::err_template_arg_must_be_template)
+      << Kind
       << getLangOpts().CPlusPlus11;
     return true;
+  }
 
   case TemplateArgument::Declaration:
     llvm_unreachable("Declaration argument with template template parameter");
@@ -7694,6 +7836,79 @@ static void DiagnoseTemplateParameterListArityMismatch(
     Sema &S, TemplateParameterList *New, TemplateParameterList *Old,
     Sema::TemplateParameterListEqualKind Kind, SourceLocation TemplateArgLoc);
 
+bool Sema::CheckDeclCompatibleWithTemplateTemplate(TemplateDecl *Template,
+                                                   TemplateTemplateParmDecl *Param,
+                                                   const TemplateArgumentLoc &Arg) {
+    // C++0x [temp.arg.template]p1:
+    //   A template-argument for a template template-parameter shall be
+    //   the name of a class template or an alias template, expressed as an
+    //   id-expression. When the template-argument names a class template, only
+    //   primary class templates are considered when matching the
+    //   template template argument with the corresponding parameter;
+    //   partial specializations are not considered even if their
+    //   parameter lists match that of the template template parameter.
+    //
+
+    TemplateNameKind Kind = TNK_Non_template;
+    unsigned DiagFoundKind = 0;
+
+    if(auto * TTP = llvm::dyn_cast<TemplateTemplateParmDecl>(Template)) {
+      switch(TTP->kind()) {
+        case TemplateNameKind::TNK_Concept_template:
+          DiagFoundKind = 3;
+          break;
+        case TemplateNameKind::TNK_Var_template:
+          DiagFoundKind = 2;
+          break;
+        default:
+          DiagFoundKind = 1;
+          break;
+      }
+      Kind = TTP->kind();
+    }
+    else if(isa<ConceptDecl>(Template)) {
+        Kind = TemplateNameKind::TNK_Concept_template;
+        DiagFoundKind = 3;
+    }
+    else if(isa<FunctionTemplateDecl>(Template)) {
+        Kind = TemplateNameKind::TNK_Function_template;
+        DiagFoundKind = 0;
+    }
+    else if(isa<VarTemplateDecl>(Template)) {
+        Kind = TemplateNameKind::TNK_Var_template;
+        DiagFoundKind = 2;
+    }
+    else if(isa<ClassTemplateDecl>(Template)
+             || isa<TypeAliasTemplateDecl>(Template) || isa<BuiltinTemplateDecl>(Template)) {
+         Kind = TemplateNameKind::TNK_Type_template;
+         DiagFoundKind = 1;
+    }
+    else {
+        assert(false && "Unexpected Decl");
+    }
+
+    if(Kind == Param->kind()) {
+        return true;
+    }
+
+    unsigned DiagKind = 0;
+    switch(Param->kind()) {
+    case TemplateNameKind::TNK_Concept_template:
+        DiagKind = 2;
+        break;
+    case TemplateNameKind::TNK_Var_template:
+        DiagKind = 1;
+        break;
+    default:
+        DiagKind = 0;
+        break;
+    }
+    Diag(Arg.getLocation(), diag::err_template_arg_not_valid_template) << DiagKind;
+    Diag(Template->getLocation(), diag::note_template_arg_refers_to_template_here) << DiagFoundKind
+      << Template;
+    return false;
+}
+
 /// Check a template argument against its corresponding
 /// template template parameter.
 ///
@@ -7713,27 +7928,8 @@ bool Sema::CheckTemplateTemplateArgument(TemplateTemplateParmDecl *Param,
   if (Template->isInvalidDecl())
     return true;
 
-  // C++0x [temp.arg.template]p1:
-  //   A template-argument for a template template-parameter shall be
-  //   the name of a class template or an alias template, expressed as an
-  //   id-expression. When the template-argument names a class template, only
-  //   primary class templates are considered when matching the
-  //   template template argument with the corresponding parameter;
-  //   partial specializations are not considered even if their
-  //   parameter lists match that of the template template parameter.
-  //
-  // Note that we also allow template template parameters here, which
-  // will happen when we are dealing with, e.g., class template
-  // partial specializations.
-  if (!isa<ClassTemplateDecl>(Template) &&
-      !isa<TemplateTemplateParmDecl>(Template) &&
-      !isa<TypeAliasTemplateDecl>(Template) &&
-      !isa<BuiltinTemplateDecl>(Template)) {
-    assert(isa<FunctionTemplateDecl>(Template) &&
-           "Only function templates are possible here");
-    Diag(Arg.getLocation(), diag::err_template_arg_not_valid_template);
-    Diag(Template->getLocation(), diag::note_template_arg_refers_here_func)
-      << Template;
+  if(!CheckDeclCompatibleWithTemplateTemplate(Template, Param, Arg)) {
+      return true;
   }
 
   // C++1z [temp.arg.template]p3: (DR 150)
@@ -7797,6 +7993,45 @@ bool Sema::CheckTemplateTemplateArgument(TemplateTemplateParmDecl *Param,
                                          true,
                                          TPL_TemplateTemplateArgumentMatch,
                                          Arg.getLocation());
+}
+
+bool Sema::CheckPartiallyAppliedConceptTemplateArgument(
+    TemplateTemplateParmDecl *Param, TemplateParameterList *Params,
+    TemplateArgumentLoc &Arg) {
+  PartiallyAppliedConcept *C = Arg.getArgument().getAsPartiallyAppliedConcept();
+  TemplateDecl *Template = C->getNamedConcept();
+  if (Template->isInvalidDecl())
+    return true;
+
+  if (!CheckDeclCompatibleWithTemplateTemplate(Template, Param, Arg)) {
+    return true;
+  }
+  if (Params->size() != 1) {
+    Diag(C->getSourceRange().getBegin(),
+         diag::err_partial_concept_param_must_have_one_arg);
+    Diag(Param->getLocation(),
+         diag::note_concept_template_parameter_declared_here)
+        << Param;
+    return true;
+  }
+  unsigned MinArguments =
+      Template->getTemplateParameters()->getMinRequiredArguments();
+
+  auto Passed = C->getTemplateArgsAsWritten()->getNumTemplateArgs();
+  bool TooFew  = MinArguments > Passed + 1;
+  bool TooMany = Passed +1 > Template->getTemplateParameters()->size() &&
+                 !Template->getTemplateParameters()->hasParameterPack();
+
+  if (TooFew || TooMany) {
+    Diag(C->getSourceRange().getBegin(),
+         diag::err_template_arg_list_different_arity)
+        << (TooFew ? 0 : 1) << /*Concept*/ 5 << Template;
+    Diag(Template->getLocation(), diag::note_template_decl_here)
+        << Template->getTemplateParameters()->getSourceRange();
+    return true;
+  }
+
+  return false;
 }
 
 /// Given a non-type template argument that refers to a
@@ -8059,6 +8294,8 @@ static bool MatchTemplateParameterKind(
   else if (TemplateTemplateParmDecl *OldTTP
                                     = dyn_cast<TemplateTemplateParmDecl>(Old)) {
     TemplateTemplateParmDecl *NewTTP = cast<TemplateTemplateParmDecl>(New);
+    if(OldTTP->kind() != NewTTP->kind())
+      return false;
     if (!S.TemplateParameterListsAreEqual(
             NewInstFrom, NewTTP->getTemplateParameters(), OldInstFrom,
             OldTTP->getTemplateParameters(), Complain,

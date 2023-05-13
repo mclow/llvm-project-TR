@@ -128,7 +128,7 @@ protected:
   NamedDecl *FoundDecl;
 
   /// \brief The concept named.
-  ConceptDecl *NamedConcept;
+  TemplateDecl *NamedConcept;
 
   /// \brief The template argument list source info used to specialize the
   /// concept.
@@ -137,7 +137,7 @@ protected:
 public:
   ConceptReference(NestedNameSpecifierLoc NNS, SourceLocation TemplateKWLoc,
                    DeclarationNameInfo ConceptNameInfo, NamedDecl *FoundDecl,
-                   ConceptDecl *NamedConcept,
+                   TemplateDecl *NamedConcept,
                    const ASTTemplateArgumentListInfo *ArgsAsWritten)
       : NestedNameSpec(NNS), TemplateKWLoc(TemplateKWLoc),
         ConceptName(ConceptNameInfo), FoundDecl(FoundDecl),
@@ -162,9 +162,7 @@ public:
     return FoundDecl;
   }
 
-  ConceptDecl *getNamedConcept() const {
-    return NamedConcept;
-  }
+  TemplateDecl *getNamedConcept() const { return NamedConcept; }
 
   const ASTTemplateArgumentListInfo *getTemplateArgsAsWritten() const {
     return ArgsAsWritten;
@@ -175,6 +173,8 @@ public:
   bool hasExplicitTemplateArgs() const {
     return ArgsAsWritten != nullptr;
   }
+
+  void print(llvm::raw_ostream &OS, PrintingPolicy Policy) const;
 };
 
 class TypeConstraint : public ConceptReference {
@@ -185,12 +185,13 @@ class TypeConstraint : public ConceptReference {
 public:
   TypeConstraint(NestedNameSpecifierLoc NNS,
                  DeclarationNameInfo ConceptNameInfo, NamedDecl *FoundDecl,
-                 ConceptDecl *NamedConcept,
+                 TemplateDecl *NamedConcept,
                  const ASTTemplateArgumentListInfo *ArgsAsWritten,
-                 Expr *ImmediatelyDeclaredConstraint) :
-      ConceptReference(NNS, /*TemplateKWLoc=*/SourceLocation(), ConceptNameInfo,
-                       FoundDecl, NamedConcept, ArgsAsWritten),
-      ImmediatelyDeclaredConstraint(ImmediatelyDeclaredConstraint) {}
+                 Expr *ImmediatelyDeclaredConstraint)
+      : ConceptReference(NNS, /*TemplateKWLoc=*/SourceLocation(),
+                         ConceptNameInfo, FoundDecl, NamedConcept,
+                         ArgsAsWritten),
+        ImmediatelyDeclaredConstraint(ImmediatelyDeclaredConstraint) {}
 
   /// \brief Get the immediately-declared constraint expression introduced by
   /// this type-constraint, that is - the constraint expression that is added to
@@ -198,8 +199,55 @@ public:
   Expr *getImmediatelyDeclaredConstraint() const {
     return ImmediatelyDeclaredConstraint;
   }
+};
 
-  void print(llvm::raw_ostream &OS, PrintingPolicy Policy) const;
+class PartiallyAppliedConcept : public ConceptReference,
+                                public llvm::FoldingSetNode {
+
+  SourceLocation ConceptKWLoc;
+  PartiallyAppliedConcept(NestedNameSpecifierLoc NNS,
+                          DeclarationNameInfo ConceptNameInfo,
+                          SourceLocation ConceptKWLoc, NamedDecl *FoundDecl,
+                          TemplateDecl *NamedConcept,
+                          const ASTTemplateArgumentListInfo *ArgsAsWritten)
+      : ConceptReference(NNS, /*TemplateKWLoc=*/SourceLocation(),
+                         ConceptNameInfo, FoundDecl, NamedConcept,
+                         ArgsAsWritten),
+        ConceptKWLoc(ConceptKWLoc) {}
+
+public:
+  static PartiallyAppliedConcept *
+  Create(const ASTContext &C, NestedNameSpecifierLoc NNS,
+         DeclarationNameInfo ConceptNameInfo, SourceLocation ConceptKWLoc,
+         NamedDecl *FoundDecl, TemplateDecl *NamedConcept,
+         const TemplateArgumentListInfo &TemplateArgs);
+
+  TemplateArgumentDependence getDependence() const;
+
+  bool isDependent() const {
+    return getDependence() & TemplateArgumentDependence::Dependent;
+  }
+
+  bool isInstantiationDependent() const {
+    return getDependence() & TemplateArgumentDependence::Instantiation;
+  }
+
+  void Profile(llvm::FoldingSetNodeID &ID, const ASTContext &C) const {
+    Profile(ID, C, getNamedConcept(), getTemplateArgsAsWritten());
+  }
+
+  static void Profile(llvm::FoldingSetNodeID &ID, const ASTContext &C,
+                      const TemplateDecl *NamedConcept,
+                      const ASTTemplateArgumentListInfo *ArgsAsWritten);
+
+  SourceLocation getConceptKWLoc() const { return ConceptKWLoc; }
+
+  SourceRange getSourceRange() const {
+    return {ConceptKWLoc, ArgsAsWritten->getRAngleLoc()};
+  }
+
+  friend const StreamingDiagnostic &operator<<(const StreamingDiagnostic &DB,
+                                               PartiallyAppliedConcept &C);
 };
 
 } // clang

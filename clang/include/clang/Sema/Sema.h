@@ -397,6 +397,7 @@ public:
 
   typedef OpaquePtr<DeclGroupRef> DeclGroupPtrTy;
   typedef OpaquePtr<TemplateName> TemplateTy;
+  typedef OpaquePtr<PartiallyAppliedConcept> ConceptTy;
   typedef OpaquePtr<QualType> TypeTy;
 
   OpenCLOptions OpenCLFeatures;
@@ -7297,8 +7298,7 @@ private:
   /// constrained declarations). If an error occurred while normalizing the
   /// associated constraints of the template or concept, nullptr will be cached
   /// here.
-  llvm::DenseMap<NamedDecl *, NormalizedConstraint *>
-      NormalizationCache;
+  llvm::FoldingSet<CachedNormalizedConstraint> NormalizationCache;
 
   llvm::ContextualFoldingSet<ConstraintSatisfaction, const ASTContext &>
       SatisfactionCache;
@@ -7380,9 +7380,9 @@ public:
     SatisfactionStack.swap(NewSS);
   }
 
-  const NormalizedConstraint *
-  getNormalizedAssociatedConstraints(
-      NamedDecl *ConstrainedDecl, ArrayRef<const Expr *> AssociatedConstraints);
+  const NormalizedConstraint *getNormalizedAssociatedConstraints(
+      NamedDecl *ConstrainedDecl, ArrayRef<const Expr *> AssociatedConstraints,
+      TemplateArgumentList *TemplateArgs = nullptr, bool TopLevel = false);
 
   /// \brief Check whether the given declaration's associated constraints are
   /// at least as constrained than another declaration's according to the
@@ -8143,7 +8143,7 @@ public:
 
   bool AttachTypeConstraint(NestedNameSpecifierLoc NS,
                             DeclarationNameInfo NameInfo,
-                            ConceptDecl *NamedConcept,
+                            TemplateDecl *NamedConcept,
                             const TemplateArgumentListInfo *TemplateArgs,
                             TemplateTypeParmDecl *ConstrainedParameter,
                             SourceLocation EllipsisLoc);
@@ -8164,16 +8164,12 @@ public:
                                       unsigned Position,
                                       SourceLocation EqualLoc,
                                       Expr *DefaultArg);
-  NamedDecl *ActOnTemplateTemplateParameter(Scope *S,
-                                       SourceLocation TmpLoc,
-                                       TemplateParameterList *Params,
-                                       SourceLocation EllipsisLoc,
-                                       IdentifierInfo *ParamName,
-                                       SourceLocation ParamNameLoc,
-                                       unsigned Depth,
-                                       unsigned Position,
-                                       SourceLocation EqualLoc,
-                                       ParsedTemplateArgument DefaultArg);
+  NamedDecl *ActOnTemplateTemplateParameter(
+      Scope *S, SourceLocation TmpLoc, TemplateNameKind Kind,
+      TemplateParameterList *Params, SourceLocation EllipsisLoc,
+      IdentifierInfo *ParamName, SourceLocation ParamNameLoc, unsigned Depth,
+      unsigned Position, SourceLocation EqualLoc,
+      ParsedTemplateArgument DefaultArg);
 
   TemplateParameterList *
   ActOnTemplateParameterList(unsigned Depth,
@@ -8267,7 +8263,7 @@ public:
   /// Get the specialization of the given variable template corresponding to
   /// the specified argument list, or a null-but-valid result if the arguments
   /// are dependent.
-  DeclResult CheckVarTemplateId(VarTemplateDecl *Template,
+  DeclResult CheckVarTemplateId(VarTemplateDecl  *Template,
                                 SourceLocation TemplateLoc,
                                 SourceLocation TemplateNameLoc,
                                 const TemplateArgumentListInfo &TemplateArgs);
@@ -8280,6 +8276,12 @@ public:
                                 VarTemplateDecl *Template,
                                 SourceLocation TemplateLoc,
                                 const TemplateArgumentListInfo *TemplateArgs);
+
+  ExprResult
+  CheckVarOrConceptTemplateTemplateId(const CXXScopeSpec &SS,
+                           const DeclarationNameInfo &NameInfo,
+                           TemplateTemplateParmDecl *Template, SourceLocation TemplateLoc,
+                           const TemplateArgumentListInfo *TemplateArgs);
 
   ExprResult
   CheckConceptTemplateId(const CXXScopeSpec &SS,
@@ -8305,6 +8307,15 @@ public:
       Scope *S, CXXScopeSpec &SS, SourceLocation TemplateKWLoc,
       const UnqualifiedId &Name, ParsedType ObjectType, bool EnteringContext,
       TemplateTy &Template, bool AllowInjectedClassName = false);
+
+  PartiallyAppliedConcept *BuildPartiallyAppliedConcept(
+      NestedNameSpecifierLoc NNS, SourceLocation ConceptKWLoc,
+      DeclarationNameInfo ConceptName, TemplateDecl *TD,
+      const TemplateArgumentListInfo &TemplateArgs);
+  PartiallyAppliedConcept *
+  ActOnPartiallyAppliedConcept(Scope *S, CXXScopeSpec &SS,
+                               SourceLocation ConceptKWLoc,
+                               TemplateIdAnnotation *TemplateId);
 
   DeclResult ActOnClassTemplateSpecialization(
       Scope *S, unsigned TagSpec, TagUseKind TUK, SourceLocation KWLoc,
@@ -8441,9 +8452,18 @@ public:
                                    TemplateArgument &SugaredConverted,
                                    TemplateArgument &CanonicalConverted,
                                    CheckTemplateArgumentKind CTAK);
+  bool
+  CheckPartiallyAppliedConceptTemplateArgument(TemplateTemplateParmDecl *Param,
+                                               TemplateParameterList *Params,
+                                               TemplateArgumentLoc &Arg);
+
   bool CheckTemplateTemplateArgument(TemplateTemplateParmDecl *Param,
                                      TemplateParameterList *Params,
                                      TemplateArgumentLoc &Arg);
+  bool CheckDeclCompatibleWithTemplateTemplate
+                                     (TemplateDecl *Template,
+                                      TemplateTemplateParmDecl *Param,
+                                      const TemplateArgumentLoc &Arg);
 
   ExprResult
   BuildExpressionFromDeclTemplateArgument(const TemplateArgument &Arg,
@@ -10094,6 +10114,12 @@ public:
   SubstTemplateArguments(ArrayRef<TemplateArgumentLoc> Args,
                          const MultiLevelTemplateArgumentList &TemplateArgs,
                          TemplateArgumentListInfo &Outputs);
+
+  ExprResult
+  SubstConceptTemplateArguments(const ConceptSpecializationExpr *CSE,
+                                const Expr *ConstraintExpr,
+                                const MultiLevelTemplateArgumentList &MLTAL,
+                                const TemplateArgumentList &Args);
 
   Decl *SubstDecl(Decl *D, DeclContext *Owner,
                   const MultiLevelTemplateArgumentList &TemplateArgs);

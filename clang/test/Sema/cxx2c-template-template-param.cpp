@@ -355,8 +355,8 @@ template <template <typename... > concept C>
 concept B = C<int>;
 
 template <template <typename... > auto Var>
-concept C = C<>;
+concept C = Var<>;
 template <template <typename... > auto Var>
-concept D = C<int>;
+concept D = Var<int>;
 
 }

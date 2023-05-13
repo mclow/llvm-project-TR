@@ -8936,7 +8936,7 @@ bool PointerExprEvaluator::VisitCastExpr(const CastExpr *E) {
            (Info.getStdAllocatorCaller("allocate") ||
            IsDeclSourceLocationCurrent(Info.CurrentCall->Callee) ||
            // Allow it in C++2b mode. Hey Jason!
-           Info.getLangOpts().CPlusPlus2b)) {
+           Info.getLangOpts().CPlusPlus23)) {
         // Permitted.
       } else {
         Result.Designator.setInvalid();

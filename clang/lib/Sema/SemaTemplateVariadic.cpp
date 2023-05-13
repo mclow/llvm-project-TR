@@ -1080,7 +1080,7 @@ ExprResult Sema::ActOnPackIndexingExpr(Scope *S, Expr *PackExpression,
   if (!isParameterPack) {
     CorrectDelayedTyposInExpr(IndexExpr);
     Diag(PackExpression->getBeginLoc(), diag::err_expected_name_of_pack)
-        << IndexExpr;
+        << PackExpression;
     return ExprError();
   }
   return BuildPackIndexingExpr(PackExpression, EllipsisLoc, IndexExpr,

@@ -2423,7 +2423,7 @@ static bool CheckEvaluationResult(CheckEvaluationResultKind CERK,
       if (!CheckEvaluationResult(CERK, Info, DiagLoc, I->getType(),
                                  Value.getStructField(I->getFieldIndex()),
                                  Kind, I->getLocation(), CheckedTemps,
-                                 Info.getCtx().getLangOpts().CPlusPlus2b
+                                 Info.getCtx().getLangOpts().CPlusPlus23
                                  && I->getType()->isReferenceType()))
         return false;
     }
@@ -15473,7 +15473,11 @@ bool Expr::EvaluateAsInitializer(APValue &Value, const ASTContext &Ctx,
   return (CheckConstantExpression(Info, DeclLoc, DeclTy, Value,
                                   ConstantExprKind::Normal,
                                   !VD->isConstexpr() &&
+<<<<<<< HEAD
                                   Ctx.getLangOpts().CPlusPlus2b && VD->getType()->isReferenceType())) &&
+=======
+                                  Ctx.getLangOpts().CPlusPlus23 && VD->getType()->isReferenceType())) &&
+>>>>>>> corentin/constexpr_structured_binding
          CheckMemoryLeaks(Info);
 }
 

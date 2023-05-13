@@ -15473,11 +15473,7 @@ bool Expr::EvaluateAsInitializer(APValue &Value, const ASTContext &Ctx,
   return (CheckConstantExpression(Info, DeclLoc, DeclTy, Value,
                                   ConstantExprKind::Normal,
                                   !VD->isConstexpr() &&
-<<<<<<< HEAD
-                                  Ctx.getLangOpts().CPlusPlus2b && VD->getType()->isReferenceType())) &&
-=======
                                   Ctx.getLangOpts().CPlusPlus23 && VD->getType()->isReferenceType())) &&
->>>>>>> corentin/constexpr_structured_binding
          CheckMemoryLeaks(Info);
 }
 

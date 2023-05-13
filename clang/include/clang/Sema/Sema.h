@@ -3491,19 +3491,24 @@ public:
 
   void ActOnObjCContainerStartDefinition(ObjCContainerDecl *IDecl);
 
+  TriviallyRelocatableSpecifier
+  ActOnTriviallyRelocatableSpecifier(SourceLocation Loc, Expr *E);
+
   /// ActOnStartCXXMemberDeclarations - Invoked when we have parsed a
   /// C++ record definition's base-specifiers clause and are starting its
   /// member declarations.
-  void ActOnStartCXXMemberDeclarations(Scope *S, Decl *TagDecl,
-                                       SourceLocation FinalLoc,
-                                       bool IsFinalSpelledSealed,
-                                       bool IsAbstract,
-                                       SourceLocation LBraceLoc);
+  void ActOnStartCXXMemberDeclarations(
+      Scope *S, Decl *TagDecl, SourceLocation FinalLoc,
+      bool IsFinalSpelledSealed, bool IsAbstract,
+      TriviallyRelocatableSpecifier TriviallyRelocatable,
+      SourceLocation LBraceLoc);
 
   /// ActOnTagFinishDefinition - Invoked once we have finished parsing
   /// the definition of a tag (enumeration, class, struct, or union).
   void ActOnTagFinishDefinition(Scope *S, Decl *TagDecl,
                                 SourceRange BraceRange);
+
+  void CheckCXX2CTriviallyRelocatable(CXXRecordDecl *D);
 
   void ActOnTagFinishSkippedDefinition(SkippedDefinitionContext Context);
 
@@ -3869,7 +3874,9 @@ public:
     CCEK_TemplateArg,  ///< Value of a non-type template parameter.
     CCEK_ArrayBound,   ///< Array bound in array declarator or new-expression.
     CCEK_ExplicitBool, ///< Condition in an explicit(bool) specifier.
-    CCEK_Noexcept      ///< Condition in a noexcept(bool) specifier.
+    CCEK_Noexcept,     ///< Condition in a noexcept(bool) specifier.
+    CCEK_TriviallyRelocatable ///< Condition in a trivially_relocatable(bool)
+                              ///< specifier.
   };
   ExprResult CheckConvertedConstantExpression(Expr *From, QualType T,
                                               llvm::APSInt &Value, CCEKind CCE);

@@ -233,7 +233,7 @@ bool Parser::ParseOptionalCXXScopeSpecifier(
     HasScopeSpecifier = true;
   }
 
-  else if(getLangOpts().CPlusPlus2b && !HasScopeSpecifier && Tok.is(tok::identifier)
+  else if(getLangOpts().CPlusPlus23 && !HasScopeSpecifier && Tok.is(tok::identifier)
       && GetLookAheadToken(1).is(tok::ellipsis)
       && GetLookAheadToken(2).is(tok::l_square)) {
     SourceLocation Start = Tok.getLocation();

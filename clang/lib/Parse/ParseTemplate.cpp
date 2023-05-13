@@ -946,7 +946,7 @@ NamedDecl *Parser::ParseTemplateTemplateParameter(unsigned Depth,
       ConsumeToken();
   }
 
-  if(!getLangOpts().CPlusPlus2b && Kind != TemplateNameKind::TNK_Type_template) {
+  if(!getLangOpts().CPlusPlus23 && Kind != TemplateNameKind::TNK_Type_template) {
       // Diag older language mods
   }
 

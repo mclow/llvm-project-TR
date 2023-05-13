@@ -2071,7 +2071,7 @@ NonOdrUseReason Sema::getNonOdrUseReasonInCurrentContext(ValueDecl *D) {
         !(getLangOpts().OpenMP && isOpenMPCapturedDecl(D)) &&
         !isCapturingReferenceToHostVarInCUDADeviceLambda(*this, VD) &&
         (VD->isUsableInConstantExpressions(Context) &&
-         (!getLangOpts().CPlusPlus2b || (VD->getInit() && VD->getInit()->EvaluateAsConstantExpr(Eval, Context)))))
+         (!getLangOpts().CPlusPlus23 || (VD->getInit() && VD->getInit()->EvaluateAsConstantExpr(Eval, Context)))))
              return NOUR_Constant;
     }
 

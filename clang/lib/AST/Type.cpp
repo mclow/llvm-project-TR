@@ -2665,6 +2665,8 @@ bool QualType::isTriviallyEqualityComparableType(
 
   return Context.hasUniqueObjectRepresentations(
       CanonicalType, /*CheckIfTriviallyCopyable=*/false);
+}
+
 bool QualType::isCppTriviallyRelocatableType(const ASTContext &Context) const {
   QualType BaseElementType = Context.getBaseElementType(*this);
   if (BaseElementType->isIncompleteType())

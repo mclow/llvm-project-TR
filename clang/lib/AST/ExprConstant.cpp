@@ -2423,7 +2423,7 @@ static bool CheckEvaluationResult(CheckEvaluationResultKind CERK,
       if (!CheckEvaluationResult(CERK, Info, DiagLoc, I->getType(),
                                  Value.getStructField(I->getFieldIndex()),
                                  Kind, I->getLocation(), CheckedTemps,
-                                 Info.getCtx().getLangOpts().CPlusPlus2b
+                                 Info.getCtx().getLangOpts().CPlusPlus23
                                  && I->getType()->isReferenceType()))
         return false;
     }
@@ -8936,7 +8936,7 @@ bool PointerExprEvaluator::VisitCastExpr(const CastExpr *E) {
            (Info.getStdAllocatorCaller("allocate") ||
            IsDeclSourceLocationCurrent(Info.CurrentCall->Callee) ||
            // Allow it in C++2b mode. Hey Jason!
-           Info.getLangOpts().CPlusPlus2b)) {
+           Info.getLangOpts().CPlusPlus23)) {
         // Permitted.
       } else {
         Result.Designator.setInvalid();
@@ -15473,7 +15473,7 @@ bool Expr::EvaluateAsInitializer(APValue &Value, const ASTContext &Ctx,
   return (CheckConstantExpression(Info, DeclLoc, DeclTy, Value,
                                   ConstantExprKind::Normal,
                                   !VD->isConstexpr() &&
-                                  Ctx.getLangOpts().CPlusPlus2b && VD->getType()->isReferenceType())) &&
+                                  Ctx.getLangOpts().CPlusPlus23 && VD->getType()->isReferenceType())) &&
          CheckMemoryLeaks(Info);
 }
 

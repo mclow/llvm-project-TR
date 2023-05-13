@@ -786,7 +786,7 @@ Sema::ActOnDecompositionDeclarator(Scope *S, Declarator &D,
       CPlusPlus20Specifiers.push_back(DeclSpec::getSpecifierName(TSCS));
       CPlusPlus20SpecifierLocs.push_back(DS.getThreadStorageClassSpecLoc());
     }
-    if (!LangOpts.CPlusPlus2b && DS.hasConstexprSpecifier()) {
+    if (!LangOpts.CPlusPlus23 && DS.hasConstexprSpecifier()) {
       BadSpecifiers.push_back(
           DeclSpec::getSpecifierName(DS.getConstexprSpecifier()));
       BadSpecifierLocs.push_back(DS.getConstexprSpecLoc());

@@ -1655,7 +1655,7 @@ static QualType ConvertDeclSpecToType(TypeProcessingState &state) {
     Expr *E = DS.getPackIndexingExpr();
     assert(E && "Didn't get an expression for pack indexing");
     QualType Pattern = S.GetTypeFromParser(DS.getRepAsType());
-    Result = S.BuildPackIndexingType(Pattern, E, DS.getBeginLoc(), DS.getEllipsisLoc());
+    Result = S.ActOnPackIndexingType(Pattern, E, DS.getBeginLoc(), DS.getEllipsisLoc());
     if(Result.isNull()) {
       declarator.setInvalidType(true);
       Result = Context.IntTy;

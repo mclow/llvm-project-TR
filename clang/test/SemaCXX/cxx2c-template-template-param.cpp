@@ -360,3 +360,13 @@ template <template <typename... > auto Var>
 concept D = Var<int>;
 
 }
+
+namespace InvalidName {
+// FIXME corentin: improve diagnostics
+template <typename T, template <typename> concept C>
+concept A = C<T>; // expected-note {{here}}
+
+template <A<concept missing<int>> T> // expected-error {{expected expression}} \
+                                     // expected-error {{too few template arguments for concept 'A'}}
+auto f();
+}

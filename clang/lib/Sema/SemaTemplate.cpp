@@ -5367,6 +5367,8 @@ Sema::ActOnPartiallyAppliedConcept(Scope *S, CXXScopeSpec &SS,
     return nullptr;
   bool IsConcept = false;
   TemplateDecl *TD = TN.getAsTemplateDecl();
+  if(!TD)
+    return nullptr;
   if (TemplateTemplateParmDecl *TTP = dyn_cast<TemplateTemplateParmDecl>(TD))
     IsConcept = TTP->kind() == TNK_Concept_template;
   else

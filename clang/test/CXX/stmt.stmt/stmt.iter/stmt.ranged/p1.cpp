@@ -1,6 +1,7 @@
-// RUN: %clang_cc1 -std=c++11 -fsyntax-only -verify %s
-// RUN: %clang_cc1 -std=c++14 -fsyntax-only -verify %s
-// RUN: %clang_cc1 -std=c++17 -fsyntax-only -verify %s
+// RUN: %clang_cc1 -std=c++11 -verify=expected,pre-cxx2b %s
+// RUN: %clang_cc1 -std=c++14 -verify=expected,pre-cxx2b %s
+// RUN: %clang_cc1 -std=c++17 -verify=expected,pre-cxx2b %s
+// RUN: %clang_cc1 -std=c++2b -verify %s
 
 struct pr12960 {
   int begin;
@@ -341,4 +342,20 @@ namespace p0962r1 {
     for (auto x : e) {} // expected-error {{invalid range expression of type 'NE::E'; no viable 'begin' function available}}
     for (auto x : f) {} // expected-error {{invalid range expression of type 'NF::F'; no viable 'end' function available}}
   }
+}
+
+namespace p2718r0 {
+struct T {
+  const int *begin() const;
+  const int *end()   const;
+  T &r() [[clang::lifetimebound]];
+};
+
+const T &f1(const T &t [[clang::lifetimebound]]) { return t; }
+T g();
+
+void foo() {
+  for (auto e : f1(g())) {}
+  for (auto e : g().r()) {}
+}
 }

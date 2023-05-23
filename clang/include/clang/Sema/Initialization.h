@@ -170,6 +170,10 @@ private:
     /// When Kind == EK_Member, whether this is the initial initialization
     /// check for a default member initializer.
     bool IsDefaultMemberInit;
+
+    /// When Kind == EK_Member, whether this variables is bound to the initializer
+    /// of a range-for loop
+    bool IsRangeForInit = false;
   };
 
   struct C {
@@ -253,6 +257,12 @@ public:
   /// Create the initialization entity for a variable.
   static InitializedEntity InitializeVariable(VarDecl *Var) {
     return InitializedEntity(Var);
+  }
+
+  static InitializedEntity InitializeRangeForLoopInit(VarDecl *Var) {
+    InitializedEntity Init(Var);
+    Init.Variable.IsRangeForInit = true;
+    return Init;
   }
 
   /// Create the initialization entity for a parameter.
@@ -515,6 +525,12 @@ public:
   /// the class definition)?
   bool isDefaultMemberInitializer() const {
     return getKind() == EK_Member && Variable.IsDefaultMemberInit;
+  }
+
+  /// Is this the default member initializer of a member (specified inside
+  /// the class definition)?
+  bool IsRangeForInitializer() const {
+    return getKind() == EK_Variable && Variable.IsRangeForInit;
   }
 
   /// Determine the location of the 'return' keyword when initializing

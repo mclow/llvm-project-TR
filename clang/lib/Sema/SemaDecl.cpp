@@ -13050,7 +13050,7 @@ void Sema::checkNonTrivialCUnion(QualType QT, SourceLocation Loc,
 /// AddInitializerToDecl - Adds the initializer Init to the
 /// declaration dcl. If DirectInit is true, this is C++ direct
 /// initialization rather than copy initialization.
-void Sema::AddInitializerToDecl(Decl *RealDecl, Expr *Init, bool DirectInit) {
+void Sema::AddInitializerToDecl(Decl *RealDecl, Expr *Init, bool DirectInit, bool RangeForInit) {
   // If there is no declaration, there was an error parsing it.  Just ignore
   // the initializer.
   if (!RealDecl || RealDecl->isInvalidDecl()) {
@@ -13222,7 +13222,7 @@ void Sema::AddInitializerToDecl(Decl *RealDecl, Expr *Init, bool DirectInit) {
   ParenListExpr *CXXDirectInit = dyn_cast<ParenListExpr>(Init);
   bool IsParenListInit = false;
   if (!VDecl->isInvalidDecl()) {
-    InitializedEntity Entity = InitializedEntity::InitializeVariable(VDecl);
+    InitializedEntity Entity = (RangeForInit ? InitializedEntity::InitializeRangeForLoopInit : InitializedEntity::InitializeVariable)(VDecl);
     InitializationKind Kind = InitializationKind::CreateForInit(
         VDecl->getLocation(), DirectInit, Init);
 

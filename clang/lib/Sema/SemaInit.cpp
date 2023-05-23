@@ -7208,6 +7208,7 @@ struct IndirectLocalPathEntry {
   enum EntryKind {
     DefaultInit,
     AddressOf,
+    CXXRangeForInit,
     VarInit,
     LValToRVal,
     LifetimeBoundCall,
@@ -7545,6 +7546,12 @@ static void visitLocalsRetainedByReferenceBinding(IndirectLocalPath &Path,
     }
   } while (Init != Old);
 
+
+  if (!Path.empty() && Path.front().Kind == IndirectLocalPathEntry::CXXRangeForInit) {
+    visitLocalsRetainedByInitializer(Path, Init, Visit,
+                                     true, EnableLifetimeWarnings);
+  }
+
   if (auto *MTE = dyn_cast<MaterializeTemporaryExpr>(Init)) {
     if (Visit(Path, Local(MTE), RK))
       visitLocalsRetainedByInitializer(Path, MTE->getSubExpr(), Visit, true,
@@ -7710,6 +7717,24 @@ static void visitLocalsRetainedByInitializer(IndirectLocalPath &Path,
       }
 
       Init = CE->getSubExpr();
+    }
+
+    if (auto *CE = dyn_cast<CallExpr>(Init);
+        CE && !Path.empty() &&
+        Path.front().Kind == IndirectLocalPathEntry::CXXRangeForInit) {
+      if (EnableLifetimeWarnings)
+        handleGslAnnotatedTypes(Path, Init, Visit);
+      visitLifetimeBoundArguments(Path, Init, Visit);
+      if (auto *ME = dyn_cast<MemberExpr>(CE->getCallee())) {
+        visitLocalsRetainedByReferenceBinding(Path, ME->getBase(),
+                                              RK_ReferenceBinding, Visit,
+                                              EnableLifetimeWarnings);
+      } else {
+        for (auto *RSE : CE->getRawSubExprs())
+          if (auto *MTE = dyn_cast<MaterializeTemporaryExpr>(RSE))
+            visitLocalsRetainedByReferenceBinding(
+                Path, MTE, RK_ReferenceBinding, Visit, EnableLifetimeWarnings);
+      }
     }
   } while (Old != Init);
 
@@ -7913,7 +7938,8 @@ shouldLifetimeExtendThroughPath(const IndirectLocalPath &Path) {
   for (auto Elem : Path) {
     if (Elem.Kind == IndirectLocalPathEntry::DefaultInit)
       Kind = PathLifetimeKind::ShouldExtend;
-    else if (Elem.Kind != IndirectLocalPathEntry::LambdaCaptureInit)
+    else if (Elem.Kind != IndirectLocalPathEntry::LambdaCaptureInit &&
+             Path.front().Kind != IndirectLocalPathEntry::CXXRangeForInit)
       return PathLifetimeKind::NoExtend;
   }
   return Kind;
@@ -7930,6 +7956,7 @@ static SourceRange nextPathEntryRange(const IndirectLocalPath &Path, unsigned I,
     case IndirectLocalPathEntry::TemporaryCopy:
     case IndirectLocalPathEntry::GslReferenceInit:
     case IndirectLocalPathEntry::GslPointerInit:
+    case IndirectLocalPathEntry::CXXRangeForInit:
       // These exist primarily to mark the path as not permitting or
       // supporting lifetime extension.
       break;
@@ -8179,6 +8206,7 @@ void Sema::checkInitializerLifetime(const InitializedEntity &Entity,
       switch (Elem.Kind) {
       case IndirectLocalPathEntry::AddressOf:
       case IndirectLocalPathEntry::LValToRVal:
+      case IndirectLocalPathEntry::CXXRangeForInit:
         // These exist primarily to mark the path as not permitting or
         // supporting lifetime extension.
         break;
@@ -8228,6 +8256,8 @@ void Sema::checkInitializerLifetime(const InitializedEntity &Entity,
   bool EnableLifetimeWarnings = !getDiagnostics().isIgnored(
       diag::warn_dangling_lifetime_pointer, SourceLocation());
   llvm::SmallVector<IndirectLocalPathEntry, 8> Path;
+  if (auto *VD = dyn_cast_or_null<VarDecl>(Entity.getDecl()); VD && Entity.IsRangeForInitializer())
+    Path.push_back({IndirectLocalPathEntry::CXXRangeForInit, nullptr});
   if (Init->isGLValue())
     visitLocalsRetainedByReferenceBinding(Path, Init, RK_ReferenceBinding,
                                           TemporaryVisitor,

@@ -100,8 +100,7 @@ namespace p0936r0_examples {
 
   std::vector make_vector();
   void use_reversed_range() {
-    // FIXME: Don't expose the name of the internal range variable.
-    for (auto x : reversed(make_vector())) {} // expected-warning {{temporary implicitly bound to local reference will be destroyed at the end of the full-expression}}
+    for (auto x : reversed(make_vector())) {}
   }
 
   template <typename K, typename V>

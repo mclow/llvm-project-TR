@@ -3275,7 +3275,10 @@ static bool evaluateVarDeclInit(EvalInfo &Info, const Expr *E,
     return true;
   }
 
-  if (isa<ParmVarDecl>(VD)) {
+  bool AllowConstexprUnknown = Info.getLangOpts().CPlusPlus23 && VD->getType()->isReferenceType();
+  bool HasError = false;
+
+  if (auto* P = dyn_cast<ParmVarDecl>(VD); P && !AllowConstexprUnknown) {
     // Assume parameters of a potential constant expression are usable in
     // constant expressions.
     if (!Info.checkingPotentialConstantExpression() ||
@@ -3289,14 +3292,14 @@ static bool evaluateVarDeclInit(EvalInfo &Info, const Expr *E,
         Info.FFDiag(E);
       }
     }
-    return false;
+    HasError = true;
   }
 
   // Dig out the initializer, and use the declaration which it's attached to.
   // FIXME: We should eventually check whether the variable has a reachable
   // initializing declaration.
   const Expr *Init = VD->getAnyInitializer(VD);
-  if (!Init) {
+  if (!HasError && !AllowConstexprUnknown && !Init) {
     // Don't diagnose during potential constant expression checking; an
     // initializer might be added later.
     if (!Info.checkingPotentialConstantExpression()) {
@@ -3304,10 +3307,10 @@ static bool evaluateVarDeclInit(EvalInfo &Info, const Expr *E,
         << VD;
       NoteLValueLocation(Info, Base);
     }
-    return false;
+    HasError = true;
   }
 
-  if (Init->isValueDependent()) {
+  if (!HasError && Init && Init->isValueDependent()) {
     // The DeclRefExpr is not value-dependent, but the variable it refers to
     // has a value-dependent initializer. This should only happen in
     // constant-folding cases, where the variable is not actually of a suitable
@@ -3321,15 +3324,15 @@ static bool evaluateVarDeclInit(EvalInfo &Info, const Expr *E,
           << VD << VD->getType();
       NoteLValueLocation(Info, Base);
     }
-    return false;
+    HasError = true;
   }
 
   // Check that we can fold the initializer. In C++, we will have already done
   // this in the cases where it matters for conformance.
-  if (!VD->evaluateValue()) {
+  if (!HasError && !AllowConstexprUnknown && !VD->evaluateValue()) {
     Info.FFDiag(E, diag::note_constexpr_var_init_non_constant, 1) << VD;
     NoteLValueLocation(Info, Base);
-    return false;
+    HasError = true;
   }
 
   // Check that the variable is actually usable in constant expressions. For a
@@ -3341,10 +3344,10 @@ static bool evaluateVarDeclInit(EvalInfo &Info, const Expr *E,
   // FIXME: We don't diagnose cases that aren't potentially usable in constant
   // expressions here; doing so would regress diagnostics for things like
   // reading from a volatile constexpr variable.
-  if ((Info.getLangOpts().CPlusPlus && !VD->hasConstantInitialization() &&
+  if (!HasError && !AllowConstexprUnknown && ((Info.getLangOpts().CPlusPlus && !VD->hasConstantInitialization() &&
        VD->mightBeUsableInConstantExpressions(Info.Ctx)) ||
       ((Info.getLangOpts().CPlusPlus || Info.getLangOpts().OpenCL) &&
-       !Info.getLangOpts().CPlusPlus11 && !VD->hasICEInitializer(Info.Ctx))) {
+                                  !Info.getLangOpts().CPlusPlus11 && !VD->hasICEInitializer(Info.Ctx)))) {
     Info.CCEDiag(E, diag::note_constexpr_var_init_non_constant, 1) << VD;
     NoteLValueLocation(Info, Base);
   }
@@ -3354,6 +3357,13 @@ static bool evaluateVarDeclInit(EvalInfo &Info, const Expr *E,
   if (VD->isWeak()) {
     Info.FFDiag(E, diag::note_constexpr_var_init_weak) << VD;
     NoteLValueLocation(Info, Base);
+    return false;
+  }
+
+  if(HasError) {
+    if(AllowConstexprUnknown) {
+
+    }
     return false;
   }
 

@@ -16,7 +16,7 @@ Written by the `LLVM Team <https://llvm.org/>`_
      `the Releases Page <https://llvm.org/releases/>`_.
 
 Introduction
-============
+=====
 
 This document contains the release notes for the Clang C/C++/Objective-C
 frontend, part of the LLVM Compiler Infrastructure, release |release|. Here we
@@ -32,7 +32,7 @@ latest release, please see the `Clang Web Site <https://clang.llvm.org>`_ or the
 `LLVM Web Site <https://llvm.org>`_.
 
 Potentially Breaking Changes
-============================
+===========
 These changes are ones which we think may surprise users when upgrading to
 Clang |release| because of the opportunity they pose for disruption to existing
 code bases.

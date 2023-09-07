@@ -1,0 +1,74 @@
+name: Checking Documentation
+
+on:
+  pull_request:
+    path: '**/docs/**/*.rst'
+
+jobs:
+  verify-sphinx-documentation:
+    runs-on: ubuntu-latest
+    env:
+      SPHINX_ACTION: "./.github/templates/validate-sphinx-docs"
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Check Bolt documentation
+      uses: "./.github/templates/validate-sphinx-docs"
+      with:
+        path: ./bolt/docs
+
+    - name: Check Clang documentation
+      uses: "./.github/templates/validate-sphinx-docs"
+      with:
+        path: ./clang/docs
+
+    - name: Check Clang Tools documentation
+      uses: "./.github/templates/validate-sphinx-docs"
+      with:
+        path: ./clang-tools-extra/docs
+
+    - name: Check Flang documentation
+      uses: "./.github/templates/validate-sphinx-docs"
+      with:
+        path: ./flang/docs
+
+    - name: Check libc documentation
+      uses: "./.github/templates/validate-sphinx-docs"
+      with:
+        path: ./libc/docs
+
+    - name: Check libcxx documentation
+      uses: "./.github/templates/validate-sphinx-docs"
+      with:
+        path: ./libcxx/docs
+
+    - name: Check libunwind documentation
+      uses: "./.github/templates/validate-sphinx-docs"
+      with:
+        path: ./libunwind/docs
+
+    - name: Check lldb documentation
+      uses: "./.github/templates/validate-sphinx-docs"
+      with:
+        path: ./lldb/docs
+
+    - name: Check lld documentation
+      uses: "./.github/templates/validate-sphinx-docs"
+      with:
+        path: ./lld/docs
+
+    - name: Check llvm documentation
+      uses: "./.github/templates/validate-sphinx-docs"
+      with:
+        path: ./llvm/docs
+
+    - name: Check openmp documentation
+      uses: "./.github/templates/validate-sphinx-docs"
+      with:
+        path: ./openmp/docs
+
+    - name: Check polly documentation
+      uses: "./.github/templates/validate-sphinx-docs"
+      with:
+        path: ./polly/docs

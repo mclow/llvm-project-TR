@@ -27,7 +27,9 @@ if not building_man_page:
     sys.path.insert(0, os.path.abspath("."))
     # Add the build directory that contains the `lldb` module. LLDB_SWIG_MODULE is
     # set by CMake.
-    sys.path.insert(0, os.getenv("LLDB_SWIG_MODULE"))
+    SWIG_MODULE = os.getenv("LLDB_SWIG_MODULE")
+    if SWIG_MODULE:
+        sys.path.insert(0, SWIG_MODULE)
 
 # Put the generated Python API documentation in the 'python_api' folder. This
 # also defines the URL these files will have in the generated website.
@@ -176,7 +178,7 @@ html_extra_path = [".htaccess"]
 
 # If not '', a 'Last updated on:' timestamp is inserted at every page bottom,
 # using the given strftime format.
-html_last_updated_fmt = "%b %d, %Y"
+# html_last_updated_fmt = "%b %d, %Y"
 
 # If true, SmartyPants will be used to convert quotes and dashes to
 # typographically correct entities.

@@ -1,0 +1,15 @@
+name: validate-sphinx-docs
+
+inputs:
+  path:
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+  - name: Validate Sphinx documentation in ${{ inputs.path }}
+    uses: cor3ntin/sphinx-action@main
+    with:
+      docs-folder: ${{ inputs.path }}
+      # We exclude references errors so that we do not have to build the table gen documentation
+      build-command: "sphinx-build -b html . _build -Dsuppress_warnings=toc.not_readable,ref.*"

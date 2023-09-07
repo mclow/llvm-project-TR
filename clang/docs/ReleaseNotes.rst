@@ -16,7 +16,7 @@ Written by the `LLVM Team <https://llvm.org/>`_
      `the Releases Page <https://llvm.org/releases/>`_.
 
 Introduction
-============
+=========
 
 This document contains the release notes for the Clang C/C++/Objective-C
 frontend, part of the LLVM Compiler Infrastructure, release |release|. Here we
@@ -24,15 +24,15 @@ describe the status of Clang in some detail, including major
 improvements from the previous release and new feature work. For the
 general LLVM release notes, see `the LLVM
 documentation <https://llvm.org/docs/ReleaseNotes.html>`_. For the libc++ release notes,
-see `this page <https://libcxx.llvm.org/ReleaseNotes.html>`_. All LLVM releases
-may be downloaded from the `LLVM releases web site <https://llvm.org/releases/>`_.
+see `this page https://libcxx.llvm.org/ReleaseNotes.html>`_. All LLVM releases
+may be downloaded from the `LLVM releases web site <https://llvm.org/releases/>`.
 
 For more information about Clang or LLVM, including information about the
 latest release, please see the `Clang Web Site <https://clang.llvm.org>`_ or the
-`LLVM Web Site <https://llvm.org>`_.
+`LLVM Web Site <https://llvm.org`_.
 
 Potentially Breaking Changes
-============================
+=========================
 These changes are ones which we think may surprise users when upgrading to
 Clang |release| because of the opportunity they pose for disruption to existing
 code bases.
@@ -45,7 +45,7 @@ C++ Specific Potentially Breaking Changes
 -----------------------------------------
 
 ABI Changes in This Version
----------------------------
+------------------------
 - Following the SystemV ABI for x86-64, ``__int128`` arguments will no longer
   be split between a register and a stack slot.
 

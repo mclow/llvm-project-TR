@@ -263,7 +263,7 @@ Bug Fixes to C++ Support
 
 - Fix a crash caused by substitution failure in expression requirements.
   (`#64172 <https://github.com/llvm/llvm-project/issues/64172>`_) and
-  (`#64723 <https://github.com/llvm/llvm-project/issues/64723>`_).
+  (`#64723 <https://github.com/llvm/llvm-project/issues/64723>).
 
 - Fix crash when parsing the requires clause of some generic lambdas.
   (`#64689 <https://github.com/llvm/llvm-project/issues/64689>`_)

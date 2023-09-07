@@ -14,6 +14,7 @@ import sys, os, re, shutil
 from datetime import date
 
 building_man_page = tags.has("builder-man")
+SWIG_MODULE = os.getenv("LLDB_SWIG_MODULE")
 
 # For the website we need to setup the path to the generated LLDB module that
 # we can generate documentation for its API.
@@ -27,7 +28,8 @@ if not building_man_page:
     sys.path.insert(0, os.path.abspath("."))
     # Add the build directory that contains the `lldb` module. LLDB_SWIG_MODULE is
     # set by CMake.
-    sys.path.insert(0, os.getenv("LLDB_SWIG_MODULE"))
+    if SWIG_MODULE:
+        sys.path.insert(0, SWIG_MODULE)
 
 # Put the generated Python API documentation in the 'python_api' folder. This
 # also defines the URL these files will have in the generated website.
@@ -113,7 +115,7 @@ exclude_patterns = ["_build", "analyzer"]
 # Without this we will get a lot of warnings about doc pages that aren't
 # included by any doctree (as the manpage ignores those pages but they are
 # potentially still around from a previous website generation).
-if building_man_page:
+if not SWIG_MODULE or building_man_page :
     exclude_patterns.append(automodapi_toctreedirnm)
 # Use the recommended 'any' rule so that referencing SB API classes is possible
 # by just writing `SBData`.
@@ -176,7 +178,7 @@ html_extra_path = [".htaccess"]
 
 # If not '', a 'Last updated on:' timestamp is inserted at every page bottom,
 # using the given strftime format.
-html_last_updated_fmt = "%b %d, %Y"
+# html_last_updated_fmt = "%b %d, %Y"
 
 # If true, SmartyPants will be used to convert quotes and dashes to
 # typographically correct entities.

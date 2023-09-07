@@ -1,0 +1,16 @@
+name: validate-sphinx-docs
+
+# Were we can define the inputs that our action will accept
+inputs:
+  path:
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+  - name: Validate Sphinx documentation in ${{ inputs.path }}
+    uses: ammaraskar/sphinx-action@master
+    with:
+      docs-folder: ${{ inputs.path }}
+      build-command: "sphinx-build -b html . _build -Dsuppress_warnings=toc.not_readable"
+      pre-build-command: "apt-get update -y && apt-get install -y python3-sphinx python3-recommonmark"

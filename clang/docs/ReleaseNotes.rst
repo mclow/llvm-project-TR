@@ -16,7 +16,7 @@ Written by the `LLVM Team <https://llvm.org/>`_
      `the Releases Page <https://llvm.org/releases/>`_.
 
 Introduction
-============
+=======
 
 This document contains the release notes for the Clang C/C++/Objective-C
 frontend, part of the LLVM Compiler Infrastructure, release |release|. Here we

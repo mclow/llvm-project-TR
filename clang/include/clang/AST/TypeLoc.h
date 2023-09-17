@@ -2228,7 +2228,7 @@ public:
     return nullptr;
   }
 
-  ConceptDecl *getNamedConcept() const {
+  TemplateDecl *getNamedConcept() const {
     if (const auto *CR = getConceptReference())
       return CR->getNamedConcept();
     return nullptr;

@@ -26,6 +26,7 @@
 namespace clang {
 
 class ConceptDecl;
+class TemplateDecl;
 class Expr;
 class NamedDecl;
 struct PrintingPolicy;
@@ -126,6 +127,7 @@ struct ASTConstraintSatisfaction final :
 ///   template <std::derives_from<Expr> T> void dump();
 ///             ~~~~~~~~~~~~~~~~~~~~~~~ (in TemplateTypeParmDecl)
 class ConceptReference {
+protected:
   // \brief The optional nested name specifier used when naming the concept.
   NestedNameSpecifierLoc NestedNameSpec;
 
@@ -161,7 +163,7 @@ public:
   static ConceptReference *
   Create(const ASTContext &C, NestedNameSpecifierLoc NNS,
          SourceLocation TemplateKWLoc, DeclarationNameInfo ConceptNameInfo,
-         NamedDecl *FoundDecl, ConceptDecl *NamedConcept,
+         NamedDecl *FoundDecl, TemplateDecl *NamedConcept,
          const ASTTemplateArgumentListInfo *ArgsAsWritten);
 
   const NestedNameSpecifierLoc &getNestedNameSpecifierLoc() const {
@@ -249,7 +251,7 @@ public:
 
   // FIXME: Instead of using these concept related functions the callers should
   // directly work with the corresponding ConceptReference.
-  ConceptDecl *getNamedConcept() const { return ConceptRef->getNamedConcept(); }
+  TemplateDecl *getNamedConcept() const { return ConceptRef->getNamedConcept(); }
 
   SourceLocation getConceptNameLoc() const {
     return ConceptRef->getConceptNameLoc();

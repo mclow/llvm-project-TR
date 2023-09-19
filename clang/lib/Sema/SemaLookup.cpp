@@ -20,6 +20,7 @@
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
+#include "clang/AST/TemplateName.h"
 #include "clang/Basic/Builtins.h"
 #include "clang/Basic/FileManager.h"
 #include "clang/Basic/LangOptions.h"
@@ -1664,6 +1665,9 @@ bool Sema::hasAcceptableDefaultArgument(
   if (auto *P = dyn_cast<NonTypeTemplateParmDecl>(D))
     return ::hasAcceptableDefaultArgument(*this, P, Modules, Kind);
 
+  if (isa<UniversalTemplateParmDecl>(D))
+    return false;
+
   return ::hasAcceptableDefaultArgument(
       *this, cast<TemplateTemplateParmDecl>(D), Modules, Kind);
 }
@@ -2979,6 +2983,8 @@ addAssociatedClassesAndNamespaces(AssociatedLookup &Result,
     }
 
     case TemplateArgument::Concept:
+    case clang::TemplateArgument::Universal:
+    case clang::TemplateArgument::UniversalExpansion:
     case TemplateArgument::Declaration:
     case TemplateArgument::Integral:
     case TemplateArgument::Expression:

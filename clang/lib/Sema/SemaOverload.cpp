@@ -15,6 +15,7 @@
 #include "clang/AST/CXXInheritance.h"
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/DeclObjC.h"
+#include "clang/AST/DeclTemplate.h"
 #include "clang/AST/DependenceFlags.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
@@ -11498,9 +11499,10 @@ static void DiagnoseBadDeduction(Sema &S, NamedDecl *Found, Decl *Templated,
                                  bool TakingCandidateAddress) {
   TemplateParameter Param = DeductionFailure.getTemplateParameter();
   NamedDecl *ParamD;
-  (ParamD = Param.dyn_cast<TemplateTypeParmDecl*>()) ||
-  (ParamD = Param.dyn_cast<NonTypeTemplateParmDecl*>()) ||
-  (ParamD = Param.dyn_cast<TemplateTemplateParmDecl*>());
+  (ParamD = Param.dyn_cast<TemplateTypeParmDecl *>()) ||
+      (ParamD = Param.dyn_cast<NonTypeTemplateParmDecl *>()) ||
+      (ParamD = Param.dyn_cast<TemplateTemplateParmDecl *>()) ||
+      (ParamD = Param.dyn_cast<UniversalTemplateParmDecl *>());
   switch (DeductionFailure.Result) {
   case Sema::TDK_Success:
     llvm_unreachable("TDK_success while diagnosing bad deduction");

@@ -24,6 +24,7 @@
 #include "clang/AST/PrettyPrinter.h"
 #include "clang/AST/RawCommentList.h"
 #include "clang/AST/TemplateName.h"
+#include "clang/AST/UniversalTemplateParameterName.h"
 #include "clang/Basic/LLVM.h"
 #include "clang/Basic/PartialDiagnostic.h"
 #include "clang/Basic/SourceLocation.h"
@@ -2205,6 +2206,11 @@ public:
                                                 Decl *AssociatedDecl,
                                                 unsigned Index,
                                                 bool Final) const;
+
+  UniversalTemplateParameterName *
+  getUniversalTemplateParameterName(SourceLocation Loc,
+                                    DeclarationNameInfo Name,
+                                    UniversalTemplateParmDecl *Decl) const;
 
   enum GetBuiltinTypeError {
     /// No error

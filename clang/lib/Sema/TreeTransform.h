@@ -16,8 +16,10 @@
 #include "CoroutineStmtBuilder.h"
 #include "TypeLocBuilder.h"
 #include "clang/AST/Decl.h"
+#include "clang/AST/DeclBase.h"
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/DeclTemplate.h"
+#include "clang/AST/DeclarationName.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/ExprConcepts.h"
@@ -28,8 +30,13 @@
 #include "clang/AST/StmtCXX.h"
 #include "clang/AST/StmtObjC.h"
 #include "clang/AST/StmtOpenMP.h"
+#include "clang/AST/TemplateBase.h"
+#include "clang/AST/TemplateName.h"
+#include "clang/AST/Type.h"
+#include "clang/AST/UniversalTemplateParameterName.h"
 #include "clang/Basic/DiagnosticParse.h"
 #include "clang/Basic/OpenMPKinds.h"
+#include "clang/Basic/SourceLocation.h"
 #include "clang/Sema/Designator.h"
 #include "clang/Sema/EnterExpressionEvaluationContext.h"
 #include "clang/Sema/Lookup.h"
@@ -39,6 +46,7 @@
 #include "clang/Sema/SemaDiagnostic.h"
 #include "clang/Sema/SemaInternal.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <algorithm>
 #include <optional>
@@ -601,6 +609,9 @@ public:
   TemplateArgument
   TransformNamedTemplateTemplateArgument(CXXScopeSpec &SS, TemplateName Name,
                                          SourceLocation NameLoc);
+
+  TemplateArgument
+  TransformUniversalTemplateArgument(UniversalTemplateParameterName *Name);
 
   /// Transform the given set of template arguments.
   ///
@@ -3920,10 +3931,20 @@ public:
           Pattern.getTemplateQualifierLoc(), Pattern.getTemplateNameLoc(),
           EllipsisLoc);
 
+    case TemplateArgument::Universal:
+      return TemplateArgumentLoc(
+          SemaRef.Context,
+          TemplateArgument(
+              Pattern.getArgument().getAsUniversalTemplateParameterName(),
+              NumExpansions),
+          Pattern.getArgument().getAsUniversalTemplateParameterName(),
+          EllipsisLoc);
+
     case TemplateArgument::Null:
     case TemplateArgument::Integral:
     case TemplateArgument::Declaration:
     case TemplateArgument::Pack:
+    case TemplateArgument::UniversalExpansion:
     case TemplateArgument::TemplateExpansion:
     case TemplateArgument::NullPtr:
     case TemplateArgument::Concept:
@@ -4582,6 +4603,24 @@ TemplateArgument TreeTransform<Derived>::TransformNamedTemplateTemplateArgument(
   return TemplateArgument(TN);
 }
 
+template <typename Derived>
+TemplateArgument TreeTransform<Derived>::TransformUniversalTemplateArgument(
+    UniversalTemplateParameterName *Name) {
+  DeclarationNameInfo NameInfo = Name->getNameInfo();
+  if (NameInfo.getName()) {
+    NameInfo = getDerived().TransformDeclarationNameInfo(NameInfo);
+    if (!NameInfo.getName())
+      return TemplateArgument();
+  }
+  Decl *D = TransformDecl(Name->getDecl()->getLocation(), Name->getDecl());
+  if (!D)
+    return TemplateArgument();
+
+  return TemplateArgument(
+      getSema().getASTContext().getUniversalTemplateParameterName(
+          Name->getLocation(), NameInfo, cast<UniversalTemplateParmDecl>(D)));
+}
+
 template<typename Derived>
 void TreeTransform<Derived>::InventTemplateArgumentLoc(
                                          const TemplateArgument &Arg,
@@ -4699,6 +4738,22 @@ bool TreeTransform<Derived>::TransformTemplateArgument(
     return false;
   }
 
+  case TemplateArgument::Universal: {
+    UniversalTemplateParameterName *N =
+        Arg.getAsUniversalTemplateParameterName();
+    TemplateArgument Out = getDerived().TransformUniversalTemplateArgument(N);
+    if (Out.isNull())
+      return true;
+    Output = SemaRef.getTrivialTemplateArgumentLoc(Out, QualType(),
+                                                   N->getLocation());
+    if (Out.getKind() != TemplateArgument::Universal) {
+      TemplateArgumentLoc Copy = Output;
+      return getDerived().TransformTemplateArgument(Copy, Output);
+    }
+    return false;
+  }
+
+  case TemplateArgument::UniversalExpansion:
   case TemplateArgument::TemplateExpansion:
     llvm_unreachable("Caller should expand pack expansions");
 
@@ -4722,6 +4777,8 @@ bool TreeTransform<Derived>::TransformTemplateArgument(
     Output = TemplateArgumentLoc(TemplateArgument(E.get()), E.get());
     return false;
   }
+  default:
+    llvm_unreachable("Unhandled template argument kind");
   }
 
   // Work around bogus GCC warning

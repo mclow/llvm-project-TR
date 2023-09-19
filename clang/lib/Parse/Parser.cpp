@@ -21,6 +21,7 @@
 #include "clang/Sema/DeclSpec.h"
 #include "clang/Sema/ParsedTemplate.h"
 #include "clang/Sema/Scope.h"
+#include "clang/Sema/Sema.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/TimeProfiler.h"
 using namespace clang;
@@ -1837,6 +1838,14 @@ Parser::TryAnnotateName(CorrectionCandidateCallback *CCC,
   case Sema::NC_Unknown:
     // It's not something we know about. Leave it unannotated.
     break;
+
+  case Sema::NC_UniversalTemplateParam:
+    Tok.setKind(tok::annot_universal);
+    setNonTypeAnnotation(Tok, Classification.getUniversalTemplateDecl());
+    Tok.setLocation(NameLoc);
+    Tok.setAnnotationEndLoc(NameLoc);
+    PP.AnnotateCachedTokens(Tok);
+    return ANK_Success;
 
   case Sema::NC_Type: {
     if (TryAltiVecVectorToken())

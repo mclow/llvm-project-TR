@@ -8,14 +8,16 @@
 //  This file implements semantic analysis for C++0x variadic templates.
 //===----------------------------------------------------------------------===/
 
-#include "clang/Sema/Sema.h"
 #include "TypeLocBuilder.h"
+#include "clang/AST/DeclTemplate.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/AST/TypeLoc.h"
+#include "clang/AST/UniversalTemplateParameterName.h"
 #include "clang/Sema/Lookup.h"
 #include "clang/Sema/ParsedTemplate.h"
 #include "clang/Sema/ScopeInfo.h"
+#include "clang/Sema/Sema.h"
 #include "clang/Sema/SemaInternal.h"
 #include "clang/Sema/Template.h"
 #include <optional>
@@ -107,6 +109,15 @@ namespace {
       }
 
       return inherited::TraverseTemplateName(Template);
+    }
+
+    /// Record occurrences of template template parameter packs.
+    bool TraverseUniversalTemplateParameterName(
+        UniversalTemplateParameterName *UTPN) {
+      UniversalTemplateParmDecl *D = UTPN->getDecl();
+      if (D->isParameterPack())
+        Unexpanded.push_back({D, UTPN->getLocation()});
+      return inherited::TraverseUniversalTemplateParameterName(UTPN);
     }
 
     /// Suppress traversal into Objective-C container literal
@@ -599,9 +610,21 @@ Sema::ActOnPackExpansion(const ParsedTemplateArgument &Arg,
         << R;
       return ParsedTemplateArgument();
     }
+    return Arg.getTemplatePackExpansion(EllipsisLoc);
 
+  case ParsedTemplateArgument::Universal:
+    if (!Arg.getAsUniversalTemplateParamName()
+             .get()
+             ->containsUnexpandedParameterPack()) {
+      SourceRange R(Arg.getLocation());
+      if (Arg.getScopeSpec().isValid())
+        R.setBegin(Arg.getScopeSpec().getBeginLoc());
+      Diag(EllipsisLoc, diag::err_pack_expansion_without_parameter_packs) << R;
+      return ParsedTemplateArgument();
+    }
     return Arg.getTemplatePackExpansion(EllipsisLoc);
   }
+
   llvm_unreachable("Unhandled template argument kind?");
 }
 
@@ -1118,9 +1141,17 @@ TemplateArgumentLoc Sema::getTemplateArgumentPackExpansionPattern(
                                OrigLoc.getTemplateQualifierLoc(),
                                OrigLoc.getTemplateNameLoc());
 
+  case TemplateArgument::UniversalExpansion:
+    Ellipsis = OrigLoc.getUniversalEllipsisLoc();
+    NumExpansions = Argument.getNumTemplateExpansions();
+    return TemplateArgumentLoc(Context, Argument.getPackExpansionPattern(),
+                               Argument.getPackExpansionPattern()
+                                   .getAsUniversalTemplateParameterOrPattern());
+
   case TemplateArgument::Declaration:
   case TemplateArgument::NullPtr:
   case TemplateArgument::Template:
+  case TemplateArgument::Universal:
   case TemplateArgument::Integral:
   case TemplateArgument::Pack:
   case TemplateArgument::Null:
@@ -1171,6 +1202,7 @@ std::optional<unsigned> Sema::getFullyPackExpandedSize(TemplateArgument Arg) {
   case TemplateArgument::Declaration:
   case TemplateArgument::NullPtr:
   case TemplateArgument::TemplateExpansion:
+  case TemplateArgument::UniversalExpansion:
   case TemplateArgument::Integral:
   case TemplateArgument::Pack:
   case TemplateArgument::Null:

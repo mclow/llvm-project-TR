@@ -69,6 +69,8 @@ TemplateParameterList::TemplateParameterList(const ASTContext& C,
       if (!IsPack &&
           TTP->getTemplateParameters()->containsUnexpandedParameterPack())
         ContainsUnexpandedParameterPack = true;
+    } else if (isa<UniversalTemplateParmDecl>(P)) {
+      //
     } else if (const auto *TTP = dyn_cast<TemplateTypeParmDecl>(P)) {
       if (const TypeConstraint *TC = TTP->getTypeConstraint()) {
         if (TC->getImmediatelyDeclaredConstraint()
@@ -153,8 +155,14 @@ void TemplateParameterList::Profile(llvm::FoldingSetNodeID &ID,
                                                         /*Canonical=*/true);
       continue;
     }
+    if (const auto *UTP = dyn_cast<UniversalTemplateParmDecl>(D)) {
+      ID.AddInteger(2);
+      ID.AddBoolean(UTP->isParameterPack());
+      continue;
+    }
     const auto *TTP = cast<TemplateTemplateParmDecl>(D);
-    ID.AddInteger(2);
+    ID.AddInteger(3);
+    ID.AddInteger(TTP->kind());
     ID.AddBoolean(TTP->isParameterPack());
     TTP->getTemplateParameters()->Profile(ID, C);
   }
@@ -177,7 +185,8 @@ unsigned TemplateParameterList::getMinRequiredArguments() const {
     } else if (const auto *NTTP = dyn_cast<NonTypeTemplateParmDecl>(P)) {
       if (NTTP->hasDefaultArgument())
         break;
-    } else if (cast<TemplateTemplateParmDecl>(P)->hasDefaultArgument())
+    } else if (const auto *TTP = dyn_cast<TemplateTemplateParmDecl>(P);
+               TTP && TTP->hasDefaultArgument())
       break;
 
     ++NumRequiredArgs;
@@ -195,6 +204,8 @@ unsigned TemplateParameterList::getDepth() const {
     return TTP->getDepth();
   else if (const auto *NTTP = dyn_cast<NonTypeTemplateParmDecl>(FirstParm))
     return NTTP->getDepth();
+  else if (const auto *UTP = dyn_cast<UniversalTemplateParmDecl>(FirstParm))
+    return UTP->getDepth();
   else
     return cast<TemplateTemplateParmDecl>(FirstParm)->getDepth();
 }
@@ -867,6 +878,13 @@ void TemplateTemplateParmDecl::setDefaultArgument(
     DefaultArgument.set(nullptr);
   else
     DefaultArgument.set(new (C) TemplateArgumentLoc(DefArg));
+}
+
+UniversalTemplateParmDecl *
+UniversalTemplateParmDecl::Create(const ASTContext &C, DeclContext *DC,
+                                  SourceLocation L, unsigned D, unsigned P,
+                                  bool ParameterPack, IdentifierInfo *Id) {
+  return new (C, DC) UniversalTemplateParmDecl(DC, L, D, P, ParameterPack, Id);
 }
 
 //===----------------------------------------------------------------------===//

@@ -45,6 +45,7 @@
 #include "clang/AST/TemplateName.h"
 #include "clang/AST/Type.h"
 #include "clang/AST/TypeLoc.h"
+#include "clang/AST/UniversalTemplateParameterName.h"
 #include "clang/AST/UnresolvedSet.h"
 #include "clang/AST/VTableBuilder.h"
 #include "clang/Basic/AddressSpaces.h"
@@ -718,8 +719,14 @@ ASTContext::CanonicalTemplateTemplateParm::Profile(llvm::FoldingSetNodeID &ID,
       continue;
     }
 
+    if (const auto *UTP = dyn_cast<UniversalTemplateParmDecl>(*P)) {
+      ID.AddInteger(2);
+      ID.AddBoolean(UTP->isParameterPack());
+      continue;
+    }
+
     auto *TTP = cast<TemplateTemplateParmDecl>(*P);
-    ID.AddInteger(2);
+    ID.AddInteger(3);
     Profile(ID, C, TTP);
   }
 }
@@ -787,9 +794,15 @@ ASTContext::getCanonicalTemplateTemplateParmDecl(
                                                 TInfo);
       }
       CanonParams.push_back(Param);
-    } else
+    } else if (const auto *UTP = dyn_cast<UniversalTemplateParmDecl>(*P)) {
+      UniversalTemplateParmDecl *Param = UniversalTemplateParmDecl::Create(
+          *this, getTranslationUnitDecl(), SourceLocation(), UTP->getDepth(),
+          UTP->getIndex(), UTP->isParameterPack(), nullptr);
+      CanonParams.push_back(Param);
+    } else {
       CanonParams.push_back(getCanonicalTemplateTemplateParmDecl(
                                            cast<TemplateTemplateParmDecl>(*P)));
+    }
   }
 
   TemplateTemplateParmDecl *CanonTTP = TemplateTemplateParmDecl::Create(
@@ -5183,6 +5196,16 @@ TemplateArgument ASTContext::getInjectedTemplateArg(NamedDecl *Param) {
       E = new (*this)
           PackExpansionExpr(DependentTy, E, NTTP->getLocation(), std::nullopt);
     Arg = TemplateArgument(E);
+  } else if (auto *UTP = dyn_cast<UniversalTemplateParmDecl>(Param)) {
+    UniversalTemplateParameterName *UTPN =
+        new (*this) UniversalTemplateParameterName(
+            Param->getLocation(),
+            DeclarationNameInfo(Param->getDeclName(), Param->getLocation()),
+            UTP);
+    if (UTP->isParameterPack())
+      Arg = TemplateArgument(UTPN, std::optional<unsigned>());
+    else
+      Arg = TemplateArgument(UTPN);
   } else {
     auto *TTP = cast<TemplateTemplateParmDecl>(Param);
     if (TTP->isParameterPack())
@@ -6741,6 +6764,17 @@ ASTContext::getCanonicalTemplateArgument(const TemplateArgument &Arg) const {
                               Arg.getIsDefaulted());
     }
 
+    case TemplateArgument::Universal: {
+      // TODO Corentin: canonicalization
+      UniversalTemplateParameterName *UTPN =
+          Arg.getAsUniversalTemplateParameterName();
+      return TemplateArgument(UTPN);
+    }
+    case TemplateArgument::UniversalExpansion: {
+      UniversalTemplateParameterName *UTPN =
+          Arg.getAsUniversalTemplateParameterOrPattern();
+      return TemplateArgument(UTPN, Arg.getNumTemplateExpansions());
+    }
     case TemplateArgument::NullPtr:
       return TemplateArgument(getCanonicalType(Arg.getNullPtrType()),
                               /*isNullPtr*/ true, Arg.getIsDefaulted());
@@ -9310,6 +9344,16 @@ ASTContext::getSubstTemplateTemplateParmPack(const TemplateArgument &ArgPack,
   }
 
   return TemplateName(Subst);
+}
+
+UniversalTemplateParameterName *ASTContext::getUniversalTemplateParameterName(
+    SourceLocation Loc, DeclarationNameInfo Name,
+    UniversalTemplateParmDecl *Decl) const {
+  // TODO Corentin: canonicalize?
+  UniversalTemplateParameterName *UTPN =
+      new (*this, alignof(UniversalTemplateParameterName))
+          UniversalTemplateParameterName(Loc, Name, Decl);
+  return UTPN;
 }
 
 /// getFromTargetType - Given one of the integer types provided by

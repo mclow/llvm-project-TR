@@ -28,6 +28,7 @@
 #include "clang/AST/TemplateName.h"
 #include "clang/AST/Type.h"
 #include "clang/AST/TypeLoc.h"
+#include "clang/AST/UniversalTemplateParameterName.h"
 #include "clang/AST/UnresolvedSet.h"
 #include "clang/Basic/AddressSpaces.h"
 #include "clang/Basic/ExceptionSpecificationType.h"
@@ -540,6 +541,23 @@ DeduceTemplateArguments(Sema &S,
   return Sema::TDK_NonDeducedMismatch;
 }
 
+static Sema::TemplateDeductionResult
+DeduceTemplateArguments(Sema &S, TemplateParameterList *TemplateParams,
+                        UniversalTemplateParameterName *Param,
+                        TemplateArgument Arg, TemplateDeductionInfo &Info,
+                        SmallVectorImpl<DeducedTemplateArgument> &Deduced) {
+
+  UniversalTemplateParmDecl *Decl = Param->getDecl();
+  assert(Decl && "unexpected null parameter");
+
+  if (Decl->getDepth() != Info.getDeducedDepth())
+    return Sema::TDK_Success;
+
+  DeducedTemplateArgument NewDeduced(Arg);
+  Deduced[Decl->getIndex()] = Arg;
+  return Sema::TDK_Success;
+}
+
 /// Deduce the template arguments by comparing the template parameter
 /// type (which is a template-id) with the template argument type.
 ///
@@ -664,8 +682,12 @@ static bool IsPossiblyOpaquelyQualifiedType(QualType T) {
 static TemplateParameter makeTemplateParameter(Decl *D) {
   if (TemplateTypeParmDecl *TTP = dyn_cast<TemplateTypeParmDecl>(D))
     return TemplateParameter(TTP);
+
   if (NonTypeTemplateParmDecl *NTTP = dyn_cast<NonTypeTemplateParmDecl>(D))
     return TemplateParameter(NTTP);
+
+  if (UniversalTemplateParmDecl *UTP = dyn_cast<UniversalTemplateParmDecl>(D))
+    return TemplateParameter(UTP);
 
   return TemplateParameter(cast<TemplateTemplateParmDecl>(D));
 }
@@ -2270,6 +2292,12 @@ DeduceTemplateArguments(Sema &S, TemplateParameterList *TemplateParams,
     Info.SecondArg = A;
     return Sema::TDK_NonDeducedMismatch;
 
+  case TemplateArgument::Universal:
+    return DeduceTemplateArguments(S, TemplateParams,
+                                   P.getAsUniversalTemplateParameterName(), A,
+                                   Info, Deduced);
+
+  case TemplateArgument::UniversalExpansion:
   case TemplateArgument::TemplateExpansion:
     llvm_unreachable("caller should handle pack expansions");
 
@@ -2607,6 +2635,13 @@ Sema::getTrivialTemplateArgumentLoc(const TemplateArgument &Arg,
 
       return TemplateArgumentLoc(
           Context, Arg, Builder.getWithLocInContext(Context), Loc, Loc);
+    }
+
+    case TemplateArgument::Universal:
+    case TemplateArgument::UniversalExpansion: {
+      UniversalTemplateParameterName *N =
+          Arg.getAsUniversalTemplateParameterOrPattern();
+      return TemplateArgumentLoc(Context, Arg, N);
     }
 
   case TemplateArgument::Expression:
@@ -6142,6 +6177,17 @@ MarkUsedTemplateParameters(ASTContext &Ctx,
 }
 
 /// Mark the template parameters that are used by the given
+/// template argument
+static void MarkUsedTemplateParameters(ASTContext &Ctx,
+                                       UniversalTemplateParameterName *Name,
+                                       bool OnlyDeduced, unsigned Depth,
+                                       llvm::SmallBitVector &Used) {
+  UniversalTemplateParmDecl *UTP = Name->getDecl();
+  if (UTP->getDepth() == Depth)
+    Used[UTP->getIndex()] = true;
+}
+
+/// Mark the template parameters that are used by the given
 /// type.
 static void
 MarkUsedTemplateParameters(ASTContext &Ctx, QualType T,
@@ -6466,6 +6512,13 @@ MarkUsedTemplateParameters(ASTContext &Ctx,
     MarkUsedTemplateParameters(Ctx,
                                TemplateArg.getAsTemplateOrTemplatePattern(),
                                OnlyDeduced, Depth, Used);
+    break;
+
+  case TemplateArgument::Universal:
+  case TemplateArgument::UniversalExpansion:
+    MarkUsedTemplateParameters(
+        Ctx, TemplateArg.getAsUniversalTemplateParameterOrPattern(),
+        OnlyDeduced, Depth, Used);
     break;
 
   case TemplateArgument::Expression:

@@ -17,8 +17,11 @@
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/RecursiveASTVisitor.h"
+#include "clang/AST/TemplateBase.h"
 #include "clang/AST/TemplateName.h"
+#include "clang/AST/Type.h"
 #include "clang/AST/TypeVisitor.h"
+#include "clang/AST/UniversalTemplateParameterName.h"
 #include "clang/Basic/Builtins.h"
 #include "clang/Basic/DiagnosticSema.h"
 #include "clang/Basic/LangOptions.h"
@@ -33,12 +36,14 @@
 #include "clang/Sema/Overload.h"
 #include "clang/Sema/ParsedTemplate.h"
 #include "clang/Sema/Scope.h"
+#include "clang/Sema/Sema.h"
 #include "clang/Sema/SemaInternal.h"
 #include "clang/Sema/Template.h"
 #include "clang/Sema/TemplateDeduction.h"
 #include "llvm/ADT/SmallBitVector.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/Support/Casting.h"
 
 #include <iterator>
 #include <optional>
@@ -917,10 +922,20 @@ TemplateDecl *Sema::AdjustDeclIfTemplate(Decl *&D) {
 
 ParsedTemplateArgument ParsedTemplateArgument::getTemplatePackExpansion(
                                              SourceLocation EllipsisLoc) const {
-  assert(Kind == Template &&
-         "Only template template arguments can be pack expansions here");
-  assert(getAsTemplate().get().containsUnexpandedParameterPack() &&
-         "Template template argument pack expansion without packs");
+  assert((Kind == Template || Kind == Universal) &&
+         "Only template and universal template arguments can be pack "
+         "expansions here");
+
+  assert(Kind != Template ||
+         getAsTemplate().get().containsUnexpandedParameterPack() &&
+             "Template template argument pack expansion without packs");
+
+  assert(Kind != Universal ||
+         getAsUniversalTemplateParamName()
+                 .get()
+                 ->containsUnexpandedParameterPack() &&
+             "universal template argument pack expansion without packs");
+
   ParsedTemplateArgument Result(*this);
   Result.EllipsisLoc = EllipsisLoc;
   return Result;
@@ -962,6 +977,16 @@ static TemplateArgumentLoc translateTemplateArgument(Sema &SemaRef,
         SemaRef.Context, TArg,
         Arg.getScopeSpec().getWithLocInContext(SemaRef.Context),
         Arg.getLocation());
+  }
+  case clang::ParsedTemplateArgument::Universal: {
+    UniversalTemplateParamNameTy U = Arg.getAsUniversalTemplateParamName();
+    TemplateArgument TArg;
+    if (Arg.getEllipsisLoc().isValid())
+      TArg = TemplateArgument(U.get(), std::optional<unsigned int>());
+    else
+      TArg = TemplateArgument(U.get());
+    return TemplateArgumentLoc(SemaRef.Context, TArg, U.get(),
+                               Arg.getEllipsisLoc());
   }
   }
   llvm_unreachable("Unhandled parsed template argument");
@@ -1745,6 +1770,36 @@ NamedDecl *Sema::ActOnTemplateTemplateParameter(
     Param->setDefaultArgument(Context, DefaultArg);
   }
 
+  return Param;
+}
+
+NamedDecl *Sema::ActOnUniversalTemplateParameter(
+    Scope *S, SourceLocation IntroducerLoc, SourceLocation EllipsisLoc,
+    IdentifierInfo *ParamName, SourceLocation NameLoc, unsigned Depth,
+    unsigned Position) {
+
+  assert(S->isTemplateParamScope() &&
+         "Template template parameter not in template parameter scope!");
+
+  // Construct the parameter object.
+  bool IsParameterPack = EllipsisLoc.isValid();
+  UniversalTemplateParmDecl *Param = UniversalTemplateParmDecl::Create(
+      Context, Context.getTranslationUnitDecl(),
+      NameLoc.isInvalid() ? IntroducerLoc : NameLoc, Depth, Position,
+      IsParameterPack, ParamName);
+  Param->setAccess(AS_public);
+
+  if (Param->isParameterPack())
+    if (auto *LSI = getEnclosingLambda())
+      LSI->LocalPacks.push_back(Param);
+
+  // If the template template parameter has a name, then link the identifier
+  // into the scope and lookup mechanisms.
+  if (ParamName) {
+    maybeDiagnoseTemplateParameterShadow(*this, S, NameLoc, ParamName);
+    S->AddDecl(Param);
+    IdResolver.AddDecl(Param);
+  }
   return Param;
 }
 
@@ -3569,6 +3624,9 @@ bool Sema::CheckTemplateParameterList(TemplateParameterList *NewParams,
         PreviousDefaultArgLoc = NewNonTypeParm->getDefaultArgumentLoc();
       } else if (SawDefaultArgument)
         MissingDefaultArg = true;
+    } else if (UniversalTemplateParmDecl *UTP =
+                   dyn_cast<UniversalTemplateParmDecl>(*NewParam)) {
+
     } else {
       TemplateTemplateParmDecl *NewTemplateParm
         = cast<TemplateTemplateParmDecl>(*NewParam);
@@ -4956,8 +5014,12 @@ static bool CheckTemplateSpecializationScope(Sema &S, NamedDecl *Specialized,
 
 static TemplateSpecializationKind getTemplateSpecializationKind(Decl *D);
 
-static bool isTemplateArgumentTemplateParameter(
-    const TemplateArgument &Arg, unsigned Depth, unsigned Index) {
+static bool isTemplateArgumentTemplateParameter(const TemplateArgument &Arg,
+                                                NamedDecl *Param,
+                                                unsigned Depth,
+                                                unsigned Index) {
+  bool ParamIsUniversal = isa<UniversalTemplateParmDecl>(Param);
+
   switch (Arg.getKind()) {
   case TemplateArgument::Null:
   case TemplateArgument::NullPtr:
@@ -4969,6 +5031,8 @@ static bool isTemplateArgumentTemplateParameter(
     return false;
 
   case TemplateArgument::Type: {
+    if (ParamIsUniversal)
+      return false;
     QualType Type = Arg.getAsType();
     const TemplateTypeParmType *TPT =
         Arg.getAsType()->getAs<TemplateTypeParmType>();
@@ -4977,6 +5041,8 @@ static bool isTemplateArgumentTemplateParameter(
   }
 
   case TemplateArgument::Expression: {
+    if (ParamIsUniversal)
+      return false;
     DeclRefExpr *DRE = dyn_cast<DeclRefExpr>(Arg.getAsExpr());
     if (!DRE || !DRE->getDecl())
       return false;
@@ -4984,8 +5050,9 @@ static bool isTemplateArgumentTemplateParameter(
         dyn_cast<NonTypeTemplateParmDecl>(DRE->getDecl());
     return NTTP && NTTP->getDepth() == Depth && NTTP->getIndex() == Index;
   }
-
   case TemplateArgument::Template:
+    if (ParamIsUniversal)
+      return false;
     const TemplateTemplateParmDecl *TTP =
         dyn_cast_or_null<TemplateTemplateParmDecl>(
             Arg.getAsTemplateOrTemplatePattern().getAsTemplateDecl());
@@ -5013,7 +5080,8 @@ static bool isSameAsPrimaryTemplate(TemplateParameterList *Params,
       Arg = Arg.pack_begin()->getPackExpansionPattern();
     }
 
-    if (!isTemplateArgumentTemplateParameter(Arg, Depth, I))
+    if (!isTemplateArgumentTemplateParameter(Arg, Params->getParam(I), Depth,
+                                             I))
       return false;
   }
 
@@ -5887,6 +5955,24 @@ Sema::ActOnPartiallyAppliedConcept(Scope *S, CXXScopeSpec &SS,
                                       TemplateArgs);
 }
 
+bool Sema::ActOnUniversalTemplateParameterName(
+    Scope *S, const UnqualifiedId &Name, bool EnteringContext,
+    UniversalTemplateParamNameTy &Template) {
+
+  DeclarationNameInfo DNI = GetNameFromUnqualifiedId(Name);
+  LookupResult R(*this, DNI.getName(), Name.getBeginLoc(), LookupOrdinaryName);
+  LookupName(R, S);
+  if (!R.isSingleResult())
+    return true;
+  UniversalTemplateParmDecl *UTP = R.getAsSingle<UniversalTemplateParmDecl>();
+  if (!UTP)
+    return true;
+  Template = UniversalTemplateParamNameTy::make(
+      getASTContext().getUniversalTemplateParameterName(Name.getBeginLoc(), DNI,
+                                                        UTP));
+  return false;
+}
+
 bool Sema::CheckTemplateTypeArgument(
     TemplateTypeParmDecl *Param, TemplateArgumentLoc &AL,
     SmallVectorImpl<TemplateArgument> &SugaredConverted,
@@ -5913,6 +5999,13 @@ bool Sema::CheckTemplateTypeArgument(
     diagnoseMissingTemplateArguments(Name, SR.getEnd());
     return true;
   }
+  case TemplateArgument::Universal:
+  case TemplateArgument::UniversalExpansion: {
+    ArgType = Context.DependentTy;
+    TSI = Context.getTrivialTypeSourceInfo(ArgType);
+    break;
+  }
+
   case TemplateArgument::Expression: {
     // We have a template type parameter but the template argument is an
     // expression; see if maybe it is missing the "typename" keyword.
@@ -6006,6 +6099,82 @@ bool Sema::CheckTemplateTypeArgument(
   SugaredConverted.push_back(TemplateArgument(ArgType));
   CanonicalConverted.push_back(
       TemplateArgument(Context.getCanonicalType(ArgType)));
+  return false;
+}
+
+bool Sema::CheckUniversalTemplateParameterArgument(
+    UniversalTemplateParmDecl *Param, TemplateArgumentLoc &AL,
+    SmallVectorImpl<TemplateArgument> &SugaredConverted,
+    SmallVectorImpl<TemplateArgument> &CanonicalConverted,
+    CheckTemplateArgumentKind CTAK) {
+
+  const TemplateArgument &Arg = AL.getArgument();
+
+  switch (Arg.getKind()) {
+  case TemplateArgument::Null:
+    llvm_unreachable("Should never see a NULL template argument here");
+    break;
+  case TemplateArgument::Pack:
+    llvm_unreachable("Caller must expand template argument packs");
+  case TemplateArgument::Type: {
+    QualType ArgType = Arg.getAsType();
+    TypeSourceInfo *TSI = AL.getTypeSourceInfo();
+    if (CheckTemplateArgument(TSI))
+      return true;
+    if (getLangOpts().ObjCAutoRefCount && ArgType->isObjCLifetimeType() &&
+        !ArgType.getObjCLifetime()) {
+      Qualifiers Qs;
+      Qs.setObjCLifetime(Qualifiers::OCL_Strong);
+      ArgType = Context.getQualifiedType(ArgType, Qs);
+    }
+    SugaredConverted.push_back(TemplateArgument(ArgType));
+    CanonicalConverted.push_back(
+        TemplateArgument(Context.getCanonicalType(ArgType)));
+    return false;
+  }
+  case TemplateArgument::Expression: {
+    Expr *E = Arg.getAsExpr();
+    TemplateArgument SugaredResult, CanonicalResult;
+    unsigned CurSFINAEErrors = NumSFINAEErrors;
+    ExprResult Res =
+        CheckTemplateArgument(Param, getASTContext().getAutoDeductType(), E,
+                              SugaredResult, CanonicalResult, CTAK);
+    if (Res.isInvalid())
+      return true;
+    // If the current template argument causes an error, give up now.
+    if (CurSFINAEErrors < NumSFINAEErrors)
+      return true;
+
+    // If the resulting expression is new, then use it in place of the
+    // old expression in the template argument.
+    if (Res.get() != E) {
+      TemplateArgument TA(Res.get());
+      AL = TemplateArgumentLoc(TA, Res.get());
+    }
+
+    SugaredConverted.push_back(SugaredResult);
+    CanonicalConverted.push_back(CanonicalResult);
+    break;
+  }
+  case TemplateArgument::Concept:
+    // TODO check invalid
+  case TemplateArgument::Declaration:
+  case TemplateArgument::Integral:
+  case TemplateArgument::NullPtr:
+    // We've already checked this template argument, so just copy
+    // it to the list of converted arguments.
+    SugaredConverted.push_back(Arg);
+    CanonicalConverted.push_back(Context.getCanonicalTemplateArgument(Arg));
+    break;
+  case TemplateArgument::Template:
+  case TemplateArgument::TemplateExpansion:
+  case TemplateArgument::Universal:
+  case TemplateArgument::UniversalExpansion:
+    // TODO check invalid
+    SugaredConverted.push_back(Arg);
+    CanonicalConverted.push_back(Context.getCanonicalTemplateArgument(Arg));
+    break;
+  }
   return false;
 }
 
@@ -6210,6 +6379,10 @@ TemplateArgumentLoc Sema::SubstDefaultTemplateArgumentIfAvailable(
     return TemplateArgumentLoc(TemplateArgument(ArgE), ArgE);
   }
 
+  // universal template params do not have default args
+  if (isa<UniversalTemplateParmDecl>(Param))
+    return TemplateArgumentLoc();
+
   TemplateTemplateParmDecl *TempTempParm
     = cast<TemplateTemplateParmDecl>(Param);
   if (!hasReachableDefaultArgument(TempTempParm))
@@ -6296,6 +6469,7 @@ bool Sema::CheckTemplateArgument(
     SmallVectorImpl<TemplateArgument> &SugaredConverted,
     SmallVectorImpl<TemplateArgument> &CanonicalConverted,
     CheckTemplateArgumentKind CTAK) {
+
   // Check template type parameters.
   if (TemplateTypeParmDecl *TTP = dyn_cast<TemplateTypeParmDecl>(Param))
     return CheckTemplateTypeArgument(TTP, Arg, SugaredConverted,
@@ -6468,6 +6642,10 @@ bool Sema::CheckTemplateArgument(
     return false;
   }
 
+  if (auto *UTP = dyn_cast<UniversalTemplateParmDecl>(Param)) {
+    return CheckUniversalTemplateParameterArgument(UTP, Arg, SugaredConverted,
+                                                   CanonicalConverted, CTAK);
+  }
 
   // Check template template parameters.
   TemplateTemplateParmDecl *TempParm = cast<TemplateTemplateParmDecl>(Param);
@@ -7264,7 +7442,7 @@ enum NullPointerValueKind {
 /// Determine whether the given template argument is a null pointer
 /// value of the appropriate type.
 static NullPointerValueKind
-isNullPointerValueTemplateArgument(Sema &S, NonTypeTemplateParmDecl *Param,
+isNullPointerValueTemplateArgument(Sema &S, NamedDecl *Param,
                                    QualType ParamType, Expr *Arg,
                                    Decl *Entity = nullptr) {
   if (Arg->isValueDependent() || Arg->isTypeDependent())
@@ -7369,9 +7547,10 @@ isNullPointerValueTemplateArgument(Sema &S, NonTypeTemplateParmDecl *Param,
 
 /// Checks whether the given template argument is compatible with its
 /// template parameter.
-static bool CheckTemplateArgumentIsCompatibleWithParameter(
-    Sema &S, NonTypeTemplateParmDecl *Param, QualType ParamType, Expr *ArgIn,
-    Expr *Arg, QualType ArgType) {
+static bool
+CheckTemplateArgumentIsCompatibleWithParameter(Sema &S, NamedDecl *Param,
+                                               QualType ParamType, Expr *ArgIn,
+                                               Expr *Arg, QualType ArgType) {
   bool ObjCLifetimeConversion;
   if (ParamType->isPointerType() &&
       !ParamType->castAs<PointerType>()->getPointeeType()->isFunctionType() &&
@@ -7427,7 +7606,7 @@ static bool CheckTemplateArgumentIsCompatibleWithParameter(
 /// Checks whether the given template argument is the address
 /// of an object or function according to C++ [temp.arg.nontype]p1.
 static bool CheckTemplateArgumentAddressOfObjectOrFunction(
-    Sema &S, NonTypeTemplateParmDecl *Param, QualType ParamType, Expr *ArgIn,
+    Sema &S, NamedDecl *Param, QualType ParamType, Expr *ArgIn,
     TemplateArgument &SugaredConverted, TemplateArgument &CanonicalConverted) {
   bool Invalid = false;
   Expr *Arg = ArgIn;
@@ -7692,11 +7871,9 @@ static bool CheckTemplateArgumentAddressOfObjectOrFunction(
 
 /// Checks whether the given template argument is a pointer to
 /// member constant according to C++ [temp.arg.nontype]p1.
-static bool
-CheckTemplateArgumentPointerToMember(Sema &S, NonTypeTemplateParmDecl *Param,
-                                     QualType ParamType, Expr *&ResultArg,
-                                     TemplateArgument &SugaredConverted,
-                                     TemplateArgument &CanonicalConverted) {
+static bool CheckTemplateArgumentPointerToMember(
+    Sema &S, NamedDecl *Param, QualType ParamType, Expr *&ResultArg,
+    TemplateArgument &SugaredConverted, TemplateArgument &CanonicalConverted) {
   bool Invalid = false;
 
   Expr *Arg = ResultArg;
@@ -7837,12 +8014,22 @@ CheckTemplateArgumentPointerToMember(Sema &S, NonTypeTemplateParmDecl *Param,
 /// If an error occurred, it returns ExprError(); otherwise, it
 /// returns the converted template argument. \p ParamType is the
 /// type of the non-type template parameter after it has been instantiated.
-ExprResult Sema::CheckTemplateArgument(NonTypeTemplateParmDecl *Param,
-                                       QualType ParamType, Expr *Arg,
+ExprResult Sema::CheckTemplateArgument(NamedDecl *Param, QualType ParamType,
+                                       Expr *Arg,
                                        TemplateArgument &SugaredConverted,
                                        TemplateArgument &CanonicalConverted,
                                        CheckTemplateArgumentKind CTAK) {
   SourceLocation StartLoc = Arg->getBeginLoc();
+  unsigned Depth;
+  QualType OriginalParamType;
+  if (auto *UTP = dyn_cast<UniversalTemplateParmDecl>(Param)) {
+    Depth = UTP->getDepth();
+    OriginalParamType = getASTContext().getAutoDeductType();
+  } else {
+    auto *NTTP = cast<NonTypeTemplateParmDecl>(Param);
+    Depth = NTTP->getDepth();
+    OriginalParamType = NTTP->getType();
+  }
 
   // If the parameter type somehow involves auto, deduce the type now.
   DeducedType *DeducedT = ParamType->getContainedDeducedType();
@@ -7881,8 +8068,7 @@ ExprResult Sema::CheckTemplateArgument(NonTypeTemplateParmDecl *Param,
       if (ParamType.isNull())
         return ExprError();
     } else {
-      TemplateDeductionInfo Info(DeductionArg->getExprLoc(),
-                                 Param->getDepth() + 1);
+      TemplateDeductionInfo Info(DeductionArg->getExprLoc(), Depth + 1);
       ParamType = QualType();
       TemplateDeductionResult Result =
           DeduceAutoType(TSI->getTypeLoc(), DeductionArg, ParamType, Info,
@@ -7899,7 +8085,7 @@ ExprResult Sema::CheckTemplateArgument(NonTypeTemplateParmDecl *Param,
       } else if (Result != TemplateDeductionResult::Success) {
         Diag(Arg->getExprLoc(),
              diag::err_non_type_template_parm_type_deduction_failure)
-            << Param->getDeclName() << Param->getType() << Arg->getType()
+            << Param->getDeclName() << OriginalParamType << Arg->getType()
             << Arg->getSourceRange();
         NoteTemplateParameterLocation(*Param);
         return ExprError();
@@ -8270,7 +8456,7 @@ ExprResult Sema::CheckTemplateArgument(NonTypeTemplateParmDecl *Param,
       if (IntegerType->isUnsignedIntegerOrEnumerationType() &&
           (OldValue.isSigned() && OldValue.isNegative())) {
         Diag(Arg->getBeginLoc(), diag::warn_template_arg_negative)
-            << toString(OldValue, 10) << toString(Value, 10) << Param->getType()
+            << toString(OldValue, 10) << toString(Value, 10) << OriginalParamType
             << Arg->getSourceRange();
         NoteTemplateParameterLocation(*Param);
       }
@@ -8285,7 +8471,7 @@ ExprResult Sema::CheckTemplateArgument(NonTypeTemplateParmDecl *Param,
         RequiredBits = OldValue.getSignificantBits();
       if (RequiredBits > AllowedBits) {
         Diag(Arg->getBeginLoc(), diag::warn_template_arg_too_large)
-            << toString(OldValue, 10) << toString(Value, 10) << Param->getType()
+            << toString(OldValue, 10) << toString(Value, 10) << OriginalParamType
             << Arg->getSourceRange();
         NoteTemplateParameterLocation(*Param);
       }
@@ -8948,7 +9134,10 @@ static bool MatchTemplateParameterKind(
     const NamedDecl *OldInstFrom, bool Complain,
     Sema::TemplateParameterListEqualKind Kind, SourceLocation TemplateArgLoc) {
   // Check the actual kind (type, non-type, template).
-  if (Old->getKind() != New->getKind()) {
+  bool OldIsUniversal = Kind == Sema::TPL_TemplateTemplateArgumentMatch &&
+                        Old->getKind() == clang::Decl::UniversalTemplateParm;
+
+  if (!OldIsUniversal && Old->getKind() != New->getKind()) {
     if (Complain) {
       unsigned NextDiag = diag::err_template_param_different_kind;
       if (TemplateArgLoc.isValid()) {
@@ -8991,41 +9180,42 @@ static bool MatchTemplateParameterKind(
     return false;
   }
 
-  // For non-type template parameters, check the type of the parameter.
-  if (NonTypeTemplateParmDecl *OldNTTP
-                                    = dyn_cast<NonTypeTemplateParmDecl>(Old)) {
-    NonTypeTemplateParmDecl *NewNTTP = cast<NonTypeTemplateParmDecl>(New);
+  if (!OldIsUniversal) {
+    // For non-type template parameters, check the type of the parameter.
+    if (NonTypeTemplateParmDecl *OldNTTP =
+            dyn_cast<NonTypeTemplateParmDecl>(Old)) {
+      NonTypeTemplateParmDecl *NewNTTP = cast<NonTypeTemplateParmDecl>(New);
 
-    // If we are matching a template template argument to a template
-    // template parameter and one of the non-type template parameter types
-    // is dependent, then we must wait until template instantiation time
-    // to actually compare the arguments.
-    if (Kind != Sema::TPL_TemplateTemplateArgumentMatch ||
-        (!OldNTTP->getType()->isDependentType() &&
-         !NewNTTP->getType()->isDependentType())) {
-      // C++20 [temp.over.link]p6:
-      //   Two [non-type] template-parameters are equivalent [if] they have
-      //   equivalent types ignoring the use of type-constraints for
-      //   placeholder types
-      QualType OldType = S.Context.getUnconstrainedType(OldNTTP->getType());
-      QualType NewType = S.Context.getUnconstrainedType(NewNTTP->getType());
-      if (!S.Context.hasSameType(OldType, NewType)) {
-        if (Complain) {
-          unsigned NextDiag = diag::err_template_nontype_parm_different_type;
-          if (TemplateArgLoc.isValid()) {
-            S.Diag(TemplateArgLoc,
-                   diag::err_template_arg_template_params_mismatch);
-            NextDiag = diag::note_template_nontype_parm_different_type;
+      // If we are matching a template template argument to a template
+      // template parameter and one of the non-type template parameter types
+      // is dependent, then we must wait until template instantiation time
+      // to actually compare the arguments.
+      if (Kind != Sema::TPL_TemplateTemplateArgumentMatch ||
+          (!OldNTTP->getType()->isDependentType() &&
+           !NewNTTP->getType()->isDependentType())) {
+        // C++20 [temp.over.link]p6:
+        //   Two [non-type] template-parameters are equivalent [if] they have
+        //   equivalent types ignoring the use of type-constraints for
+        //   placeholder types
+        QualType OldType = S.Context.getUnconstrainedType(OldNTTP->getType());
+        QualType NewType = S.Context.getUnconstrainedType(NewNTTP->getType());
+        if (!S.Context.hasSameType(OldType, NewType)) {
+          if (Complain) {
+            unsigned NextDiag = diag::err_template_nontype_parm_different_type;
+            if (TemplateArgLoc.isValid()) {
+              S.Diag(TemplateArgLoc,
+                     diag::err_template_arg_template_params_mismatch);
+              NextDiag = diag::note_template_nontype_parm_different_type;
+            }
+            S.Diag(NewNTTP->getLocation(), NextDiag)
+                << NewNTTP->getType() << (Kind != Sema::TPL_TemplateMatch);
+            S.Diag(OldNTTP->getLocation(),
+                   diag::note_template_nontype_parm_prev_declaration)
+                << OldNTTP->getType();
           }
-          S.Diag(NewNTTP->getLocation(), NextDiag)
-            << NewNTTP->getType()
-            << (Kind != Sema::TPL_TemplateMatch);
-          S.Diag(OldNTTP->getLocation(),
-                 diag::note_template_nontype_parm_prev_declaration)
-            << OldNTTP->getType();
-        }
 
-        return false;
+          return false;
+        }
       }
     }
   }
@@ -9049,7 +9239,7 @@ static bool MatchTemplateParameterKind(
 
   if (Kind != Sema::TPL_TemplateParamsEquivalent &&
       Kind != Sema::TPL_TemplateTemplateArgumentMatch &&
-      !isa<TemplateTemplateParmDecl>(Old)) {
+      !isa<TemplateTemplateParmDecl, UniversalTemplateParmDecl>(Old)) {
     const Expr *NewC = nullptr, *OldC = nullptr;
 
     if (isa<TemplateTypeParmDecl>(New)) {

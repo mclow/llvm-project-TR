@@ -14,6 +14,7 @@
 #ifndef LLVM_CLANG_SEMA_PARSEDTEMPLATE_H
 #define LLVM_CLANG_SEMA_PARSEDTEMPLATE_H
 
+#include "clang/AST/DeclTemplate.h"
 #include "clang/Basic/OperatorKinds.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/TemplateKinds.h"
@@ -39,7 +40,9 @@ public:
     /// A template template argument, stored as a template name.
     Template,
     /// A partially applied concept
-    PartiallyAppliedConcept
+    PartiallyAppliedConcept,
+    /// The name of a Universal Template Parameter
+    Universal
   };
 
   /// Build an empty template argument.
@@ -73,6 +76,11 @@ public:
       : Kind(ParsedTemplateArgument::PartiallyAppliedConcept), Arg(Concept),
         Loc(TemplateLoc) {}
 
+  ParsedTemplateArgument(UniversalTemplateParamNameTy ParamName,
+                         SourceLocation Loc)
+      : Kind(ParsedTemplateArgument::Universal),
+        Arg(ParamName.getAsOpaquePtr()), Loc(Loc) {}
+
   /// Determine whether the given template argument is invalid.
   bool isInvalid() const { return Arg == nullptr; }
 
@@ -102,6 +110,12 @@ public:
     return reinterpret_cast<class PartiallyAppliedConcept *>(Arg);
   }
 
+  UniversalTemplateParamNameTy getAsUniversalTemplateParamName() const {
+    assert(Kind == Universal &&
+           "Not a reference to a universal template parameter");
+    return UniversalTemplateParamNameTy::getFromOpaquePtr(Arg);
+  }
+
   /// Retrieve the location of the template argument.
   SourceLocation getLocation() const { return Loc; }
 
@@ -116,8 +130,9 @@ public:
   /// Retrieve the location of the ellipsis that makes a template
   /// template argument into a pack expansion.
   SourceLocation getEllipsisLoc() const {
-    assert(Kind == Template &&
-           "Only template template arguments can have an ellipsis");
+    assert(
+        (Kind == Template || Kind == Universal) &&
+        "Only template and universal template arguments can have an ellipsis");
     return EllipsisLoc;
   }
 
@@ -143,8 +158,9 @@ private:
   /// the location of the template argument.
   SourceLocation Loc;
 
-  /// The ellipsis location that can accompany a template template
-  /// argument (turning it into a template template argument expansion).
+  /// The ellipsis location that can accompany a template/universal template
+  /// argument (turning it into a template/universal template argument
+  /// expansion).
   SourceLocation EllipsisLoc;
   };
 

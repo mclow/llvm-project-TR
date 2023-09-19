@@ -125,6 +125,7 @@ add_clang_library(clangAST
   Type.cpp
   TypeLoc.cpp
   TypePrinter.cpp
+  UniversalTemplateParameterName.cpp
   VTableBuilder.cpp
   VTTBuilder.cpp
 

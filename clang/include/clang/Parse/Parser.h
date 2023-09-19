@@ -14,6 +14,7 @@
 #define LLVM_CLANG_PARSE_PARSER_H
 
 #include "clang/Basic/OpenACCKinds.h"
+#include "clang/AST/UniversalTemplateParameterName.h"
 #include "clang/Basic/OperatorPrecedence.h"
 #include "clang/Lex/CodeCompletionHandler.h"
 #include "clang/Lex/Preprocessor.h"
@@ -162,6 +163,9 @@ class Parser : public CodeCompletionHandler {
   // C++2a contextual keywords.
   mutable IdentifierInfo *Ident_import;
   mutable IdentifierInfo *Ident_module;
+
+  // C++2c contextual keywords
+  mutable IdentifierInfo *Ident_universal;
 
   // C++ type trait keywords that can be reverted to identifiers and still be
   // used as type traits.
@@ -479,6 +483,8 @@ public:
   // different actual classes based on the actions in place.
   typedef OpaquePtr<DeclGroupRef> DeclGroupPtrTy;
   typedef OpaquePtr<TemplateName> TemplateTy;
+  typedef OpaquePtr<UniversalTemplateParameterName *>
+      UniversalTemplateParamNameTy;
 
   typedef SmallVector<TemplateParameterList *, 4> TemplateParameterLists;
 
@@ -3681,9 +3687,11 @@ private:
   bool ParseTemplateParameterList(unsigned Depth,
                                   SmallVectorImpl<NamedDecl*> &TemplateParams);
   TPResult isStartOfTemplateTypeParameter();
+  bool isUniversalTemplateParameterIntroducer();
   NamedDecl *ParseTemplateParameter(unsigned Depth, unsigned Position);
   NamedDecl *ParseTypeParameter(unsigned Depth, unsigned Position);
   NamedDecl *ParseTemplateTemplateParameter(unsigned Depth, unsigned Position);
+  NamedDecl *ParseUniversalTemplateParameter(unsigned Depth, unsigned Position);
   NamedDecl *ParseNonTypeTemplateParameter(unsigned Depth, unsigned Position);
   bool isTypeConstraintAnnotation();
   bool TryAnnotateTypeConstraint();
@@ -3720,6 +3728,7 @@ private:
                                  TemplateTy Template, SourceLocation OpenLoc);
   ParsedTemplateArgument ParsePartiallyAppliedConceptTemplateArgument();
   ParsedTemplateArgument ParseTemplateTemplateArgument();
+  ParsedTemplateArgument ParseUniversalTemplateParamNameArgument();
   ParsedTemplateArgument ParseTemplateArgument();
   DeclGroupPtrTy ParseExplicitInstantiation(DeclaratorContext Context,
                                             SourceLocation ExternLoc,

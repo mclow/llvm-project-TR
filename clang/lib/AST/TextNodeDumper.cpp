@@ -1046,11 +1046,6 @@ void TextNodeDumper::VisitTemplateTemplateArgument(const TemplateArgument &TA) {
   TA.getAsTemplate().dump(OS);
 }
 
-void TextNodeDumper::VisitConceptTemplateArgument(const TemplateArgument &TA) {
-  OS << " concept ";
-  OS << TA.getAsPartiallyAppliedConcept()->getConceptNameInfo().getName();
-}
-
 void TextNodeDumper::VisitTemplateExpansionTemplateArgument(
     const TemplateArgument &TA) {
   if (TA.getAsTemplateOrTemplatePattern().getKind() ==
@@ -1058,6 +1053,23 @@ void TextNodeDumper::VisitTemplateExpansionTemplateArgument(
     OS << " using";
   OS << " template expansion ";
   TA.getAsTemplateOrTemplatePattern().dump(OS);
+}
+
+void TextNodeDumper::VisitConceptTemplateArgument(const TemplateArgument &TA) {
+  OS << " concept ";
+  OS << TA.getAsPartiallyAppliedConcept()->getConceptNameInfo().getName();
+}
+
+void TextNodeDumper::VisitUniversalTemplateArgument(
+    const TemplateArgument &TA) {
+  OS << " universal ";
+  OS << TA.getAsUniversalTemplateParameterName()->getDecl()->getDeclName();
+}
+
+void TextNodeDumper::VisitUniversalExpansionTemplateArgument(
+    const TemplateArgument &TA) {
+  OS << " universal expansion ";
+  OS << TA.getAsUniversalTemplateParameterName()->getDecl()->getDeclName();
 }
 
 void TextNodeDumper::VisitExpressionTemplateArgument(const TemplateArgument &) {

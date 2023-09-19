@@ -519,6 +519,8 @@ namespace clang {
     ExpectedDecl VisitTemplateTypeParmDecl(TemplateTypeParmDecl *D);
     ExpectedDecl VisitNonTypeTemplateParmDecl(NonTypeTemplateParmDecl *D);
     ExpectedDecl VisitTemplateTemplateParmDecl(TemplateTemplateParmDecl *D);
+    ExpectedDecl VisitUniversalTemplateParmDecl(UniversalTemplateParmDecl *D);
+
     ExpectedDecl VisitClassTemplateDecl(ClassTemplateDecl *D);
     ExpectedDecl VisitClassTemplateSpecializationDecl(
                                             ClassTemplateSpecializationDecl *D);
@@ -5964,6 +5966,11 @@ ASTNodeImporter::VisitTemplateTemplateParmDecl(TemplateTemplateParmDecl *D) {
   }
 
   return ToD;
+}
+
+ExpectedDecl
+ASTNodeImporter::VisitUniversalTemplateParmDecl(UniversalTemplateParmDecl *D) {
+  assert(false && "TODO CORENTIN");
 }
 
 // Returns the definition for a (forward) declaration of a TemplateDecl, if

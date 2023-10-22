@@ -4360,7 +4360,7 @@ Sema::SubstConceptTemplateArguments(const ConceptSpecializationExpr *CSE,
       TemplateArgumentList(TemplateArgumentList::OnStack, NewArgList);
   Sema::SFINAETrap Trap(*this);
   MultiLevelTemplateArgumentList MLTALForConstraint =
-      getTemplateInstantiationArgs(CSE->getNamedConcept(), /*Final=*/false,
+      getTemplateInstantiationArgs(CSE->getNamedConcept(), CSE->getNamedConcept()->getDeclContext(), /*Final=*/false,
                                    &Rewritten,
                                    /*RelativeToPrimary=*/true,
                                    /*Pattern=*/nullptr,

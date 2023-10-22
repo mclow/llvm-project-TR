@@ -1296,7 +1296,7 @@ substituteConceptTemplateParameter(Sema &S, NamedDecl *D,
       Sema::InstantiatingTemplate::ConstraintNormalization{}, D,
       ULE->getSourceRange());
   MultiLevelTemplateArgumentList MLTAL =
-      S.getTemplateInstantiationArgs(D, /*Final=*/false, TemplateArgs,
+      S.getTemplateInstantiationArgs(D, D->getDeclContext(), /*Final=*/false, TemplateArgs,
                                      /*RelativeToPrimary=*/true,
                                      /*Pattern=*/nullptr,
                                      /*ForConstraintInstantiation=*/true);
@@ -1331,7 +1331,7 @@ substituteConceptTemplateParameter(Sema &S, NamedDecl *D, const CXXFoldExpr *FE,
       FE->getSourceRange());
 
   MultiLevelTemplateArgumentList MLTAL =
-      S.getTemplateInstantiationArgs(D, /*Final=*/false, TemplateArgs,
+      S.getTemplateInstantiationArgs(D, D->getDeclContext(), /*Final=*/false, TemplateArgs,
                                      /*RelativeToPrimary=*/true,
                                      /*Pattern=*/nullptr,
                                      /*ForConstraintInstantiation=*/true);
@@ -1372,7 +1372,7 @@ substituteConceptArguments(Sema &S, ConceptDecl *Concept,
   }
 
   MultiLevelTemplateArgumentList MLTAL =
-      S.getTemplateInstantiationArgs(Concept, /*Final=*/false, &Args,
+      S.getTemplateInstantiationArgs(Concept, Concept->getDeclContext(), /*Final=*/false, &Args,
                                      /*RelativeToPrimary=*/true,
                                      /*Pattern=*/nullptr,
                                      /*ForConstraintInstantiation=*/true);

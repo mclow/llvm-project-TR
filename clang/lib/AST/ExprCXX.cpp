@@ -368,7 +368,7 @@ UnresolvedLookupExpr::UnresolvedLookupExpr(
     UnresolvedSetIterator End, bool KnownDependent)
     : OverloadExpr(UnresolvedLookupExprClass, Context, QualifierLoc,
                    TemplateKWLoc, NameInfo, TemplateArgs, Begin, End,
-                   KnownDependent, false, false,
+                   KnownDependent, false,
                    UnresolvedLookupExprIsVariableOrConceptParameterPack(Begin, End)),
       NamingClass(NamingClass) {
   UnresolvedLookupExprBits.RequiresADL = RequiresADL;

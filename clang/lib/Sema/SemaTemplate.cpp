@@ -1269,7 +1269,7 @@ static ExprResult formImmediatelyDeclaredConstraint(
     R.addDecl(CDT);
     ImmediatelyDeclaredConstraint = UnresolvedLookupExpr::Create(
         S.getASTContext(), nullptr, SS.getWithLocInContext(S.getASTContext()),
-        SourceLocation(), NameInfo, false, &ConstraintArgs, R.begin(), R.end());
+        SourceLocation(), NameInfo, false, &ConstraintArgs, R.begin(), R.end(), /*KnownDependent=*/false);
     if (ImmediatelyDeclaredConstraint.isInvalid() || !EllipsisLoc.isValid())
       return ImmediatelyDeclaredConstraint;
   }

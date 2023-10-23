@@ -5842,6 +5842,9 @@ struct CXXNameMangler::TemplateArgManglingInfo {
       return NTTP->getType()->isInstantiationDependentType() ||
              NTTP->getType()->getContainedDeducedType();
 
+    if(isa<UniversalTemplateParmDecl>(Param))
+      return true;
+
     // For a template template parameter, the template-head might differ from
     // that of the template.
     auto *TTP = cast<TemplateTemplateParmDecl>(Param);

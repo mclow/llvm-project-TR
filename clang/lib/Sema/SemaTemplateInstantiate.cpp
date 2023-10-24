@@ -1467,7 +1467,7 @@ namespace {
     Decl *TransformDecl(SourceLocation Loc, Decl *D);
 
     bool InjectAdditionalArgumentsFromPartiallyAppliedConcept(
-        TemplateArgumentListInfo &Args, TemplateTemplateParmDecl *D);
+        TemplateArgumentListInfo &Args, TemplateDecl *D);
 
     void transformAttrs(Decl *Old, Decl *New) {
       SemaRef.InstantiateAttrs(TemplateArgs, Old, New);
@@ -1891,12 +1891,13 @@ Decl *TemplateInstantiator::TransformDecl(SourceLocation Loc, Decl *D) {
 }
 
 bool TemplateInstantiator::InjectAdditionalArgumentsFromPartiallyAppliedConcept(
-    TemplateArgumentListInfo &Args, TemplateTemplateParmDecl *D) {
-  if (D->getDepth() >= TemplateArgs.getNumLevels())
+    TemplateArgumentListInfo &Args, TemplateDecl *D) {
+  auto [Depth, Index] = getDepthAndIndex(D);
+  if (Depth >= TemplateArgs.getNumLevels())
     return false;
-  if (!TemplateArgs.hasTemplateArgument(D->getDepth(), D->getPosition()))
+  if (!TemplateArgs.hasTemplateArgument(Depth, Index))
     return false;
-  TemplateArgument Arg = TemplateArgs(D->getDepth(), D->getPosition());
+  TemplateArgument Arg = TemplateArgs(Depth, Index);
   if (Arg.getKind() != clang::TemplateArgument::Concept)
     return false;
   PartiallyAppliedConcept *C = Arg.getAsPartiallyAppliedConcept();
@@ -4677,7 +4678,7 @@ Sema::SubstConceptTemplateArguments(const ConceptSpecializationExpr *CSE,
     }
 
     ExprResult TransformUnresolvedLookupExpr(UnresolvedLookupExpr *E) {
-      if (E->isConceptTemplateParameterReference()) {
+      if (E->isConceptReference() || E->isVarDeclReference()) {
         TemplateInstantiator Instantiator(SemaRef, MLTAL,
                                           SourceLocation(),
                                           DeclarationName());

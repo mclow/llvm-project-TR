@@ -3346,6 +3346,18 @@ struct DependencyChecker : RecursiveASTVisitor<DependencyChecker> {
     return super::VisitDeclRefExpr(E);
   }
 
+  bool VisitUnresolvedLookupExpr(UnresolvedLookupExpr *ULE) {
+    if (ULE->isConceptReference() || ULE->isVarDeclReference()) {
+      if (auto *TTP = ULE->getTemplateTemplateDecl()) {
+        if (Matches(TTP->getDepth(), ULE->getExprLoc()))
+          return false;
+      }
+      for (auto &TLoc : ULE->template_arguments())
+        super::TraverseTemplateArgumentLoc(TLoc);
+    }
+    return super::VisitUnresolvedLookupExpr(ULE);
+  }
+
   bool VisitSubstTemplateTypeParmType(const SubstTemplateTypeParmType *T) {
     return TraverseType(T->getReplacementType());
   }
@@ -5625,6 +5637,17 @@ bool Sema::CheckUniversalTemplateParameterArgument(
   }
   case TemplateArgument::Expression: {
     Expr *E = Arg.getAsExpr();
+
+    // deduce a universal template param from a variable template parameter
+    if (auto *ULE = dyn_cast<UnresolvedLookupExpr>(E);
+        ULE && (ULE->isConceptReference() || ULE->isVarDeclReference())) {
+      TemplateArgument TA(ULE);
+      AL = TemplateArgumentLoc(TA, ULE);
+      SugaredConverted.push_back(TA);
+      CanonicalConverted.push_back(TA);
+      break;
+    }
+
     TemplateArgument SugaredResult, CanonicalResult;
     unsigned CurSFINAEErrors = NumSFINAEErrors;
     ExprResult Res =
@@ -9090,6 +9113,11 @@ static bool CheckNonTypeTemplatePartialSpecializationArgs(
     if (DeclRefExpr *DRE = dyn_cast<DeclRefExpr>(ArgExpr))
       if (isa<NonTypeTemplateParmDecl>(DRE->getDecl()))
         continue;
+
+    if (auto *ULE = dyn_cast<UnresolvedLookupExpr>(ArgExpr);
+        ULE && (ULE->isConceptReference() || ULE->isVarDeclReference())) {
+      continue;
+    }
 
     // C++ [temp.class.spec]p9:
     //   Within the argument list of a class template partial

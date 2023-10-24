@@ -1185,7 +1185,7 @@ const NormalizedConstraint *Sema::getNormalizedAssociatedConstraints(
 
   auto ExprDenotesConcept = [](const Expr* E) {
     if (const UnresolvedLookupExpr *ULE = llvm::dyn_cast<UnresolvedLookupExpr>(E))
-      return ULE->isConceptTemplateParameterReference();
+      return ULE->isConceptReference();
     return isa<ConceptSpecializationExpr, BinaryOperator, ParenExpr, CXXFoldExpr>(E);
   };
 
@@ -1319,7 +1319,7 @@ substituteConceptTemplateParameter(Sema &S, NamedDecl *D, const CXXFoldExpr *FE,
     IsConceptExpansion = true;
   else if (UnresolvedLookupExpr *ULE =
                llvm::dyn_cast<UnresolvedLookupExpr>(Pattern)) {
-    IsConceptExpansion = ULE->isConceptTemplateParameterReference();
+    IsConceptExpansion = ULE->isConceptReference();
   }
 
   if (!IsConceptExpansion)
@@ -1446,7 +1446,7 @@ NormalizedConstraint::fromConstraintExpr(Sema &S, NamedDecl *D, const Expr *E,
 
     return New;
   } else if (auto *ULE = dyn_cast<const UnresolvedLookupExpr>(E);
-             ULE && ULE->isConceptTemplateParameterReference()) {
+             ULE && ULE->isConceptReference()) {
     ExprResult Res =
         substituteConceptTemplateParameter(S, D, ULE, TemplateArgs);
     if (Res.isInvalid()) {

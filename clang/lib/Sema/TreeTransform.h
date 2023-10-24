@@ -640,7 +640,7 @@ public:
   }
 
   bool InjectAdditionalArgumentsFromPartiallyAppliedConcept(
-      TemplateArgumentListInfo &, TemplateTemplateParmDecl *) {
+      TemplateArgumentListInfo &, TemplateDecl *) {
     return true;
   }
 
@@ -12981,9 +12981,9 @@ TreeTransform<Derived>::TransformUnresolvedLookupExpr(
     return ExprError();
   }
 
-  if (Old->isConceptTemplateParameterReference()) {
+  if (Old->isConceptReference()) {
     getDerived().InjectAdditionalArgumentsFromPartiallyAppliedConcept(
-        TransArgs, Old->getTemplateTemplateParameterDecl());
+        TransArgs, Old->getTemplateDecl());
   }
 
   return getDerived().RebuildTemplateIdExpr(SS, TemplateKWLoc, R,

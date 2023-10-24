@@ -38,6 +38,7 @@
 #include "clang/Basic/OperatorKinds.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/Specifiers.h"
+#include "clang/Basic/TemplateKinds.h"
 #include "clang/Basic/TypeTraits.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/PointerUnion.h"
@@ -3131,23 +3132,43 @@ public:
     if (!hasTemplateKWAndArgsInfo())
       return false;
     // FIXME corentin: deduced function types can have "hidden" args and no <
-    // investigate that further, but ultiumately maybe we want to model concepts reference
-    // with another kind of expression.
-    return isConceptTemplateParameterReference() ?
-        getTrailingASTTemplateKWAndArgsInfo()->NumTemplateArgs : getLAngleLoc().isValid();
+    // investigate that further, but ultimately maybe we want to model concepts
+    // reference with another kind of expression.
+    return (isConceptReference() || isVarDeclReference())
+               ? getTrailingASTTemplateKWAndArgsInfo()->NumTemplateArgs
+               : getLAngleLoc().isValid();
   }
 
-  bool isConceptTemplateParameterReference() const {
-    return getNumDecls() == 1 && [&] () {
-      if(auto* TTP = llvm::dyn_cast_or_null<TemplateTemplateParmDecl>(getTrailingResults()->getDecl()))
+  bool isConceptReference() const {
+    return getNumDecls() == 1 && [&]() {
+      if (auto *TTP = dyn_cast_or_null<TemplateTemplateParmDecl>(
+              getTrailingResults()->getDecl()))
         return TTP->kind() == TNK_Concept_template;
+      if (isa<ConceptDecl>(getTrailingResults()->getDecl()))
+        return true;
       return false;
     }();
   }
 
-  TemplateTemplateParmDecl *getTemplateTemplateParameterDecl() {
+  bool isVarDeclReference() const {
+    return getNumDecls() == 1 && [&]() {
+      if (auto *TTP = dyn_cast_or_null<TemplateTemplateParmDecl>(
+              getTrailingResults()->getDecl()))
+        return TTP->kind() == TNK_Var_template;
+      if (isa<VarTemplateDecl>(getTrailingResults()->getDecl()))
+        return true;
+      return false;
+    }();
+  }
+
+  TemplateDecl *getTemplateDecl() const {
     assert(getNumDecls() == 1);
-    return llvm::dyn_cast_or_null<TemplateTemplateParmDecl>(
+    return dyn_cast_or_null<TemplateDecl>(getTrailingResults()->getDecl());
+  }
+
+  TemplateTemplateParmDecl *getTemplateTemplateDecl() const {
+    assert(getNumDecls() == 1);
+    return dyn_cast_or_null<TemplateTemplateParmDecl>(
         getTrailingResults()->getDecl());
   }
 

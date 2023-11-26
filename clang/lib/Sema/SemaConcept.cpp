@@ -15,6 +15,7 @@
 #include "clang/AST/ASTLambda.h"
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/ExprConcepts.h"
+#include "clang/AST/OperationKinds.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Basic/OperatorPrecedence.h"
 #include "clang/Sema/EnterExpressionEvaluationContext.h"
@@ -1174,7 +1175,8 @@ void Sema::DiagnoseUnsatisfiedConstraint(
 
 const NormalizedConstraint *Sema::getNormalizedAssociatedConstraints(
     NamedDecl *ConstrainedDecl, ArrayRef<const Expr *> AssociatedConstraints,
-    TemplateArgumentList *TemplateArgs, bool TopLevel) {
+    TemplateArgumentList *TemplateArgs, bool TopLevel,
+    AtomicConstraint::FoldKind FK) {
 
   // In case the ConstrainedDecl comes from modules, it is necessary to use
   // the canonical decl to avoid different atomic constraints with the 'same'
@@ -1206,12 +1208,15 @@ const NormalizedConstraint *Sema::getNormalizedAssociatedConstraints(
   void* InsertPos;
   CachedNormalizedConstraint* CacheEntry = NormalizationCache.FindNodeOrInsertPos(ID, InsertPos);
   if(CacheEntry)
-    return CacheEntry;
+    return CacheEntry->IsInvalid ? nullptr : CacheEntry;
 
   auto Normalized = NormalizedConstraint::fromConstraintExprs(
-      *this, ConstrainedDecl, AssociatedConstraints, TemplateArgs);
-  if(!Normalized)
+      *this, ConstrainedDecl, AssociatedConstraints, TemplateArgs, FK);
+  if (!Normalized) {
+    CacheEntry = new (Context) CachedNormalizedConstraint(ID);
+    NormalizationCache.InsertNode(CacheEntry, InsertPos);
     return nullptr;
+  }
   CacheEntry = new (Context) CachedNormalizedConstraint(ID, std::move(*Normalized));
   NormalizationCache.InsertNode(CacheEntry, InsertPos);
   return CacheEntry;
@@ -1340,16 +1345,15 @@ substituteConceptTemplateParameter(Sema &S, NamedDecl *D, const CXXFoldExpr *FE,
   return E;
 }
 
-std::optional<NormalizedConstraint>
-NormalizedConstraint::fromConstraintExprs(Sema &S, NamedDecl *D,
-                                          ArrayRef<const Expr *> E,
-                                          TemplateArgumentList *TemplateArgs) {
+std::optional<NormalizedConstraint> NormalizedConstraint::fromConstraintExprs(
+    Sema &S, NamedDecl *D, ArrayRef<const Expr *> E,
+    TemplateArgumentList *TemplateArgs, AtomicConstraint::FoldKind FK) {
   assert(E.size() != 0);
-  auto Conjunction = fromConstraintExpr(S, D, E[0], TemplateArgs);
+  auto Conjunction = fromConstraintExpr(S, D, E[0], TemplateArgs, FK);
   if (!Conjunction)
     return std::nullopt;
   for (unsigned I = 1; I < E.size(); ++I) {
-    auto Next = fromConstraintExpr(S, D, E[I], TemplateArgs);
+    auto Next = fromConstraintExpr(S, D, E[I], TemplateArgs, FK);
     if (!Next)
       return std::nullopt;
     *Conjunction = NormalizedConstraint(S.Context, std::move(*Conjunction),
@@ -1386,7 +1390,8 @@ substituteConceptArguments(Sema &S, ConceptDecl *Concept,
 
 std::optional<NormalizedConstraint>
 NormalizedConstraint::fromConstraintExpr(Sema &S, NamedDecl *D, const Expr *E,
-                                         TemplateArgumentList *TemplateArgs) {
+                                         TemplateArgumentList *TemplateArgs,
+                                         AtomicConstraint::FoldKind FK) {
   assert(E != nullptr);
 
   // C++ [temp.constr.normal]p1.1
@@ -1397,14 +1402,12 @@ NormalizedConstraint::fromConstraintExpr(Sema &S, NamedDecl *D, const Expr *E,
 
   // C++2a [temp.param]p4:
   //     [...] If T is not a pack, then E is E', otherwise E is (E' && ...).
-  // Fold expression is considered atomic constraints per current wording.
-  // See http://cplusplus.github.io/concepts-ts/ts-active.html#28
 
   if (LogicalBinOp BO = E) {
-    auto LHS = fromConstraintExpr(S, D, BO.getLHS(), TemplateArgs);
+    auto LHS = fromConstraintExpr(S, D, BO.getLHS(), TemplateArgs, FK);
     if (!LHS)
       return std::nullopt;
-    auto RHS = fromConstraintExpr(S, D, BO.getRHS(), TemplateArgs);
+    auto RHS = fromConstraintExpr(S, D, BO.getRHS(), TemplateArgs, FK);
     if (!RHS)
       return std::nullopt;
 
@@ -1433,7 +1436,8 @@ NormalizedConstraint::fromConstraintExpr(Sema &S, NamedDecl *D, const Expr *E,
       if (Res.isInvalid())
         return std::nullopt;
 
-      SubNF = S.getNormalizedAssociatedConstraints(CD, {Res.get()}, &Args);
+      SubNF = S.getNormalizedAssociatedConstraints(CD, {Res.get()}, &Args,
+                                                   /*TopLevel=*/false, FK);
       if (!SubNF)
         return std::nullopt;
     }
@@ -1452,16 +1456,43 @@ NormalizedConstraint::fromConstraintExpr(Sema &S, NamedDecl *D, const Expr *E,
     if (Res.isInvalid()) {
       return std::nullopt;
     }
-    return fromConstraintExpr(S, D, Res.get());
+    return fromConstraintExpr(S, D, Res.get(), nullptr, FK);
   } else if (const CXXFoldExpr *FE = dyn_cast<const CXXFoldExpr>(E)) {
     ExprResult Res = substituteConceptTemplateParameter(S, D, FE, TemplateArgs);
     if (Res.isInvalid()) {
       return std::nullopt;
     }
-    if (!isa<CXXFoldExpr>(Res.get()))
-      return fromConstraintExpr(S, D, Res.get(), TemplateArgs);
+    auto *Transformed = dyn_cast<const CXXFoldExpr>(Res.get());
+    if (!Transformed)
+      return fromConstraintExpr(S, D, Res.get(), TemplateArgs, FK);
+    if (Transformed->getOperator() == BO_LOr ||
+        Transformed->getOperator() == BO_LAnd) {
+      auto PatternConstraint =
+          fromConstraintExpr(S, D, Transformed->getPattern(), TemplateArgs,
+                             Transformed->getOperator() == BO_LAnd
+                                 ? AtomicConstraint::FoldKind::FoldAnd
+                                 : AtomicConstraint::FoldKind::FoldOr);
+      if (!PatternConstraint)
+        return std::nullopt;
+      if (Expr *Init = Transformed->getInit()) {
+        auto InitConstraint = fromConstraintExpr(S, D, Init, TemplateArgs);
+        if (!InitConstraint)
+          return std::nullopt;
+        return NormalizedConstraint(S.Context, std::move(*InitConstraint),
+                                    std::move(*PatternConstraint),
+                                    Transformed->getOperator() == BO_LAnd
+                                        ? CCK_Conjunction
+                                        : CCK_Disjunction);
+      }
+      return PatternConstraint;
+    }
+    E = Transformed;
   }
-  return NormalizedConstraint{new (S.Context) AtomicConstraint(S, E)};
+  return NormalizedConstraint{new (S.Context) AtomicConstraint(
+      S, E,
+      E->containsUnexpandedParameterPack()
+          ? FK
+          : AtomicConstraint::FoldKind::FoldNone)};
 }
 
 using NormalForm =
@@ -1662,9 +1693,13 @@ bool Sema::MaybeEmitAmbiguousAtomicConstraintsDiagnostic(NamedDecl *D1,
       [&] (const AtomicConstraint &A, const AtomicConstraint &B) {
         if (!A.hasMatchingParameterMapping(Context, B))
           return false;
+
         const Expr *EA = A.ConstraintExpr, *EB = B.ConstraintExpr;
         if (EA == EB)
           return true;
+
+        if (!A.isCompatibleFold(B))
+          return false;
 
         // Not the same source level expression - are the expressions
         // identical?

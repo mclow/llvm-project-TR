@@ -7501,7 +7501,8 @@ public:
 
   const NormalizedConstraint *getNormalizedAssociatedConstraints(
       NamedDecl *ConstrainedDecl, ArrayRef<const Expr *> AssociatedConstraints,
-      TemplateArgumentList *TemplateArgs = nullptr, bool TopLevel = false);
+      TemplateArgumentList *TemplateArgs = nullptr, bool TopLevel = false,
+      AtomicConstraint::FoldKind FK = AtomicConstraint::FoldKind::FoldNone);
 
   /// \brief Check whether the given declaration's associated constraints are
   /// at least as constrained than another declaration's according to the

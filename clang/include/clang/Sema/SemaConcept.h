@@ -27,11 +27,29 @@ namespace clang {
 class Sema;
 
 struct AtomicConstraint {
+  enum class FoldKind {
+    FoldNone,
+    FoldAnd,
+    FoldOr,
+  };
   const Expr *ConstraintExpr;
+  FoldKind Fold = FoldKind::FoldNone;
+
   std::optional<ArrayRef<TemplateArgumentLoc>> ParameterMapping;
 
-  AtomicConstraint(Sema &S, const Expr *ConstraintExpr) :
-      ConstraintExpr(ConstraintExpr) { };
+  AtomicConstraint(Sema &S, const Expr *ConstraintExpr,
+                   FoldKind Fold = FoldKind::FoldNone)
+      : ConstraintExpr(ConstraintExpr), Fold(Fold){};
+
+  bool isCompatibleFold(const AtomicConstraint &Other) const {
+    if (Fold == AtomicConstraint::FoldKind::FoldAnd)
+      return Other.Fold != AtomicConstraint::FoldKind::FoldNone;
+
+    if (Fold == AtomicConstraint::FoldKind::FoldOr)
+      return Other.Fold == AtomicConstraint::FoldKind::FoldOr;
+
+    return Other.Fold == AtomicConstraint::FoldKind::FoldNone;
+  }
 
   bool hasMatchingParameterMapping(ASTContext &C,
                                    const AtomicConstraint &Other) const {
@@ -72,6 +90,9 @@ struct AtomicConstraint {
     // constraint expressions, therefore the constraint expressions are
     // the originals, and comparing them will suffice.
     if (ConstraintExpr != Other.ConstraintExpr)
+      return false;
+
+    if (!isCompatibleFold(Other))
       return false;
 
     // Check that the parameter lists are identical
@@ -164,20 +185,27 @@ struct NormalizedConstraint {
   }
 
 private:
-  static std::optional<NormalizedConstraint>
-  fromConstraintExprs(Sema &S, NamedDecl *D, ArrayRef<const Expr *> E,
-                      TemplateArgumentList *TemplateArgs = nullptr);
-  static std::optional<NormalizedConstraint>
-  fromConstraintExpr(Sema &S, NamedDecl *D, const Expr *E,
-                     TemplateArgumentList *TemplateArgs = nullptr);
+  static std::optional<NormalizedConstraint> fromConstraintExprs(
+      Sema &S, NamedDecl *D, ArrayRef<const Expr *> E,
+      TemplateArgumentList *TemplateArgs = nullptr,
+      AtomicConstraint::FoldKind FK = AtomicConstraint::FoldKind::FoldNone);
+  static std::optional<NormalizedConstraint> fromConstraintExpr(
+      Sema &S, NamedDecl *D, const Expr *E,
+      TemplateArgumentList *TemplateArgs = nullptr,
+      AtomicConstraint::FoldKind FK = AtomicConstraint::FoldKind::FoldNone);
+
+protected:
+  NormalizedConstraint() = default;
 };
 
 struct CachedNormalizedConstraint : public llvm::FastFoldingSetNode,
                                     public NormalizedConstraint {
-  NormalizedConstraint* Constraint = nullptr;
+  bool IsInvalid = false;
   CachedNormalizedConstraint(const llvm::FoldingSetNodeID &ID, NormalizedConstraint &&Other)
       : FastFoldingSetNode(ID), NormalizedConstraint(std::move(Other))
   {}
+  CachedNormalizedConstraint(const llvm::FoldingSetNodeID &ID)
+      : FastFoldingSetNode(ID), IsInvalid(true) {}
 };
 
 

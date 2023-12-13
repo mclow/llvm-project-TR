@@ -6142,8 +6142,10 @@ static ExprResult EvaluateConvertedConstantExpression(
     bool RequireInt, const APValue &PreNarrowingValue) {
   ExprResult Result = E;
 
-  if (isa<ConstantExpr>(Result.get()))
+  if (auto *CE = dyn_cast<ConstantExpr>(Result.get())) {
+    Value = CE->getAPValueResult();
     return Result;
+  }
 
   // Check the expression is a constant expression.
   SmallVector<PartialDiagnosticAt, 8> Notes;

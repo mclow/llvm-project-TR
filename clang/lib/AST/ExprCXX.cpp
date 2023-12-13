@@ -1671,8 +1671,8 @@ SizeOfPackExpr *SizeOfPackExpr::CreateDeserialized(ASTContext &Context,
   return new (Storage) SizeOfPackExpr(EmptyShell(), NumPartialArgs);
 }
 
-NonTypeTemplateParmDecl *SubstNonTypeTemplateParmExpr::getParameter() const {
-  return cast<NonTypeTemplateParmDecl>(
+NamedDecl *SubstNonTypeTemplateParmExpr::getParameter() const {
+  return cast<NamedDecl>(
       getReplacedTemplateParameterList(getAssociatedDecl())->asArray()[Index]);
 }
 
@@ -1680,9 +1680,14 @@ QualType SubstNonTypeTemplateParmExpr::getParameterType(
     const ASTContext &Context) const {
   // Note that, for a class type NTTP, we will have an lvalue of type 'const
   // T', so we can't just compute this from the type and value category.
+
+  QualType Type = getType();
+  if (isa<UniversalTemplateParmDecl>(getParameter()))
+    Type = getReplacement()->getType();
+
   if (isReferenceParameter())
-    return Context.getLValueReferenceType(getType());
-  return getType().getUnqualifiedType();
+    return Context.getLValueReferenceType(Type);
+  return Type.getUnqualifiedType();
 }
 
 SubstNonTypeTemplateParmPackExpr::SubstNonTypeTemplateParmPackExpr(

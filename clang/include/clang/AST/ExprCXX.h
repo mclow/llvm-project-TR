@@ -4443,7 +4443,7 @@ public:
     return PackIndex - 1;
   }
 
-  NonTypeTemplateParmDecl *getParameter() const;
+  NamedDecl *getParameter() const;
 
   bool isReferenceParameter() const { return AssociatedDeclAndRef.getInt(); }
 

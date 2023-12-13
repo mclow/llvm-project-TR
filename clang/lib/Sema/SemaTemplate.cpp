@@ -5648,11 +5648,26 @@ bool Sema::CheckUniversalTemplateParameterArgument(
       break;
     }
 
+    // If we have an id-expression
+    // do not make any deduction yet, we will do that when we
+    // initialize a non-universal template argument.
+    // Only check that we have a constant expression
+    if (auto *DR = dyn_cast<DeclRefExpr>(E);
+        DR && CTAK == CheckTemplateArgumentKind::CTAK_Deduced) {
+      TemplateArgument TA(DR);
+      AL = TemplateArgumentLoc(TA, DR);
+      SugaredConverted.push_back(TA);
+      CanonicalConverted.push_back(TA);
+      break;
+    }
+
+    // For arbitrary expressions, use decltype(auto) semantics
     TemplateArgument SugaredResult, CanonicalResult;
     unsigned CurSFINAEErrors = NumSFINAEErrors;
-    ExprResult Res =
-        CheckTemplateArgument(Param, getASTContext().getAutoDeductType(), E,
-                              SugaredResult, CanonicalResult, CTAK);
+    QualType Type =
+        Context.getAutoType(QualType(), AutoTypeKeyword::DecltypeAuto, false);
+    ExprResult Res = CheckTemplateArgument(Param, Type, E, SugaredResult,
+                                           CanonicalResult, CTAK);
     if (Res.isInvalid())
       return true;
     // If the current template argument causes an error, give up now.
@@ -6074,6 +6089,12 @@ bool Sema::CheckTemplateArgument(
           << Arg.getSourceRange();
       Diag(Param->getLocation(), diag::note_template_param_here);
       return true;
+
+    case TemplateArgument::Universal:
+      SugaredConverted.push_back(Arg.getArgument());
+      CanonicalConverted.push_back(
+          Context.getCanonicalTemplateArgument(Arg.getArgument()));
+      break;
 
     case TemplateArgument::Template:
     case TemplateArgument::TemplateExpansion:
@@ -7530,7 +7551,8 @@ ExprResult Sema::CheckTemplateArgument(NamedDecl *Param, QualType ParamType,
   QualType OriginalParamType;
   if (auto *UTP = dyn_cast<UniversalTemplateParmDecl>(Param)) {
     Depth = UTP->getDepth();
-    OriginalParamType = getASTContext().getAutoDeductType();
+    OriginalParamType = getASTContext().getAutoType(
+        QualType(), AutoTypeKeyword::DecltypeAuto, false);
   } else {
     auto *NTTP = cast<NonTypeTemplateParmDecl>(Param);
     Depth = NTTP->getDepth();

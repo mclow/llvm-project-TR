@@ -1818,8 +1818,7 @@ namespace {
 
   private:
     ExprResult
-    transformNonTypeTemplateParmRef(Decl *AssociatedDecl,
-                                    const NonTypeTemplateParmDecl *parm,
+    transformNonTypeTemplateParmRef(Decl *AssociatedDecl, const NamedDecl *parm,
                                     SourceLocation loc, TemplateArgument arg,
                                     std::optional<unsigned> PackIndex);
   };
@@ -2204,7 +2203,8 @@ NamedDecl *TemplateInstantiator::TransformUniversalTemplateParameter(
   case TemplateArgument::Expression:
   case TemplateArgument::NullPtr:
   case TemplateArgument::Integral: {
-    QualType Type = SemaRef.Context.getAutoDeductType();
+    QualType Type = SemaRef.Context.getAutoType(
+        QualType(), AutoTypeKeyword::DecltypeAuto, false);
     TypeSourceInfo *TInfo =
         SemaRef.Context.getTrivialTypeSourceInfo(Type, UTP->getBeginLoc());
     NonTypeTemplateParmDecl *Inst = NonTypeTemplateParmDecl::Create(
@@ -2262,6 +2262,12 @@ TemplateArgument TemplateInstantiator::TransformUniversalTemplateArgument(
     return TemplateArgument(Result);
   }
   if (auto *NTTP = dyn_cast<NonTypeTemplateParmDecl>(D)) {
+    TemplateArgument Arg = TemplateArgs(NTTP->getDepth(), NTTP->getPosition());
+    if (Arg.getKind() == TemplateArgument::Expression) {
+      if (auto *DRE = dyn_cast<DeclRefExpr>(Arg.getAsExpr())) {
+        return DRE;
+      }
+    }
     DeclRefExpr *E = SemaRef.BuildDeclRefExpr(
         NTTP, NTTP->getType(), ExprValueKind::VK_LValue, Name->getNameInfo());
     return TemplateArgument(E);
@@ -2395,22 +2401,25 @@ TemplateInstantiator::TransformCodeAlignAttr(const CodeAlignAttr *CA) {
 }
 
 ExprResult TemplateInstantiator::transformNonTypeTemplateParmRef(
-    Decl *AssociatedDecl, const NonTypeTemplateParmDecl *parm,
-    SourceLocation loc, TemplateArgument arg,
-    std::optional<unsigned> PackIndex) {
+    Decl *AssociatedDecl, const NamedDecl *parm, SourceLocation loc,
+    TemplateArgument arg, std::optional<unsigned> PackIndex) {
   ExprResult result;
 
   // Determine the substituted parameter type. We can usually infer this from
   // the template argument, but not always.
   auto SubstParamType = [&] {
-    QualType T;
-    if (parm->isExpandedParameterPack())
-      T = parm->getExpansionType(SemaRef.ArgumentPackSubstitutionIndex);
-    else
-      T = parm->getType();
-    if (parm->isParameterPack() && isa<PackExpansionType>(T))
-      T = cast<PackExpansionType>(T)->getPattern();
-    return SemaRef.SubstType(T, TemplateArgs, loc, parm->getDeclName());
+    if (auto NTTP = dyn_cast<NonTypeTemplateParmDecl>(parm)) {
+      QualType T;
+      if (NTTP->isExpandedParameterPack())
+        T = NTTP->getExpansionType(SemaRef.ArgumentPackSubstitutionIndex);
+      else
+        T = NTTP->getType();
+      if (parm->isParameterPack() && isa<PackExpansionType>(T))
+        T = cast<PackExpansionType>(T)->getPattern();
+      return SemaRef.SubstType(T, TemplateArgs, loc, parm->getDeclName());
+    }
+    return SemaRef.SubstType(arg.getAsExpr()->getType(), TemplateArgs, loc,
+                             parm->getDeclName());
   };
 
   bool refParam = false;
@@ -2466,7 +2475,9 @@ ExprResult TemplateInstantiator::transformNonTypeTemplateParmRef(
   // FIXME: Don't put subst node on final replacement.
   return new (SemaRef.Context) SubstNonTypeTemplateParmExpr(
       resultExpr->getType(), resultExpr->getValueKind(), loc, resultExpr,
-      AssociatedDecl, parm->getIndex(), PackIndex, refParam);
+      AssociatedDecl,
+      clang::getDepthAndIndex(const_cast<NamedDecl *>(parm)).second, PackIndex,
+      refParam);
 }
 
 ExprResult

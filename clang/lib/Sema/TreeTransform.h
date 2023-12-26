@@ -1004,8 +1004,8 @@ public:
   }
 
   /// Build a new typedef type.
-  QualType RebuildTypedefType(TypedefNameDecl *Typedef) {
-    return SemaRef.Context.getTypeDeclType(Typedef);
+  QualType RebuildTypedefType(TypedefNameDecl *Typedef, QualType Underlying) {
+    return SemaRef.Context.getTypedefType(Typedef, Underlying);
   }
 
   /// Build a new MacroDefined type.
@@ -6384,13 +6384,12 @@ QualType TreeTransform<Derived>::TransformTypedefType(TypeLocBuilder &TLB,
   if (!Typedef)
     return QualType();
 
-  QualType Result = TL.getType();
-  if (getDerived().AlwaysRebuild() ||
-      Typedef != T->getDecl()) {
-    Result = getDerived().RebuildTypedefType(Typedef);
-    if (Result.isNull())
-      return QualType();
-  }
+  QualType Result = getDerived().TransformType(Typedef->getUnderlyingType());
+  if (Result.isNull())
+    return QualType();
+  Result = getDerived().RebuildTypedefType(Typedef, Result);
+  if (Result.isNull())
+    return QualType();
 
   TypedefTypeLoc NewTL = TLB.push<TypedefTypeLoc>(Result);
   NewTL.setNameLoc(TL.getNameLoc());

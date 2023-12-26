@@ -13490,7 +13490,9 @@ bool Sema::CheckUsingDeclQualifier(SourceLocation UsingLoc, bool HasTypename,
 
 Decl *Sema::ActOnAliasDeclaration(Scope *S, AccessSpecifier AS,
                                   MultiTemplateParamsArg TemplateParamLists,
-                                  SourceLocation UsingLoc, UnqualifiedId &Name,
+                                  SourceLocation UsingLoc,
+                                  SourceLocation EllipsisLoc,
+                                  UnqualifiedId &Name,
                                   const ParsedAttributesView &AttrList,
                                   TypeResult Type, Decl *DeclFromDeclSpec) {
   // Skip up to the relevant declaration scope.
@@ -13510,8 +13512,15 @@ Decl *Sema::ActOnAliasDeclaration(Scope *S, AccessSpecifier AS,
   if (DiagnoseClassNameShadow(CurContext, NameInfo))
     return nullptr;
 
-  if (DiagnoseUnexpandedParameterPack(Name.StartLocation, TInfo,
-                                      UPPC_DeclarationType)) {
+  // If we are declaring a pack alias, the right hand side must be a pack
+  if (EllipsisLoc.isValid()) {
+    if (!TInfo->getType()->containsUnexpandedParameterPack()) {
+      Diag(Name.StartLocation, diag::err_expected_unexpanded_pack)
+          << TInfo->getType() << TInfo->getTypeLoc().getSourceRange();
+      Invalid = true;
+    }
+  } else if (DiagnoseUnexpandedParameterPack(Name.StartLocation, TInfo,
+                                             UPPC_DeclarationType)) {
     Invalid = true;
     TInfo = Context.getTrivialTypeSourceInfo(Context.IntTy,
                                              TInfo->getTypeLoc().getBeginLoc());

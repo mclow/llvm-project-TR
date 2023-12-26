@@ -1723,7 +1723,7 @@ TemplateInstantiator::RebuildElaboratedType(SourceLocation KeywordLoc,
                                             ElaboratedTypeKeyword Keyword,
                                             NestedNameSpecifierLoc QualifierLoc,
                                             QualType T) {
-  if (const TagType *TT = T->getAs<TagType>()) {
+  if (const TagType *TT = T.getCanonicalType()->getAs<TagType>()) {
     TagDecl* TD = TT->getDecl();
 
     SourceLocation TagLocation = KeywordLoc;

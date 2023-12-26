@@ -5724,6 +5724,9 @@ def err_ellipsis_in_declarator_not_parameter : Error<
 def err_expected_name_of_pack : Error<
   "%0 does not refer to the name of a parameter pack">;
 
+def err_expected_unexpanded_pack : Error<
+  "%0 does not contain an unexpanded pack">;
+
 def err_pack_index_out_of_bound : Error<
   "invalid index %0 for pack %1 of size %2">;
 

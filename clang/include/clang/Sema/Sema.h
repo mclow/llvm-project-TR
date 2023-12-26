@@ -6418,7 +6418,8 @@ public:
                                   CXXScopeSpec *SS = nullptr);
   Decl *ActOnAliasDeclaration(Scope *CurScope, AccessSpecifier AS,
                               MultiTemplateParamsArg TemplateParams,
-                              SourceLocation UsingLoc, UnqualifiedId &Name,
+                              SourceLocation UsingLoc,
+                              SourceLocation EllipsisLoc, UnqualifiedId &Name,
                               const ParsedAttributesView &AttrList,
                               TypeResult Type, Decl *DeclFromDeclSpec);
 

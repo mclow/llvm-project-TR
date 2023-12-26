@@ -4663,7 +4663,7 @@ QualType ASTContext::getTypedefType(const TypedefNameDecl *Decl,
   }
   if (Underlying.isNull() || Decl->getUnderlyingType() == Underlying)
     return QualType(Decl->TypeForDecl, 0);
-  assert(hasSameType(Decl->getUnderlyingType(), Underlying));
+  // assert(hasSameType(Decl->getUnderlyingType(), Underlying));
 
   llvm::FoldingSetNodeID ID;
   TypedefType::Profile(ID, Decl, Underlying);

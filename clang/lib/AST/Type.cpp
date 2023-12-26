@@ -3708,8 +3708,13 @@ void FunctionProtoType::Profile(llvm::FoldingSetNodeID &ID,
 
 TypedefType::TypedefType(TypeClass tc, const TypedefNameDecl *D,
                          QualType Underlying, QualType can)
-    : Type(tc, can, toSemanticDependence(can->getDependence())),
+    : Type(tc, can,
+           toSemanticDependence(can->getDependence()) |
+               (can->containsUnexpandedParameterPack()
+                    ? TypeDependence::UnexpandedPack
+                    : TypeDependence::None)),
       Decl(const_cast<TypedefNameDecl *>(D)) {
+
   assert(!isa<TypedefType>(can) && "Invalid canonical type");
   TypedefBits.hasTypeDifferentFromDecl = !Underlying.isNull();
   if (!typeMatchesDecl())

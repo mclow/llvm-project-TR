@@ -89,6 +89,18 @@ namespace {
       return true;
     }
 
+    bool VisitTypedefType(TypedefType *T) {
+      // if(T->containsUnexpandedParameterPack())
+      return inherited::TraverseDecl(T->getDecl());
+      return true;
+    }
+
+    bool VisitTypedefTypeLoc(TypedefTypeLoc T) {
+      // if(T.getTypePtr()->containsUnexpandedParameterPack())
+      return TraverseDecl(T.getTypePtr()->getDecl());
+      return true;
+    }
+
     /// Record occurrences of function and non-type template
     /// parameter packs in an expression.
     bool VisitDeclRefExpr(DeclRefExpr *E) {

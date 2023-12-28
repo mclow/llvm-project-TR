@@ -341,6 +341,7 @@ namespace clang {
     RedeclarableResult VisitTypedefNameDecl(TypedefNameDecl *TD);
     void VisitTypedefDecl(TypedefDecl *TD);
     void VisitTypeAliasDecl(TypeAliasDecl *TD);
+    void VisitTypeAliasPackDecl(TypeAliasPackDecl *TD);
     void VisitUnresolvedUsingTypenameDecl(UnresolvedUsingTypenameDecl *D);
     void VisitUnresolvedUsingIfExistsDecl(UnresolvedUsingIfExistsDecl *D);
     RedeclarableResult VisitTagDecl(TagDecl *TD);
@@ -750,6 +751,10 @@ void ASTDeclReader::VisitTypeAliasDecl(TypeAliasDecl *TD) {
     TD->setDescribedAliasTemplate(Template);
   else
     mergeRedeclarable(TD, Redecl);
+}
+
+void ASTDeclReader::VisitTypeAliasPackDecl(TypeAliasPackDecl *TD) {
+  assert(false && "TODO");
 }
 
 ASTDeclReader::RedeclarableResult ASTDeclReader::VisitTagDecl(TagDecl *TD) {

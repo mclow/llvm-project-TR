@@ -1056,6 +1056,7 @@ DEF_TRAVERSE_TYPE(FunctionProtoType, {
 DEF_TRAVERSE_TYPE(UsingType, {})
 DEF_TRAVERSE_TYPE(UnresolvedUsingType, {})
 DEF_TRAVERSE_TYPE(TypedefType, {})
+DEF_TRAVERSE_TYPE(SubstTypedefPackType, {})
 
 DEF_TRAVERSE_TYPE(TypeOfExprType,
                   { TRY_TO(TraverseStmt(T->getUnderlyingExpr())); })
@@ -1335,6 +1336,7 @@ DEF_TRAVERSE_TYPELOC(FunctionProtoType, {
 DEF_TRAVERSE_TYPELOC(UsingType, {})
 DEF_TRAVERSE_TYPELOC(UnresolvedUsingType, {})
 DEF_TRAVERSE_TYPELOC(TypedefType, {})
+DEF_TRAVERSE_TYPELOC(SubstTypedefPackType, {})
 
 DEF_TRAVERSE_TYPELOC(TypeOfExprType,
                      { TRY_TO(TraverseStmt(TL.getUnderlyingExpr())); })
@@ -1942,6 +1944,8 @@ DEF_TRAVERSE_DECL(TypeAliasTemplateDecl, {
   TRY_TO(TraverseDecl(D->getTemplatedDecl()));
   TRY_TO(TraverseTemplateParameterListHelper(D->getTemplateParameters()));
 })
+
+DEF_TRAVERSE_DECL(TypeAliasPackDecl, {})
 
 DEF_TRAVERSE_DECL(ConceptDecl, {
   TRY_TO(TraverseTemplateParameterListHelper(D->getTemplateParameters()));

@@ -79,6 +79,7 @@ def UsingType : TypeNode<Type>, NeverCanonical;
 def UnresolvedUsingType : TypeNode<Type>, AlwaysDependent;
 def ParenType : TypeNode<Type>, NeverCanonical;
 def TypedefType : TypeNode<Type>, NeverCanonical;
+def SubstTypedefPackType : TypeNode<Type>, NeverCanonical;
 def MacroQualifiedType : TypeNode<Type>, NeverCanonical;
 def AdjustedType : TypeNode<Type>, NeverCanonical;
 def DecayedType : TypeNode<AdjustedType>, NeverCanonical;

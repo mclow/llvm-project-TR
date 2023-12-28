@@ -1014,7 +1014,8 @@ Decl *TemplateDeclInstantiator::InstantiateTypedefNameDecl(TypedefNameDecl *D,
   TypedefNameDecl *Typedef;
   if (IsTypeAlias)
     Typedef = TypeAliasDecl::Create(SemaRef.Context, Owner, D->getBeginLoc(),
-                                    D->getLocation(), D->getIdentifier(), DI);
+                                    D->getLocation(), D->getIdentifier(), DI,
+                                    cast<TypeAliasDecl>(D)->getEllipsisLoc());
   else
     Typedef = TypedefDecl::Create(SemaRef.Context, Owner, D->getBeginLoc(),
                                   D->getLocation(), D->getIdentifier(), DI);
@@ -1065,10 +1066,71 @@ Decl *TemplateDeclInstantiator::VisitTypedefDecl(TypedefDecl *D) {
 }
 
 Decl *TemplateDeclInstantiator::VisitTypeAliasDecl(TypeAliasDecl *D) {
-  Decl *Typedef = InstantiateTypedefNameDecl(D, /*IsTypeAlias=*/true);
+  Decl *Typedef = D->isPack()
+                      ? instantiateAliasPack(D)
+                      : InstantiateTypedefNameDecl(D, /*IsTypeAlias=*/true);
   if (Typedef)
     Owner->addDecl(Typedef);
   return Typedef;
+}
+
+Decl *TemplateDeclInstantiator::instantiateAliasPack(TypeAliasDecl *D) {
+  assert(D->isPack() && "Expected an alias pack");
+
+  SmallVector<UnexpandedParameterPack, 2> Unexpanded;
+  SemaRef.collectUnexpandedParameterPacks(D->getUnderlyingType(), Unexpanded);
+
+  // Determine whether the set of unexpanded parameter packs can and should
+  // be expanded.
+  bool Expand = true;
+  bool RetainExpansion = false;
+  std::optional<unsigned> NumExpansions;
+  if (SemaRef.CheckParameterPacksForExpansion(
+          D->getEllipsisLoc(), D->getSourceRange(), Unexpanded, TemplateArgs,
+          Expand, RetainExpansion, NumExpansions))
+    return nullptr;
+
+  // This declaration cannot appear within a function template signature,
+  // so we can't have a partial argument list for a parameter pack.
+  assert(!RetainExpansion &&
+         "should never need to retain an expansion for TypeAliasPackDecl");
+
+  if (!Expand) {
+    // We cannot fully expand the pack expansion now, so substitute into the
+    // pattern and create a new pack expansion.
+    Sema::ArgumentPackSubstitutionIndexRAII SubstIndex(SemaRef, -1);
+    return InstantiateTypedefNameDecl(D, true);
+  }
+  // Instantiate the slices of this pack and build a UsingPackDecl.
+  SmallVector<TypedefNameDecl *, 8> Expansions;
+  for (unsigned I = 0; I != *NumExpansions; ++I) {
+    Sema::ArgumentPackSubstitutionIndexRAII SubstIndex(SemaRef, I);
+    Decl *Elem = InstantiateTypedefNameDecl(D, true);
+    if (!Elem)
+      return nullptr;
+    Expansions.push_back(cast<TypeAliasDecl>(Elem));
+  }
+  auto *NewD = SemaRef.BuildAliasPackDeclaration(D, Expansions);
+  if (isDeclWithinFunction(D))
+    SemaRef.CurrentInstantiationScope->InstantiatedLocal(D, NewD);
+  return NewD;
+}
+
+Decl *TemplateDeclInstantiator::VisitTypeAliasPackDecl(TypeAliasPackDecl *D) {
+  SmallVector<TypedefNameDecl *, 8> Expansions;
+  for (TypeDecl *D : D->expansions()) {
+    if (TypedefNameDecl *NewD = cast<TypedefNameDecl>(
+            SemaRef.FindInstantiatedDecl(D->getLocation(), D, TemplateArgs)))
+      Expansions.push_back(NewD);
+    else
+      return nullptr;
+  }
+  auto *NewD = SemaRef.BuildAliasPackDeclaration(
+      D->getInstantiatedFromAliasDecl(), Expansions);
+  Owner->addDecl(D);
+  if (isDeclWithinFunction(D))
+    SemaRef.CurrentInstantiationScope->InstantiatedLocal(D, NewD);
+  return NewD;
 }
 
 Decl *

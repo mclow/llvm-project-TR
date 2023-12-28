@@ -68,6 +68,7 @@ namespace clang {
     void VisitTypedefNameDecl(TypedefNameDecl *D);
     void VisitTypedefDecl(TypedefDecl *D);
     void VisitTypeAliasDecl(TypeAliasDecl *D);
+    void VisitTypeAliasPackDecl(TypeAliasPackDecl *D);
     void VisitUnresolvedUsingTypenameDecl(UnresolvedUsingTypenameDecl *D);
     void VisitUnresolvedUsingIfExistsDecl(UnresolvedUsingIfExistsDecl *D);
     void VisitTagDecl(TagDecl *D);
@@ -442,6 +443,10 @@ void ASTDeclWriter::VisitTypeAliasDecl(TypeAliasDecl *D) {
   VisitTypedefNameDecl(D);
   Record.AddDeclRef(D->getDescribedAliasTemplate());
   Code = serialization::DECL_TYPEALIAS;
+}
+
+void ASTDeclWriter::VisitTypeAliasPackDecl(TypeAliasPackDecl *D) {
+  assert(false && "todo");
 }
 
 void ASTDeclWriter::VisitTagDecl(TagDecl *D) {

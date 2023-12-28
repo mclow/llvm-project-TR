@@ -1228,6 +1228,41 @@ SourceLocation Parser::ParsePackIndexingType(DeclSpec &DS) {
     DS.SetTypeSpecType(DeclSpec::TST_typename_pack_indexing, StartLoc, PrevSpec,
                        DiagID, Type, Policy);
     return EndLoc;
+  } else {
+    if (!NextToken().is(tok::ellipsis) ||
+        !GetLookAheadToken(2).is(tok::l_square)) {
+      DS.SetTypeSpecError();
+      return Tok.getEndLoc();
+    }
+
+    ParsedType Ty =
+        Actions.getTypeName(*Tok.getIdentifierInfo(), Tok.getLocation(),
+                            getCurScope(), &DS.getTypeSpecScope());
+    if (!Ty) {
+      DS.SetTypeSpecError();
+      return Tok.getEndLoc();
+    }
+    Type = Ty;
+
+    StartLoc = ConsumeToken();
+    EllipsisLoc = ConsumeToken();
+    BalancedDelimiterTracker T(*this, tok::l_square);
+    T.consumeOpen();
+    ExprResult IndexExpr = ParseConstantExpression();
+    if (T.consumeClose()) {
+      DS.SetTypeSpecError();
+      return IndexExpr.isInvalid() ? StartLoc : IndexExpr.get()->getEndLoc();
+    }
+    if (IndexExpr.isInvalid()) {
+      DS.SetTypeSpecError();
+      return T.getCloseLocation();
+    }
+    DS.SetRangeStart(StartLoc);
+    DS.SetRangeEnd(T.getCloseLocation());
+    DS.SetTypeSpecType(DeclSpec::TST_typename, StartLoc, PrevSpec, DiagID, Type,
+                       Policy);
+    DS.SetPackIndexingExpr(EllipsisLoc, IndexExpr.get());
+    return T.getCloseLocation();
   }
   if (!NextToken().is(tok::ellipsis) ||
       !GetLookAheadToken(2).is(tok::l_square)) {

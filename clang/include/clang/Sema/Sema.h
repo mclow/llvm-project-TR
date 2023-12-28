@@ -6423,6 +6423,9 @@ public:
                               const ParsedAttributesView &AttrList,
                               TypeResult Type, Decl *DeclFromDeclSpec);
 
+  Decl *BuildAliasPackDeclaration(TypedefNameDecl *InstantiatedFrom,
+                                  ArrayRef<TypedefNameDecl *> Expansions);
+
   /// BuildCXXConstructExpr - Creates a complete call to a constructor,
   /// including handling of its default argument expressions.
   ///

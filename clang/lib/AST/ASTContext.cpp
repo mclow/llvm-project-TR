@@ -4630,6 +4630,9 @@ QualType ASTContext::getTypeDeclTypeSlow(const TypeDecl *Decl) const {
   if (const auto *Typedef = dyn_cast<TypedefNameDecl>(Decl))
     return getTypedefType(Typedef);
 
+  if (const auto *Typedef = dyn_cast<TypeAliasPackDecl>(Decl))
+    return getTypeDeclTypeSlow(Typedef->getInstantiatedFromAliasDecl());
+
   assert(!isa<TemplateTypeParmDecl>(Decl) &&
          "Template type parameter types are always available.");
 
@@ -4682,6 +4685,19 @@ QualType ASTContext::getTypedefType(const TypedefNameDecl *Decl,
   TypedefTypes.InsertNode(NewType, InsertPos);
   Types.push_back(NewType);
   return QualType(NewType, 0);
+}
+
+QualType ASTContext::getAliasPackType(const TypeAliasPackDecl *Decl) const {
+  llvm::FoldingSetNodeID ID;
+  if (!Decl->TypeForDecl) {
+    QualType T = Decl->getPattern();
+    auto *NewType = new (*this, alignof(TypedefType))
+        TypedefType(Type::Typedef, Decl, QualType(), getCanonicalType(T));
+    Decl->TypeForDecl = NewType;
+    Types.push_back(NewType);
+    return QualType(NewType, 0);
+  }
+  return QualType(Decl->TypeForDecl, 0);
 }
 
 QualType ASTContext::getUsingType(const UsingShadowDecl *Found,

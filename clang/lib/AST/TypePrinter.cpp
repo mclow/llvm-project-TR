@@ -1146,6 +1146,14 @@ void TypePrinter::printTypedefBefore(const TypedefType *T, raw_ostream &OS) {
   printTypeSpec(T->getDecl(), OS);
 }
 
+void TypePrinter::printTypedefAfter(const TypedefType *T, raw_ostream &OS) {}
+
+void TypePrinter::printSubstTypedefPackBefore(const SubstTypedefPackType *T,
+                                              raw_ostream &OS) {}
+
+void TypePrinter::printSubstTypedefPackAfter(const SubstTypedefPackType *T,
+                                             raw_ostream &OS) {}
+
 void TypePrinter::printMacroQualifiedBefore(const MacroQualifiedType *T,
                                             raw_ostream &OS) {
   StringRef MacroName = T->getMacroIdentifier()->getName();
@@ -1160,8 +1168,6 @@ void TypePrinter::printMacroQualifiedAfter(const MacroQualifiedType *T,
                                            raw_ostream &OS) {
   printAfter(T->getModifiedType(), OS);
 }
-
-void TypePrinter::printTypedefAfter(const TypedefType *T, raw_ostream &OS) {}
 
 void TypePrinter::printTypeOfExprBefore(const TypeOfExprType *T,
                                         raw_ostream &OS) {

@@ -691,6 +691,16 @@ public:
   }
 };
 
+/// Wrapper for source info for typedefs.
+class SubstTypedefPackTypeLoc
+    : public InheritingConcreteTypeLoc<TypeSpecTypeLoc, SubstTypedefPackTypeLoc,
+                                       SubstTypedefPackType> {
+public:
+  // TypedefNameDecl *getTypedefNameDecl() const {
+  //   return getTypePtr()->getDecl();
+  // }
+};
+
 /// Wrapper for source info for injected class names of class
 /// templates.
 class InjectedClassNameTypeLoc :

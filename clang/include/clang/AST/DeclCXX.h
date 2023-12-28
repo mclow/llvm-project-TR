@@ -3496,6 +3496,100 @@ public:
   static bool classofKind(Kind K) { return K == Using || K == UsingEnum; }
 };
 
+/// Represents the declaration of a typedef-name via a C++11
+/// alias-declaration.
+class TypeAliasDecl : public TypedefNameDecl {
+  /// The template for which this is the pattern, if any.
+  TypeAliasTemplateDecl *Template;
+  SourceLocation EllipsisLoc;
+
+  TypeAliasDecl(ASTContext &C, DeclContext *DC, SourceLocation StartLoc,
+                SourceLocation IdLoc, IdentifierInfo *Id, TypeSourceInfo *TInfo,
+                SourceLocation EllipsisLoc)
+      : TypedefNameDecl(TypeAlias, C, DC, StartLoc, IdLoc, Id, TInfo),
+        Template(nullptr), EllipsisLoc(EllipsisLoc) {}
+
+public:
+  static TypeAliasDecl *Create(ASTContext &C, DeclContext *DC,
+                               SourceLocation StartLoc, SourceLocation IdLoc,
+                               IdentifierInfo *Id, TypeSourceInfo *TInfo,
+                               SourceLocation EllipsisLoc);
+  static TypeAliasDecl *CreateDeserialized(ASTContext &C, unsigned ID);
+
+  SourceRange getSourceRange() const override LLVM_READONLY;
+
+  TypeAliasTemplateDecl *getDescribedAliasTemplate() const { return Template; }
+  void setDescribedAliasTemplate(TypeAliasTemplateDecl *TAT) { Template = TAT; }
+
+  SourceLocation getEllipsisLoc() const { return EllipsisLoc; }
+
+  bool isPack() const { return EllipsisLoc.isValid(); }
+
+  static bool classof(const Decl *D) { return classofKind(D->getKind()); }
+  static bool classofKind(Kind K) { return K == TypeAlias; }
+};
+
+class TypeAliasPackDecl final
+    : public TypedefNameDecl,
+      private llvm::TrailingObjects<TypeAliasPackDecl, TypedefNameDecl *> {
+
+  TypedefNameDecl *InstantiatedFrom;
+  unsigned NumExpansions;
+
+  TypeAliasPackDecl(ASTContext &C, DeclContext *DC,
+                    TypedefNameDecl *InstantiatedFrom,
+                    ArrayRef<TypedefNameDecl *> UsingDecls)
+      : TypedefNameDecl(TypeAliasPack, C, DC, InstantiatedFrom->getLocation(),
+                        SourceLocation(), InstantiatedFrom->getIdentifier(),
+                        InstantiatedFrom->getTypeSourceInfo()),
+        InstantiatedFrom(InstantiatedFrom), NumExpansions(UsingDecls.size()) {
+    std::uninitialized_copy(UsingDecls.begin(), UsingDecls.end(),
+                            getTrailingObjects<TypedefNameDecl *>());
+  }
+
+  void anchor() override;
+
+public:
+  friend class ASTDeclReader;
+  friend class ASTDeclWriter;
+  friend TrailingObjects;
+
+  TypedefNameDecl *getInstantiatedFromAliasDecl() const {
+    return InstantiatedFrom;
+  }
+
+  QualType getPattern() const {
+    if (auto *Inner =
+            dyn_cast<TypeAliasPackDecl>(getInstantiatedFromAliasDecl()))
+      return Inner->getPattern();
+    return cast<TypeAliasDecl>(getInstantiatedFromAliasDecl())
+        ->getUnderlyingType();
+  }
+
+  ArrayRef<TypedefNameDecl *> expansions() const {
+    return llvm::ArrayRef(getTrailingObjects<TypedefNameDecl *>(),
+                          NumExpansions);
+  }
+
+  static TypeAliasPackDecl *Create(ASTContext &C, DeclContext *DC,
+                                   TypedefNameDecl *InstantiatedFrom,
+                                   ArrayRef<TypedefNameDecl *> AliasDecls);
+
+  static TypeAliasPackDecl *CreateDeserialized(ASTContext &C, unsigned ID,
+                                               unsigned NumExpansions);
+
+  SourceRange getSourceRange() const override LLVM_READONLY {
+    return InstantiatedFrom->getSourceRange();
+  }
+
+  // TypeAliasPackDecl *getCanonicalDecl() override { return getFirstDecl(); }
+  // const TypeAliasPackDecl *getCanonicalDecl() const { return getFirstDecl();
+  // }
+
+  static bool classof(const Decl *D) { return classofKind(D->getKind()); }
+  static bool classofKind(Kind K) { return K == TypeAliasPack; }
+};
+
 /// Represents a C++ using-declaration.
 ///
 /// For example:

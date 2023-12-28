@@ -436,6 +436,10 @@ void TypeLocWriter::VisitTypedefTypeLoc(TypedefTypeLoc TL) {
   addSourceLocation(TL.getNameLoc());
 }
 
+void TypeLocWriter::VisitSubstTypedefPackTypeLoc(SubstTypedefPackTypeLoc TL) {
+  addSourceLocation(TL.getNameLoc());
+}
+
 void TypeLocWriter::VisitObjCTypeParamTypeLoc(ObjCTypeParamTypeLoc TL) {
   if (TL.getNumProtocols()) {
     addSourceLocation(TL.getProtocolLAngleLoc());

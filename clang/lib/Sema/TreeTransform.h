@@ -6378,9 +6378,17 @@ template<typename Derived>
 QualType TreeTransform<Derived>::TransformTypedefType(TypeLocBuilder &TLB,
                                                       TypedefTypeLoc TL) {
   const TypedefType *T = TL.getTypePtr();
-  TypedefNameDecl *Typedef
-    = cast_or_null<TypedefNameDecl>(getDerived().TransformDecl(TL.getNameLoc(),
-                                                               T->getDecl()));
+  TypedefNameDecl *Typedef = nullptr;
+
+  if (auto *D = dyn_cast<TypeAliasPackDecl>(T->getDecl());
+      D && SemaRef.ArgumentPackSubstitutionIndex != -1) {
+    Typedef = cast_or_null<TypedefNameDecl>(getDerived().TransformDecl(
+        TL.getNameLoc(),
+        D->expansions()[SemaRef.ArgumentPackSubstitutionIndex]));
+  } else {
+    Typedef = cast_or_null<TypedefNameDecl>(
+        getDerived().TransformDecl(TL.getNameLoc(), T->getDecl()));
+  }
   if (!Typedef)
     return QualType();
 
@@ -6395,6 +6403,12 @@ QualType TreeTransform<Derived>::TransformTypedefType(TypeLocBuilder &TLB,
   NewTL.setNameLoc(TL.getNameLoc());
 
   return Result;
+}
+
+template <typename Derived>
+QualType TreeTransform<Derived>::TransformSubstTypedefPackType(
+    TypeLocBuilder &TLB, SubstTypedefPackTypeLoc TL) {
+  assert(false && "todo");
 }
 
 template<typename Derived>

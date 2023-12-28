@@ -473,6 +473,7 @@ namespace clang {
     ExpectedDecl VisitTypedefNameDecl(TypedefNameDecl *D, bool IsAlias);
     ExpectedDecl VisitTypedefDecl(TypedefDecl *D);
     ExpectedDecl VisitTypeAliasDecl(TypeAliasDecl *D);
+    ExpectedDecl VisitTypeAliasPackDecl(TypeAliasPackDecl *D);
     ExpectedDecl VisitTypeAliasTemplateDecl(TypeAliasTemplateDecl *D);
     ExpectedDecl VisitLabelDecl(LabelDecl *D);
     ExpectedDecl VisitEnumDecl(EnumDecl *D);
@@ -1384,6 +1385,11 @@ ExpectedType ASTNodeImporter::VisitTypedefType(const TypedefType *T) {
     return ToUnderlyingTypeOrErr.takeError();
 
   return Importer.getToContext().getTypedefType(ToDecl, *ToUnderlyingTypeOrErr);
+}
+
+ExpectedType
+ASTNodeImporter::VisitSubstTypedefPackType(const SubstTypedefPackType *T) {
+  assert(false && "Todo");
 }
 
 ExpectedType ASTNodeImporter::VisitTypeOfExprType(const TypeOfExprType *T) {
@@ -2720,6 +2726,9 @@ ASTNodeImporter::VisitTypedefNameDecl(TypedefNameDecl *D, bool IsAlias) {
   auto ToUnderlyingType = importChecked(Err, D->getUnderlyingType());
   auto ToTypeSourceInfo = importChecked(Err, D->getTypeSourceInfo());
   auto ToBeginLoc = importChecked(Err, D->getBeginLoc());
+  auto ToEllipsisLoc =
+      IsAlias ? importChecked(Err, cast<TypeAliasDecl>(D)->getEllipsisLoc())
+              : SourceLocation();
   if (Err)
     return std::move(Err);
 
@@ -2729,8 +2738,8 @@ ASTNodeImporter::VisitTypedefNameDecl(TypedefNameDecl *D, bool IsAlias) {
   TypedefNameDecl *ToTypedef;
   if (IsAlias) {
     if (GetImportedOrCreateDecl<TypeAliasDecl>(
-        ToTypedef, D, Importer.getToContext(), DC, ToBeginLoc, Loc,
-        Name.getAsIdentifierInfo(), ToTypeSourceInfo))
+            ToTypedef, D, Importer.getToContext(), DC, ToBeginLoc, Loc,
+            Name.getAsIdentifierInfo(), ToTypeSourceInfo, ToEllipsisLoc))
       return ToTypedef;
   } else if (GetImportedOrCreateDecl<TypedefDecl>(
       ToTypedef, D, Importer.getToContext(), DC, ToBeginLoc, Loc,
@@ -2761,6 +2770,10 @@ ExpectedDecl ASTNodeImporter::VisitTypedefDecl(TypedefDecl *D) {
 
 ExpectedDecl ASTNodeImporter::VisitTypeAliasDecl(TypeAliasDecl *D) {
   return VisitTypedefNameDecl(D, /*IsAlias=*/true);
+}
+
+ExpectedDecl ASTNodeImporter::VisitTypeAliasPackDecl(TypeAliasPackDecl *D) {
+  assert(false && "Todo");
 }
 
 ExpectedDecl

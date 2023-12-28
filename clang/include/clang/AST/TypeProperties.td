@@ -386,11 +386,17 @@ let Class = TypedefType in {
   def : Property<"underlyingType", QualType> {
     let Read = [{ node->desugar() }];
   }
-
   def : Creator<[{
     return ctx.getTypedefType(cast<TypedefNameDecl>(declaration), underlyingType);
   }]>;
 }
+
+let Class = SubstTypedefPackType in {
+  def : Creator<[{
+    return {};
+  }]>;
+}
+
 
 let Class = TypeOfExprType in {
   def : Property<"expression", ExprRef> {

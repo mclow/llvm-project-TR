@@ -1235,8 +1235,9 @@ SourceLocation Parser::ParseIndexedTypeNamePack(DeclSpec &DS) {
       return Tok.getEndLoc();
     }
 
-    ParsedType Ty = Actions.getTypeName(*Tok.getIdentifierInfo(),
-                                        Tok.getLocation(), getCurScope());
+    ParsedType Ty =
+        Actions.getTypeName(*Tok.getIdentifierInfo(), Tok.getLocation(),
+                            getCurScope(), &DS.getTypeSpecScope());
     if (!Ty) {
       DS.SetTypeSpecError();
       return Tok.getEndLoc();
@@ -1262,7 +1263,6 @@ SourceLocation Parser::ParseIndexedTypeNamePack(DeclSpec &DS) {
                        Policy);
     DS.SetPackIndexingExpr(EllipsisLoc, IndexExpr.get());
     return T.getCloseLocation();
-    ;
   }
   return SourceLocation();
 }

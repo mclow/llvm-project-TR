@@ -2069,9 +2069,11 @@ bool Parser::TryAnnotateTypeOrScopeToken(
                      TemplateId->Template, TemplateId->Name,
                      TemplateId->TemplateNameLoc, TemplateId->LAngleLoc,
                      TemplateArgsPtr, TemplateId->RAngleLoc);
+    } else if (Tok.is(tok::annot_indexed_pack_type)) {
+      // TODO wrap that in some other type ?
+      return false;
     } else {
-      Diag(Tok, diag::err_expected_type_name_after_typename)
-        << SS.getRange();
+      Diag(Tok, diag::err_expected_type_name_after_typename) << SS.getRange();
       return true;
     }
 

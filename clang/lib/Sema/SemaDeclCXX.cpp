@@ -13541,9 +13541,9 @@ Decl *Sema::ActOnAliasDeclaration(Scope *S, AccessSpecifier AS,
 
   assert(Name.getKind() == UnqualifiedIdKind::IK_Identifier &&
          "name in alias declaration must be an identifier");
-  TypeAliasDecl *NewTD = TypeAliasDecl::Create(Context, CurContext, UsingLoc,
-                                               Name.StartLocation,
-                                               Name.Identifier, TInfo);
+  TypeAliasDecl *NewTD =
+      TypeAliasDecl::Create(Context, CurContext, UsingLoc, Name.StartLocation,
+                            Name.Identifier, TInfo, EllipsisLoc);
 
   NewTD->setAccess(AS);
 
@@ -13651,6 +13651,17 @@ Decl *Sema::ActOnAliasDeclaration(Scope *S, AccessSpecifier AS,
   PushOnScopeChains(NewND, S);
   ActOnDocumentableDecl(NewND);
   return NewND;
+}
+
+Decl *Sema::BuildAliasPackDeclaration(TypedefNameDecl *InstantiatedFrom,
+                                      ArrayRef<TypedefNameDecl *> Expansions) {
+  assert((isa<TypeAliasDecl, TypeAliasPackDecl>(InstantiatedFrom)) &&
+         "an alias pack declaration must be built fron a type alias");
+
+  auto *T = TypeAliasPackDecl::Create(Context, CurContext, InstantiatedFrom,
+                                      Expansions);
+  T->setAccess(InstantiatedFrom->getAccess());
+  return T;
 }
 
 Decl *Sema::ActOnNamespaceAliasDef(Scope *S, SourceLocation NamespaceLoc,

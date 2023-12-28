@@ -1594,6 +1594,8 @@ public:
   QualType getTypedefType(const TypedefNameDecl *Decl,
                           QualType Underlying = QualType()) const;
 
+  QualType getAliasPackType(const TypeAliasPackDecl *Decl) const;
+
   QualType getRecordType(const RecordDecl *Decl) const;
 
   QualType getEnumType(const EnumDecl *Decl) const;

@@ -233,8 +233,8 @@ bool Parser::ParseOptionalCXXScopeSpecifier(
     HasScopeSpecifier = true;
   }
 
-  else if (getLangOpts().CPlusPlus26 && !HasScopeSpecifier &&
-           Tok.is(tok::identifier) && GetLookAheadToken(1).is(tok::ellipsis) &&
+  else if (getLangOpts().CPlusPlus26 && Tok.is(tok::identifier) &&
+           GetLookAheadToken(1).is(tok::ellipsis) &&
            GetLookAheadToken(2).is(tok::l_square)) {
     SourceLocation Start = Tok.getLocation();
     DeclSpec DS(AttrFactory);
@@ -418,6 +418,31 @@ bool Parser::ParseOptionalCXXScopeSpecifier(
     Token Next = NextToken();
     Sema::NestedNameSpecInfo IdInfo(&II, Tok.getLocation(), Next.getLocation(),
                                     ObjectType);
+
+    if (Next.is(tok::ellipsis) && GetLookAheadToken(2).is(tok::l_square)) {
+      SourceLocation Start = Tok.getLocation();
+      DeclSpec DS(AttrFactory);
+      SourceLocation CCLoc;
+      DS.getTypeSpecScope() = SS;
+      SourceLocation EndLoc = ParseIndexedTypeNamePack(DS);
+      if (DS.getTypeSpecType() == DeclSpec::TST_error)
+        return false;
+      QualType Type = Actions.ActOnPackIndexingType(
+          DS.getRepAsType().get(), DS.getPackIndexingExpr(), DS.getBeginLoc(),
+          DS.getEllipsisLoc());
+      if (Type.isNull())
+        return true;
+
+      if (TryConsumeToken(tok::coloncolon, CCLoc)) {
+        if (Actions.ActOnCXXNestedNameSpecifierIndexedPack(SS, DS, CCLoc,
+                                                           std::move(Type)))
+          return false;
+        HasScopeSpecifier = true;
+      } else {
+        AnnotateExistingIndexedTypeNamePack(ParsedType::make(Type), Start,
+                                            EndLoc);
+      }
+    }
 
     // If we get foo:bar, this is almost certainly a typo for foo::bar.  Recover
     // and emit a fixit hint for it.

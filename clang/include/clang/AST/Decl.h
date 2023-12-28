@@ -3501,33 +3501,6 @@ public:
   static bool classofKind(Kind K) { return K == Typedef; }
 };
 
-/// Represents the declaration of a typedef-name via a C++11
-/// alias-declaration.
-class TypeAliasDecl : public TypedefNameDecl {
-  /// The template for which this is the pattern, if any.
-  TypeAliasTemplateDecl *Template;
-
-  TypeAliasDecl(ASTContext &C, DeclContext *DC, SourceLocation StartLoc,
-                SourceLocation IdLoc, IdentifierInfo *Id, TypeSourceInfo *TInfo)
-      : TypedefNameDecl(TypeAlias, C, DC, StartLoc, IdLoc, Id, TInfo),
-        Template(nullptr) {}
-
-public:
-  static TypeAliasDecl *Create(ASTContext &C, DeclContext *DC,
-                               SourceLocation StartLoc, SourceLocation IdLoc,
-                               IdentifierInfo *Id, TypeSourceInfo *TInfo);
-  static TypeAliasDecl *CreateDeserialized(ASTContext &C, unsigned ID);
-
-  SourceRange getSourceRange() const override LLVM_READONLY;
-
-  TypeAliasTemplateDecl *getDescribedAliasTemplate() const { return Template; }
-  void setDescribedAliasTemplate(TypeAliasTemplateDecl *TAT) { Template = TAT; }
-
-  // Implement isa/cast/dyncast/etc.
-  static bool classof(const Decl *D) { return classofKind(D->getKind()); }
-  static bool classofKind(Kind K) { return K == TypeAlias; }
-};
-
 /// Represents the declaration of a struct/union/class/enum.
 class TagDecl : public TypeDecl,
                 public DeclContext,

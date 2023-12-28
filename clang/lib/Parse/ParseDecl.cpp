@@ -3577,6 +3577,19 @@ void Parser::ParseDeclarationSpecifiers(
         ConsumeAnnotationToken(); // The typename
       }
 
+      else if (Next.is(tok::annot_indexed_pack_type)) {
+        DS.getTypeSpecScope() = SS;
+        ConsumeAnnotationToken(); // The C++ scope.
+        TypeResult T = getTypeAnnotation(Tok);
+        isInvalid = DS.SetTypeSpecType(DeclSpec::TST_indexed_typename_pack,
+                                       Tok.getAnnotationEndLoc(), PrevSpec,
+                                       DiagID, T, Policy);
+        if (isInvalid)
+          break;
+        DS.SetRangeEnd(Tok.getAnnotationEndLoc());
+        ConsumeAnnotationToken(); // The pack alias
+      }
+
       if (AllowImplicitTypename == ImplicitTypenameContext::Yes &&
           Next.is(tok::annot_template_id) &&
           static_cast<TemplateIdAnnotation *>(Next.getAnnotationValue())

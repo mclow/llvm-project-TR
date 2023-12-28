@@ -2233,10 +2233,11 @@ public:
       QualType Transformed =
           TransformType(InnerTLB, OrigDecl->getTypeSourceInfo()->getTypeLoc());
       TypeSourceInfo *TSI = InnerTLB.getTypeSourceInfo(Context, Transformed);
-      if (isa<TypeAliasDecl>(OrigDecl))
+      if (auto *AliasDecl = dyn_cast<TypeAliasDecl>(OrigDecl))
         Decl = TypeAliasDecl::Create(
-            Context, Context.getTranslationUnitDecl(), OrigDecl->getBeginLoc(),
-            OrigDecl->getLocation(), OrigDecl->getIdentifier(), TSI);
+            Context, Context.getTranslationUnitDecl(), AliasDecl->getBeginLoc(),
+            AliasDecl->getLocation(), AliasDecl->getIdentifier(), TSI,
+            AliasDecl->getEllipsisLoc());
       else {
         assert(isa<TypedefDecl>(OrigDecl) && "Not a Type alias or typedef");
         Decl = TypedefDecl::Create(

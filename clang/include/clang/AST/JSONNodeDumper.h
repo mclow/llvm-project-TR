@@ -244,6 +244,7 @@ public:
   void VisitNamedDecl(const NamedDecl *ND);
   void VisitTypedefDecl(const TypedefDecl *TD);
   void VisitTypeAliasDecl(const TypeAliasDecl *TAD);
+  void VisitTypeAliasPackDecl(const TypeAliasPackDecl *TAD);
   void VisitNamespaceDecl(const NamespaceDecl *ND);
   void VisitUsingDirectiveDecl(const UsingDirectiveDecl *UDD);
   void VisitNamespaceAliasDecl(const NamespaceAliasDecl *NAD);

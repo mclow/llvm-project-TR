@@ -17,6 +17,7 @@
 #include "clang/AST/ASTUnresolvedSet.h"
 #include "clang/AST/Attr.h"
 #include "clang/AST/CXXInheritance.h"
+#include "clang/AST/Decl.h"
 #include "clang/AST/DeclBase.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/DeclarationName.h"
@@ -3190,6 +3191,17 @@ UsingPackDecl *UsingPackDecl::CreateDeserialized(ASTContext &C, unsigned ID,
     new (Trail + I) NamedDecl*(nullptr);
   return Result;
 }
+
+TypeAliasPackDecl *
+TypeAliasPackDecl::Create(ASTContext &C, DeclContext *DC,
+                          TypedefNameDecl *InstantiatedFrom,
+                          ArrayRef<TypedefNameDecl *> AliasDecls) {
+  size_t Extra = additionalSizeToAlloc<TypedefNameDecl *>(AliasDecls.size());
+  return new (C, DC, Extra)
+      TypeAliasPackDecl(C, DC, InstantiatedFrom, AliasDecls);
+}
+
+void TypeAliasPackDecl::anchor() {}
 
 void UnresolvedUsingValueDecl::anchor() {}
 

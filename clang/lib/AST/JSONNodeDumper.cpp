@@ -843,6 +843,12 @@ void JSONNodeDumper::VisitTypeAliasDecl(const TypeAliasDecl *TAD) {
   JOS.attribute("type", createQualType(TAD->getUnderlyingType()));
 }
 
+void JSONNodeDumper::VisitTypeAliasPackDecl(const TypeAliasPackDecl *TAD) {
+  VisitNamedDecl(TAD);
+  JOS.attribute("type", createQualType(TAD->getUnderlyingType()));
+  assert(false && "todo");
+}
+
 void JSONNodeDumper::VisitNamespaceDecl(const NamespaceDecl *ND) {
   VisitNamedDecl(ND);
   attributeOnlyIfTrue("isInline", ND->isInline());

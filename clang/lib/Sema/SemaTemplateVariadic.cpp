@@ -48,6 +48,8 @@ namespace {
         auto *FTD = FD ? FD->getDescribedFunctionTemplate() : nullptr;
         if (FTD && FTD->getTemplateParameters()->getDepth() >= DepthLimit)
           return;
+      } else if (isa<TypeAliasPackDecl>(ND)) {
+        // do nothing
       } else if (getDepthAndIndex(ND).first >= DepthLimit)
         return;
 
@@ -90,15 +92,15 @@ namespace {
     }
 
     bool VisitTypedefType(TypedefType *T) {
-      // if(T->containsUnexpandedParameterPack())
-      return inherited::TraverseDecl(T->getDecl());
-      return true;
+      if (auto *D = dyn_cast<TypeAliasPackDecl>(T->getDecl()))
+        addUnexpanded(D);
+      return TraverseDecl(T->getDecl());
     }
 
     bool VisitTypedefTypeLoc(TypedefTypeLoc T) {
-      // if(T.getTypePtr()->containsUnexpandedParameterPack())
+      if (auto *D = dyn_cast<TypeAliasPackDecl>(T.getTypedefNameDecl()))
+        addUnexpanded(D, T.getNameLoc());
       return TraverseDecl(T.getTypePtr()->getDecl());
-      return true;
     }
 
     /// Record occurrences of function and non-type template
@@ -712,6 +714,8 @@ bool Sema::CheckParameterPacksForExpansion(
     unsigned Depth = 0, Index = 0;
     IdentifierInfo *Name;
     bool IsVarDeclPack = false;
+    bool IsNonDependentPack = false;
+    unsigned NewPackSize;
 
     if (const TemplateTypeParmType *TTP =
             ParmPack.first.dyn_cast<const TemplateTypeParmType *>()) {
@@ -720,7 +724,11 @@ bool Sema::CheckParameterPacksForExpansion(
       Name = TTP->getIdentifier();
     } else {
       NamedDecl *ND = ParmPack.first.get<NamedDecl *>();
-      if (isa<VarDecl>(ND))
+      if (const auto *Alias = dyn_cast<const TypeAliasPackDecl>(ND)) {
+        Name = Alias->getIdentifier();
+        NewPackSize = Alias->expansions().size();
+        IsNonDependentPack = true;
+      } else if (isa<VarDecl>(ND))
         IsVarDeclPack = true;
       else
         std::tie(Depth, Index) = getDepthAndIndex(ND);
@@ -729,7 +737,6 @@ bool Sema::CheckParameterPacksForExpansion(
     }
 
     // Determine the size of this argument pack.
-    unsigned NewPackSize;
     if (IsVarDeclPack) {
       // Figure out whether we're instantiating to an argument pack or not.
       typedef LocalInstantiationScope::DeclArgumentPack DeclArgumentPack;
@@ -746,7 +753,7 @@ bool Sema::CheckParameterPacksForExpansion(
         ShouldExpand = false;
         continue;
       }
-    } else {
+    } else if (!IsNonDependentPack) {
       // If we don't have a template argument at this depth/index, then we
       // cannot expand the pack expansion. Make a note of this, but we still
       // want to check any parameter packs we *do* have arguments for.
@@ -764,7 +771,7 @@ bool Sema::CheckParameterPacksForExpansion(
     //   Template argument deduction can extend the sequence of template
     //   arguments corresponding to a template parameter pack, even when the
     //   sequence contains explicitly specified template arguments.
-    if (!IsVarDeclPack && CurrentInstantiationScope) {
+    if (!IsVarDeclPack && !IsNonDependentPack && CurrentInstantiationScope) {
       if (NamedDecl *PartialPack =
               CurrentInstantiationScope->getPartiallySubstitutedPack()) {
         unsigned PartialDepth, PartialIndex;

@@ -5472,13 +5472,16 @@ TypedefDecl *TypedefDecl::CreateDeserialized(ASTContext &C, unsigned ID) {
 TypeAliasDecl *TypeAliasDecl::Create(ASTContext &C, DeclContext *DC,
                                      SourceLocation StartLoc,
                                      SourceLocation IdLoc, IdentifierInfo *Id,
-                                     TypeSourceInfo *TInfo) {
-  return new (C, DC) TypeAliasDecl(C, DC, StartLoc, IdLoc, Id, TInfo);
+                                     TypeSourceInfo *TInfo,
+                                     SourceLocation EllipsisLoc) {
+  return new (C, DC)
+      TypeAliasDecl(C, DC, StartLoc, IdLoc, Id, TInfo, EllipsisLoc);
 }
 
 TypeAliasDecl *TypeAliasDecl::CreateDeserialized(ASTContext &C, unsigned ID) {
-  return new (C, ID) TypeAliasDecl(C, nullptr, SourceLocation(),
-                                   SourceLocation(), nullptr, nullptr);
+  return new (C, ID)
+      TypeAliasDecl(C, nullptr, SourceLocation(), SourceLocation(), nullptr,
+                    nullptr, SourceLocation());
 }
 
 SourceRange TypedefDecl::getSourceRange() const {

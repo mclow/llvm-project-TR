@@ -47,13 +47,15 @@ class TypeLoc;
 /// (for dependent names), decltype specifier, or the global specifier ('::').
 /// The last two specifiers can only appear at the start of a
 /// nested-namespace-specifier.
-class NestedNameSpecifier : public llvm::FoldingSetNode {
+class alignas(8) NestedNameSpecifier : public llvm::FoldingSetNode {
   /// Enumeration describing
   enum StoredSpecifierKind {
     StoredIdentifier = 0,
     StoredDecl = 1,
     StoredTypeSpec = 2,
-    StoredTypeSpecWithTemplate = 3
+    StoredTypeSpecWithTemplate = 3,
+    StoredPackName = 4,
+    //StoredIndexedPackName
   };
 
   /// The nested name specifier that precedes this nested name
@@ -62,7 +64,7 @@ class NestedNameSpecifier : public llvm::FoldingSetNode {
   /// The pointer is the nested-name-specifier that precedes this
   /// one. The integer stores one of the first four values of type
   /// SpecifierKind.
-  llvm::PointerIntPair<NestedNameSpecifier *, 2, StoredSpecifierKind> Prefix;
+  llvm::PointerIntPair<NestedNameSpecifier *, 3, StoredSpecifierKind> Prefix;
 
   /// The last component in the nested name specifier, which
   /// can be an identifier, a declaration, or a type.
@@ -79,6 +81,12 @@ public:
   enum SpecifierKind {
     /// An identifier, stored as an IdentifierInfo*.
     Identifier,
+
+    /// the  name of a pack
+    PackName,
+
+    /// An indexed pack name
+    //IndexedPackName,
 
     /// A namespace, stored as a NamespaceDecl*.
     Namespace,
@@ -124,7 +132,7 @@ public:
   /// cannot be resolved.
   static NestedNameSpecifier *Create(const ASTContext &Context,
                                      NestedNameSpecifier *Prefix,
-                                     IdentifierInfo *II);
+                                     IdentifierInfo *II, bool IsPackName);
 
   /// Builds a nested name specifier that names a namespace.
   static NestedNameSpecifier *Create(const ASTContext &Context,
@@ -174,7 +182,7 @@ public:
   /// Retrieve the identifier stored in this nested name
   /// specifier.
   IdentifierInfo *getAsIdentifier() const {
-    if (Prefix.getInt() == StoredIdentifier)
+    if (Prefix.getInt() == StoredIdentifier || Prefix.getInt() == StoredPackName)
       return (IdentifierInfo *)Specifier;
 
     return nullptr;
@@ -300,6 +308,8 @@ public:
     return getSourceRange().getBegin();
   }
 
+  SourceLocation getIdentifierLoc() const;
+
   /// Retrieve the location of the end of this
   /// nested-name-specifier.
   SourceLocation getEndLoc() const {
@@ -416,6 +426,22 @@ public:
   /// \param ColonColonLoc The location of the trailing '::'.
   void Extend(ASTContext &Context, IdentifierInfo *Identifier,
               SourceLocation IdentifierLoc, SourceLocation ColonColonLoc);
+
+  /// Extend the current nested-name-specifier by another
+  /// nested-name-specifier component of the form '...identifier::'.
+  ///
+  /// \param Context The AST context in which this nested-name-specifier
+  /// resides.
+  ///
+  /// \param The pack name
+  ///
+  /// \param ColonColonLoc The location of the trailing '::'.
+  void Extend(ASTContext &Context,
+              SourceLocation EllipsisLoc,
+              IdentifierInfo *Identifier,
+              SourceLocation IdentifierLoc,
+              SourceLocation ColonColonLoc);
+
 
   /// Extend the current nested-name-specifier by another
   /// nested-name-specifier component of the form 'namespace::'.

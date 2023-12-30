@@ -797,6 +797,11 @@ void clang::TextNodeDumper::dumpNestedNameSpecifier(const NestedNameSpecifier *N
       OS << " Identifier";
       OS << " '" << NNS->getAsIdentifier()->getName() << "'";
       break;
+
+    case NestedNameSpecifier::PackName:
+      OS << " PackName";
+      OS << " '" << NNS->getAsIdentifier()->getName() << "'";
+      break;
     case NestedNameSpecifier::Namespace:
       OS << " "; // "Namespace" is printed as the decl kind.
       dumpBareDeclRef(NNS->getAsNamespace());

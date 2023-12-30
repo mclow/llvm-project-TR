@@ -545,6 +545,7 @@ static bool IsStructurallyEquivalent(StructuralEquivalenceContext &Context,
       return false;
 
   switch (NNS1->getKind()) {
+  case NestedNameSpecifier::PackName:
   case NestedNameSpecifier::Identifier:
     return IsStructurallyEquivalent(NNS1->getAsIdentifier(),
                                     NNS2->getAsIdentifier());

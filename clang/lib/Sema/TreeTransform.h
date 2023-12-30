@@ -4336,7 +4336,19 @@ NestedNameSpecifierLoc TreeTransform<Derived>::TransformNestedNameSpecifierLoc(
     switch (QNNS->getKind()) {
     case NestedNameSpecifier::Identifier: {
       Sema::NestedNameSpecInfo IdInfo(QNNS->getAsIdentifier(),
+                                      /*DependentPackEllipsisLoc=*/{},
                                       Q.getLocalBeginLoc(), Q.getLocalEndLoc(),
+                                      ObjectType);
+      if (SemaRef.BuildCXXNestedNameSpecifier(/*Scope=*/nullptr, IdInfo, false,
+                                              SS, FirstQualifierInScope, false))
+        return NestedNameSpecifierLoc();
+      break;
+    }
+
+    case NestedNameSpecifier::PackName: {
+      Sema::NestedNameSpecInfo IdInfo(QNNS->getAsIdentifier(),
+                                      Q.getLocalBeginLoc(),
+                                      Q.getIdentifierLoc(), Q.getLocalEndLoc(),
                                       ObjectType);
       if (SemaRef.BuildCXXNestedNameSpecifier(/*Scope=*/nullptr, IdInfo, false,
                                               SS, FirstQualifierInScope, false))

@@ -256,7 +256,8 @@ public:
       switch (kind) {
       case NestedNameSpecifier::Identifier:
         cur = NestedNameSpecifier::Create(ctx, cur,
-                                          asImpl().readIdentifier());
+                                          asImpl().readIdentifier(),
+                                          /*IsPackName=*/kind == NestedNameSpecifier::PackName);
         continue;
 
       case NestedNameSpecifier::Namespace:

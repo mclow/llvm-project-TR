@@ -80,6 +80,7 @@ ParsedType Sema::getInheritingConstructorName(CXXScopeSpec &SS,
   case NestedNameSpecifier::Super:
   case NestedNameSpecifier::Namespace:
   case NestedNameSpecifier::NamespaceAlias:
+  case NestedNameSpecifier::PackName:
     llvm_unreachable("Nested name specifier is not a type for inheriting ctor");
   }
 
@@ -521,6 +522,7 @@ bool Sema::checkLiteralOperatorId(const CXXScopeSpec &SS,
 
   switch (SS.getScopeRep()->getKind()) {
   case NestedNameSpecifier::Identifier:
+  case NestedNameSpecifier::PackName:
   case NestedNameSpecifier::TypeSpec:
   case NestedNameSpecifier::TypeSpecWithTemplate:
     // Per C++11 [over.literal]p2, literal operators can only be declared at

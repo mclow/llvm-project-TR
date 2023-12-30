@@ -6493,6 +6493,7 @@ static bool isSameQualifier(const NestedNameSpecifier *X,
   // FIXME: For namespaces and types, we're permitted to check that the entity
   // is named via the same tokens. We should probably do so.
   switch (X->getKind()) {
+  case NestedNameSpecifier::PackName:
   case NestedNameSpecifier::Identifier:
     if (X->getAsIdentifier() != Y->getAsIdentifier())
       return false;
@@ -6849,10 +6850,11 @@ ASTContext::getCanonicalNestedNameSpecifier(NestedNameSpecifier *NNS) const {
 
   switch (NNS->getKind()) {
   case NestedNameSpecifier::Identifier:
+  case NestedNameSpecifier::PackName:
     // Canonicalize the prefix but keep the identifier the same.
     return NestedNameSpecifier::Create(*this,
                          getCanonicalNestedNameSpecifier(NNS->getPrefix()),
-                                       NNS->getAsIdentifier());
+                                       NNS->getAsIdentifier(), /*IsPackName=*/NNS->getKind() == NestedNameSpecifier::PackName);
 
   case NestedNameSpecifier::Namespace:
     // A namespace is canonical; build a nested-name-specifier with
@@ -6883,7 +6885,7 @@ ASTContext::getCanonicalNestedNameSpecifier(NestedNameSpecifier *NNS) const {
     if (const auto *DNT = T->getAs<DependentNameType>())
       return NestedNameSpecifier::Create(
           *this, DNT->getQualifier(),
-          const_cast<IdentifierInfo *>(DNT->getIdentifier()));
+          const_cast<IdentifierInfo *>(DNT->getIdentifier()), /*IsPackName=*/false);
     if (const auto *DTST = T->getAs<DependentTemplateSpecializationType>())
       return NestedNameSpecifier::Create(*this, DTST->getQualifier(), true,
                                          const_cast<Type *>(T));

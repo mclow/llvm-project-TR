@@ -9265,6 +9265,14 @@ ASTRecordReader::readNestedNameSpecifierLoc() {
       break;
     }
 
+    case NestedNameSpecifier::PackName: {
+      IdentifierInfo *II = readIdentifier();
+      SourceRange Range = readSourceRange();
+      SourceLocation IdLoc = readSourceLocation();
+      Builder.Extend(Context, Range.getBegin(), II, IdLoc, Range.getEnd());
+      break;
+    }
+
     case NestedNameSpecifier::Namespace: {
       NamespaceDecl *NS = readDeclAs<NamespaceDecl>();
       SourceRange Range = readSourceRange();

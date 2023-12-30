@@ -57,13 +57,15 @@ NestedNameSpecifier::FindOrInsert(const ASTContext &Context,
 
 NestedNameSpecifier *
 NestedNameSpecifier::Create(const ASTContext &Context,
-                            NestedNameSpecifier *Prefix, IdentifierInfo *II) {
+                            NestedNameSpecifier *Prefix,
+                            IdentifierInfo *II,
+                            bool IsPackName) {
   assert(II && "Identifier cannot be NULL");
   assert((!Prefix || Prefix->isDependent()) && "Prefix must be dependent");
 
   NestedNameSpecifier Mockup;
   Mockup.Prefix.setPointer(Prefix);
-  Mockup.Prefix.setInt(StoredIdentifier);
+  Mockup.Prefix.setInt(IsPackName ? StoredPackName : StoredIdentifier);
   Mockup.Specifier = II;
   return FindOrInsert(Context, Mockup);
 }
@@ -148,6 +150,9 @@ NestedNameSpecifier::SpecifierKind NestedNameSpecifier::getKind() const {
   case StoredIdentifier:
     return Identifier;
 
+  case StoredPackName:
+    return PackName;
+
   case StoredDecl: {
     NamedDecl *ND = static_cast<NamedDecl *>(Specifier);
     if (isa<CXXRecordDecl>(ND))
@@ -184,6 +189,7 @@ NamespaceAliasDecl *NestedNameSpecifier::getAsNamespaceAlias() const {
 /// Retrieve the record declaration stored in this nested name specifier.
 CXXRecordDecl *NestedNameSpecifier::getAsRecordDecl() const {
   switch (Prefix.getInt()) {
+  case StoredPackName:
   case StoredIdentifier:
     return nullptr;
 
@@ -200,11 +206,15 @@ CXXRecordDecl *NestedNameSpecifier::getAsRecordDecl() const {
 
 NestedNameSpecifierDependence NestedNameSpecifier::getDependence() const {
   switch (getKind()) {
+  case PackName:
   case Identifier: {
     // Identifier specifiers always represent dependent types
     auto F = NestedNameSpecifierDependence::Dependent |
              NestedNameSpecifierDependence::Instantiation;
     // Prefix can contain unexpanded template parameters.
+    if(getKind() == PackName)
+      F |= NestedNameSpecifierDependence::UnexpandedPack;
+
     if (getPrefix())
       return F | getPrefix()->getDependence();
     return F;
@@ -257,6 +267,10 @@ void NestedNameSpecifier::print(raw_ostream &OS, const PrintingPolicy &Policy,
   switch (getKind()) {
   case Identifier:
     OS << getAsIdentifier()->getName();
+    break;
+
+  case PackName:
+    OS << "..." <<getAsIdentifier()->getName();
     break;
 
   case Namespace:
@@ -372,6 +386,12 @@ NestedNameSpecifierLoc::getLocalDataLength(NestedNameSpecifier *Qualifier) {
     Length += sizeof(SourceLocation::UIntTy);
     break;
 
+
+  case NestedNameSpecifier::PackName:
+    // The location of the identifier + preceeding ellipsis.
+    Length += 2 * sizeof(SourceLocation::UIntTy);
+    break;
+
   case NestedNameSpecifier::TypeSpecWithTemplate:
   case NestedNameSpecifier::TypeSpec:
     // The "void*" that points at the TypeLoc data.
@@ -436,6 +456,12 @@ SourceRange NestedNameSpecifierLoc::getLocalSourceRange() const {
         LoadSourceLocation(Data, Offset),
         LoadSourceLocation(Data, Offset + sizeof(SourceLocation::UIntTy)));
 
+
+  case NestedNameSpecifier::PackName:
+    return SourceRange(
+        LoadSourceLocation(Data, Offset),
+        LoadSourceLocation(Data, Offset + 2*sizeof(SourceLocation::UIntTy)));
+
   case NestedNameSpecifier::TypeSpecWithTemplate:
   case NestedNameSpecifier::TypeSpec: {
     // The "void*" that points at the TypeLoc data.
@@ -448,6 +474,15 @@ SourceRange NestedNameSpecifierLoc::getLocalSourceRange() const {
   }
 
   llvm_unreachable("Invalid NNS Kind!");
+}
+
+SourceLocation NestedNameSpecifierLoc::getIdentifierLoc() const {
+  if(Qualifier->getKind() == NestedNameSpecifier::Identifier)
+    return getBeginLoc();
+  assert(Qualifier->getKind() == NestedNameSpecifier::PackName && "No identifier loc for this kind of NNS");
+
+  unsigned Offset = getDataLength(Qualifier->getPrefix());
+  return LoadSourceLocation(Data, Offset + sizeof(SourceLocation::UIntTy));
 }
 
 TypeLoc NestedNameSpecifierLoc::getTypeLoc() const {
@@ -578,9 +613,23 @@ void NestedNameSpecifierLocBuilder::Extend(ASTContext &Context,
                                            SourceLocation IdentifierLoc,
                                            SourceLocation ColonColonLoc) {
   Representation = NestedNameSpecifier::Create(Context, Representation,
-                                               Identifier);
+                                               Identifier, /*IsPackName=*/false);
 
   // Push source-location info into the buffer.
+  SaveSourceLocation(IdentifierLoc, Buffer, BufferSize, BufferCapacity);
+  SaveSourceLocation(ColonColonLoc, Buffer, BufferSize, BufferCapacity);
+}
+
+void NestedNameSpecifierLocBuilder::Extend(ASTContext &Context,
+                                           SourceLocation EllipsisLoc,
+                                           IdentifierInfo *Identifier,
+                                           SourceLocation IdentifierLoc,
+                                           SourceLocation ColonColonLoc) {
+  Representation = NestedNameSpecifier::Create(Context, Representation,
+                                               Identifier, /*IsPackName=*/true);
+
+         // Push source-location info into the buffer.
+  SaveSourceLocation(EllipsisLoc, Buffer, BufferSize, BufferCapacity);
   SaveSourceLocation(IdentifierLoc, Buffer, BufferSize, BufferCapacity);
   SaveSourceLocation(ColonColonLoc, Buffer, BufferSize, BufferCapacity);
 }
@@ -642,6 +691,9 @@ void NestedNameSpecifierLocBuilder::MakeTrivial(ASTContext &Context,
   while (!Stack.empty()) {
     NestedNameSpecifier *NNS = Stack.pop_back_val();
     switch (NNS->getKind()) {
+      case NestedNameSpecifier::PackName:
+        SaveSourceLocation(R.getBegin(), Buffer, BufferSize, BufferCapacity);
+        [[fallthrough]];
       case NestedNameSpecifier::Identifier:
       case NestedNameSpecifier::Namespace:
       case NestedNameSpecifier::NamespaceAlias:

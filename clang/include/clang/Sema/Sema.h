@@ -7066,6 +7066,9 @@ public:
     /// The identifier preceding the '::'.
     IdentifierInfo *Identifier;
 
+    /// Source location of the ellipsis for a dependent pack
+    SourceLocation EllipsisLoc;
+
     /// The location of the identifier.
     SourceLocation IdentifierLoc;
 
@@ -7073,15 +7076,17 @@ public:
     SourceLocation CCLoc;
 
     /// Creates info object for the most typical case.
-    NestedNameSpecInfo(IdentifierInfo *II, SourceLocation IdLoc,
+    NestedNameSpecInfo(IdentifierInfo *II, SourceLocation DependentPackEllipsisLoc,
+             SourceLocation IdLoc,
              SourceLocation ColonColonLoc, ParsedType ObjectType = ParsedType())
-      : ObjectType(ObjectType), Identifier(II), IdentifierLoc(IdLoc),
+      : ObjectType(ObjectType), Identifier(II), EllipsisLoc(DependentPackEllipsisLoc), IdentifierLoc(IdLoc),
         CCLoc(ColonColonLoc) {
     }
 
-    NestedNameSpecInfo(IdentifierInfo *II, SourceLocation IdLoc,
+    NestedNameSpecInfo(IdentifierInfo *II, SourceLocation DependentPackEllipsisLoc, SourceLocation IdLoc,
                        SourceLocation ColonColonLoc, QualType ObjectType)
       : ObjectType(ParsedType::make(ObjectType)), Identifier(II),
+        EllipsisLoc(DependentPackEllipsisLoc),
         IdentifierLoc(IdLoc), CCLoc(ColonColonLoc) {
     }
   };
@@ -10281,6 +10286,11 @@ public:
                             bool ForCallExpr = false);
   ExprResult SubstExpr(Expr *E,
                        const MultiLevelTemplateArgumentList &TemplateArgs);
+
+
+  QualType ExpandNonDependentPack(QualType T,
+                                  SourceLocation Loc);
+
 
   // A RAII type used by the TemplateDeclInstantiator and TemplateInstantiator
   // to disable constraint evaluation, then restore the state.

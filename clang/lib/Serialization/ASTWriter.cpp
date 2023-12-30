@@ -5863,6 +5863,12 @@ void ASTRecordWriter::AddNestedNameSpecifierLoc(NestedNameSpecifierLoc NNS) {
       AddSourceRange(NNS.getLocalSourceRange());
       break;
 
+    case NestedNameSpecifier::PackName:
+      AddIdentifierRef(NNS.getNestedNameSpecifier()->getAsIdentifier());
+      AddSourceRange(NNS.getLocalSourceRange());
+      AddSourceLocation(NNS.getIdentifierLoc());
+      break;
+
     case NestedNameSpecifier::Namespace:
       AddDeclRef(NNS.getNestedNameSpecifier()->getAsNamespace());
       AddSourceRange(NNS.getLocalSourceRange());

@@ -9590,10 +9590,12 @@ ASTImporter::Import(NestedNameSpecifier *FromNNS) {
     return std::move(Err);
 
   switch (FromNNS->getKind()) {
+  case NestedNameSpecifier::PackName:
   case NestedNameSpecifier::Identifier:
     assert(FromNNS->getAsIdentifier() && "NNS should contain identifier.");
     return NestedNameSpecifier::Create(ToContext, Prefix,
-                                       Import(FromNNS->getAsIdentifier()));
+                                       Import(FromNNS->getAsIdentifier()),
+                                       FromNNS->getKind() == NestedNameSpecifier::PackName);
 
   case NestedNameSpecifier::Namespace:
     if (ExpectedDecl NSOrErr = Import(FromNNS->getAsNamespace())) {
@@ -9672,6 +9674,16 @@ ASTImporter::Import(NestedNameSpecifierLoc FromNNS) {
       Builder.Extend(getToContext(), Spec->getAsIdentifier(), ToLocalBeginLoc,
                      ToLocalEndLoc);
       break;
+
+    case NestedNameSpecifier::PackName: {
+        SourceLocation IdLoc;
+        if (Error Err = importInto(IdLoc, NNS.getIdentifierLoc()))
+          return std::move(Err);
+        Builder.Extend(getToContext(), ToLocalBeginLoc, Spec->getAsIdentifier(), IdLoc,
+                       ToLocalEndLoc);
+        break;
+
+    }
 
     case NestedNameSpecifier::Namespace:
       Builder.Extend(getToContext(), Spec->getAsNamespace(), ToLocalBeginLoc,

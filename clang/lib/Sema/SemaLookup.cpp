@@ -4528,6 +4528,7 @@ static void getNestedNameSpecifierIdentifiers(
   const IdentifierInfo *II = nullptr;
 
   switch (NNS->getKind()) {
+  case NestedNameSpecifier::PackName:
   case NestedNameSpecifier::Identifier:
     II = NNS->getAsIdentifier();
     break;

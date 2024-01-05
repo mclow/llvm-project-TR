@@ -73,15 +73,6 @@ inline std::pair<unsigned, unsigned> getDepthAndIndex(NamedDecl *ND) {
   return std::make_pair(TTP->getDepth(), TTP->getIndex());
 }
 
-/// Retrieve the depth and index of an unexpanded parameter pack.
-inline std::pair<unsigned, unsigned>
-getDepthAndIndex(UnexpandedParameterPack UPP) {
-  if (const auto *TTP = UPP.first.dyn_cast<const TemplateTypeParmType *>())
-    return std::make_pair(TTP->getDepth(), TTP->getIndex());
-
-  return getDepthAndIndex(UPP.first.get<NamedDecl *>());
-}
-
 class TypoCorrectionConsumer : public VisibleDeclConsumer {
   typedef SmallVector<TypoCorrection, 1> TypoResultList;
   typedef llvm::StringMap<TypoResultList> TypoResultsMap;

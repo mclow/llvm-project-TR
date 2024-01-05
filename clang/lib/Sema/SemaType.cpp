@@ -5740,6 +5740,11 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
               ElaboratedTypeKeyword::None, NNSPrefix, NNS->getAsIdentifier());
           break;
 
+        case NestedNameSpecifier::PackName:
+          ClsType = Context.getPackNameType(Context.getDependentNameType(
+              ElaboratedTypeKeyword::None, NNSPrefix, NNS->getAsIdentifier()));
+          break;
+
         case NestedNameSpecifier::Namespace:
         case NestedNameSpecifier::NamespaceAlias:
         case NestedNameSpecifier::Global:
@@ -9744,8 +9749,10 @@ QualType Sema::BuildPackIndexingType(QualType Pattern, Expr *IndexExpr,
     }
   }
 
-  return Context.getPackIndexingType(Pattern, IndexExpr, FullyExpanded,
-                                     Expansions, Index.value_or(-1));
+  QualType T = Context.getPackIndexingType(Pattern, IndexExpr, FullyExpanded,
+                                           Expansions, Index.value_or(-1));
+
+  return ExpandNonDependentPack(T, Loc);
 }
 
 static QualType GetEnumUnderlyingType(Sema &S, QualType BaseType,

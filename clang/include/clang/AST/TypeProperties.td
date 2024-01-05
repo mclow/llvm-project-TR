@@ -875,6 +875,19 @@ let Class = DependentNameType in {
   }]>;
 }
 
+let Class = PackNameType in {
+  def : Property<"underlyingType", QualType> {
+    let Read = [{
+      node->getUnderlyingType()
+    }];
+  }
+
+  def : Creator<[{
+    return ctx.getPackNameType(ctx.getCanonicalType(underlyingType));
+  }]>;
+}
+
+
 let Class = ObjCObjectType in {
   def : Property<"baseType", QualType> {
     let Read = [{ node->getBaseType() }];

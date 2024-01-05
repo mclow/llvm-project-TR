@@ -17,3 +17,24 @@ struct Test {
 };
 
 Test<int, double> t;
+
+template <typename... T>
+struct S {
+    using ...types = T;
+};
+template <typename... Ts>
+struct e1 {
+   using a = S<Ts...>::...types;
+   using b = S<Ts...>::...types::a;
+   using ...c = S<Ts...>::types;
+   using ...d = S<Ts...>::types::a;
+   S<Ts...>::...types e;
+   S<Ts...>::...types::a f;
+};
+
+template <typename... Ts>
+struct ok {
+    using ...a = S<Ts...>::...types;
+    using ...b = S<Ts...>::...types::a;
+};
+

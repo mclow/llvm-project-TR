@@ -766,7 +766,7 @@ private:
       S.collectUnexpandedParameterPacks(Pattern, Unexpanded);
       for (unsigned I = 0, N = Unexpanded.size(); I != N; ++I) {
         unsigned Depth, Index;
-        std::tie(Depth, Index) = getDepthAndIndex(Unexpanded[I]);
+        std::tie(Depth, Index) = Unexpanded[I].getDepthAndIndex();
         if (Depth == Info.getDeducedDepth())
           AddPack(Index);
       }

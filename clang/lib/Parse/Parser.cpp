@@ -19,6 +19,7 @@
 #include "clang/Parse/ParseDiagnostic.h"
 #include "clang/Parse/RAIIObjectsForParser.h"
 #include "clang/Sema/DeclSpec.h"
+#include "clang/Sema/ParsedPackInfo.h"
 #include "clang/Sema/ParsedTemplate.h"
 #include "clang/Sema/Scope.h"
 #include "llvm/Support/Path.h"
@@ -2046,7 +2047,14 @@ bool Parser::TryAnnotateTypeOrScopeToken(
     }
 
     TypeResult Ty;
-    if (Tok.is(tok::identifier)) {
+
+    if (Tok.is(tok::ellipsis) && getLangOpts().CPlusPlus26 &&
+        NextToken().is(tok::identifier)) {
+      ParsedPackInfo PackInfo{ConsumeToken()};
+      Ty = Actions.ActOnTypenameType(
+          getCurScope(), TypenameLoc, SS, *Tok.getIdentifierInfo(),
+          Tok.getLocation(), ImplicitTypenameContext::No, &PackInfo);
+    } else if (Tok.is(tok::identifier)) {
       // FIXME: check whether the next token is '<', first!
       Ty = Actions.ActOnTypenameType(getCurScope(), TypenameLoc, SS,
                                      *Tok.getIdentifierInfo(),
@@ -2106,14 +2114,31 @@ bool Parser::TryAnnotateTypeOrScopeToken(
 bool Parser::TryAnnotateTypeOrScopeTokenAfterScopeSpec(
     CXXScopeSpec &SS, bool IsNewScope,
     ImplicitTypenameContext AllowImplicitTypename) {
+
+  SourceLocation EllipsisLoc;
+  if (getLangOpts().CPlusPlus26 && Tok.is(tok::ellipsis) &&
+      NextToken().is(tok::identifier)) {
+    EllipsisLoc = ConsumeToken();
+  }
+
   if (Tok.is(tok::identifier)) {
+    ParsedType Ty;
+    if (EllipsisLoc.isValid()) {
+      Ty = Actions.getPackName(EllipsisLoc, *Tok.getIdentifierInfo(),
+                               Tok.getLocation(), getCurScope(), &SS, false,
+                               NextToken().is(tok::period), nullptr,
+                               AllowImplicitTypename);
+    } else {
+      Ty = Actions.getTypeName(
+          *Tok.getIdentifierInfo(), Tok.getLocation(), getCurScope(), &SS,
+          false, NextToken().is(tok::period), nullptr,
+          /*IsCtorOrDtorName=*/false,
+          /*NonTrivialTypeSourceInfo=*/true,
+          /*IsClassTemplateDeductionContext=*/true, AllowImplicitTypename);
+    }
+
     // Determine whether the identifier is a type name.
-    if (ParsedType Ty = Actions.getTypeName(
-            *Tok.getIdentifierInfo(), Tok.getLocation(), getCurScope(), &SS,
-            false, NextToken().is(tok::period), nullptr,
-            /*IsCtorOrDtorName=*/false,
-            /*NonTrivialTypeSourceInfo=*/true,
-            /*IsClassTemplateDeductionContext=*/true, AllowImplicitTypename)) {
+    if (Ty) {
       SourceLocation BeginLoc = Tok.getLocation();
       if (SS.isNotEmpty()) // it was a C++ qualified type name.
         BeginLoc = SS.getBeginLoc();

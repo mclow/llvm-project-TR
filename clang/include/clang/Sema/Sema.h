@@ -54,6 +54,7 @@
 #include "clang/Sema/IdentifierResolver.h"
 #include "clang/Sema/ObjCMethodList.h"
 #include "clang/Sema/Ownership.h"
+#include "clang/Sema/ParsedPackInfo.h"
 #include "clang/Sema/Scope.h"
 #include "clang/Sema/SemaConcept.h"
 #include "clang/Sema/TypoCorrection.h"
@@ -237,11 +238,42 @@ namespace threadSafety {
   void threadSafetyCleanup(BeforeSet* Cache);
 }
 
-// FIXME: No way to easily map from TemplateTypeParmTypes to
-// TemplateTypeParmDecls, so we have this horrible PointerUnion.
-typedef std::pair<llvm::PointerUnion<const TemplateTypeParmType *, NamedDecl *>,
-                  SourceLocation>
-    UnexpandedParameterPack;
+class UnexpandedParameterPack {
+  llvm::PointerUnion<const Type *, const NestedNameSpecifier *, NamedDecl *>
+      Data;
+  SourceLocation Loc;
+  bool IsTemplateParameter : 1;
+
+public:
+  UnexpandedParameterPack(const Type *, SourceLocation);
+  UnexpandedParameterPack(NamedDecl *ND, SourceLocation);
+  UnexpandedParameterPack(const NestedNameSpecifier *NNS, SourceLocation);
+
+  std::pair<unsigned, unsigned> getDepthAndIndex() const;
+  bool isTemplateParameter() const;
+
+  const IdentifierInfo *getIdentifier() const;
+
+  SourceLocation getLocation() const { return Loc; }
+
+  template <
+      typename T,
+      typename Decayed = std::remove_const_t<std::remove_pointer_t<T>>,
+      typename = std::enable_if_t<std::is_base_of_v<Type, Decayed> ||
+                                  std::is_base_of_v<NamedDecl, Decayed> ||
+                                  std::is_same_v<NestedNameSpecifier, Decayed>>>
+  const T getAs() const {
+    if constexpr (std::is_base_of_v<Type, Decayed>) {
+      const auto *type = Data.dyn_cast<const Type *>();
+      return llvm::dyn_cast_if_present<std::remove_pointer_t<const T>>(type);
+    } else if constexpr (std::is_same_v<NestedNameSpecifier, Decayed>) {
+      return Data.dyn_cast<const NestedNameSpecifier *>();
+    } else {
+      auto *type = Data.dyn_cast<NamedDecl *>();
+      return llvm::dyn_cast_if_present<std::remove_pointer_t<T>>(type);
+    }
+  }
+};
 
 /// Describes whether we've seen any nullability information for the given
 /// file.
@@ -2638,6 +2670,18 @@ public:
 
   bool isSimpleTypeSpecifier(tok::TokenKind Kind) const;
 
+  ParsedType getTypeName(const ParsedPackInfo *PackInfo,
+                         const IdentifierInfo &II, SourceLocation NameLoc,
+                         Scope *S, CXXScopeSpec *SS = nullptr,
+                         bool isClassName = false, bool HasTrailingDot = false,
+                         ParsedType ObjectType = nullptr,
+                         bool IsCtorOrDtorName = false,
+                         bool WantNontrivialTypeSourceInfo = false,
+                         bool IsClassTemplateDeductionContext = true,
+                         ImplicitTypenameContext AllowImplicitTypename =
+                             ImplicitTypenameContext::No,
+                         IdentifierInfo **CorrectedII = nullptr);
+
   ParsedType getTypeName(const IdentifierInfo &II, SourceLocation NameLoc,
                          Scope *S, CXXScopeSpec *SS = nullptr,
                          bool isClassName = false, bool HasTrailingDot = false,
@@ -2648,6 +2692,16 @@ public:
                          ImplicitTypenameContext AllowImplicitTypename =
                              ImplicitTypenameContext::No,
                          IdentifierInfo **CorrectedII = nullptr);
+
+  ParsedType getPackName(SourceLocation EllipsisLoc, const IdentifierInfo &II,
+                         SourceLocation NameLoc, Scope *S,
+                         CXXScopeSpec *SS = nullptr, bool isClassName = false,
+                         bool HasTrailingDot = false,
+                         ParsedType ObjectType = nullptr,
+                         ImplicitTypenameContext AllowImplicitTypename =
+                             ImplicitTypenameContext::No,
+                         IdentifierInfo **CorrectedII = nullptr);
+
   TypeSpecifierType isTagName(IdentifierInfo &II, Scope *S);
   bool isMicrosoftMissingTypename(const CXXScopeSpec *SS, Scope *S);
   void DiagnoseUnknownTypeName(IdentifierInfo *&II,
@@ -8729,7 +8783,8 @@ public:
   TypeResult ActOnTypenameType(
       Scope *S, SourceLocation TypenameLoc, const CXXScopeSpec &SS,
       const IdentifierInfo &II, SourceLocation IdLoc,
-      ImplicitTypenameContext IsImplicitTypename = ImplicitTypenameContext::No);
+      ImplicitTypenameContext IsImplicitTypename = ImplicitTypenameContext::No,
+      const ParsedPackInfo *PackInfo = nullptr);
 
   /// Called when the parser has parsed a C++ typename
   /// specifier that ends in a template-id, e.g.,
@@ -8759,10 +8814,9 @@ public:
   QualType CheckTypenameType(ElaboratedTypeKeyword Keyword,
                              SourceLocation KeywordLoc,
                              NestedNameSpecifierLoc QualifierLoc,
-                             const IdentifierInfo &II,
-                             SourceLocation IILoc,
-                             TypeSourceInfo **TSI,
-                             bool DeducedTSTContext);
+                             const ParsedPackInfo *PackInfo,
+                             const IdentifierInfo &II, SourceLocation IILoc,
+                             TypeSourceInfo **TSI, bool DeducedTSTContext);
 
   QualType CheckTypenameType(ElaboratedTypeKeyword Keyword,
                              SourceLocation KeywordLoc,
@@ -8771,6 +8825,12 @@ public:
                              SourceLocation IILoc,
                              bool DeducedTSTContext = true);
 
+  QualType CheckTypenameType(ElaboratedTypeKeyword Keyword,
+                             SourceLocation KeywordLoc,
+                             NestedNameSpecifierLoc QualifierLoc,
+                             const ParsedPackInfo *PackInfo,
+                             const IdentifierInfo &II, SourceLocation IILoc,
+                             bool DeducedTSTContext = true);
 
   TypeSourceInfo *RebuildTypeInCurrentInstantiation(TypeSourceInfo *T,
                                                     SourceLocation Loc,

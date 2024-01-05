@@ -1655,6 +1655,21 @@ ASTNodeImporter::VisitDependentNameType(const DependentNameType *T) {
                                                       Name, Canon);
 }
 
+ExpectedType ASTNodeImporter::VisitPackNameType(const PackNameType *T) {
+  auto UnderlyingOrErr = import(T->getUnderlyingType());
+  if (!UnderlyingOrErr)
+    return UnderlyingOrErr.takeError();
+
+  QualType Canon;
+  if (T != T->getCanonicalTypeInternal().getTypePtr()) {
+    if (ExpectedType TyOrErr = import(T->getCanonicalTypeInternal()))
+      Canon = (*TyOrErr).getCanonicalType();
+    else
+      return TyOrErr.takeError();
+  }
+  return Importer.getToContext().getPackNameType(*UnderlyingOrErr, Canon);
+}
+
 ExpectedType
 ASTNodeImporter::VisitObjCInterfaceType(const ObjCInterfaceType *T) {
   Expected<ObjCInterfaceDecl *> ToDeclOrErr = import(T->getDecl());

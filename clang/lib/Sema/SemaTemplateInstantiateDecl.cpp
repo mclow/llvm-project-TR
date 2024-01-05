@@ -1078,7 +1078,10 @@ Decl *TemplateDeclInstantiator::instantiateAliasPack(TypeAliasDecl *D) {
   assert(D->isPack() && "Expected an alias pack");
 
   SmallVector<UnexpandedParameterPack, 2> Unexpanded;
-  SemaRef.collectUnexpandedParameterPacks(D->getUnderlyingType(), Unexpanded);
+
+  QualType Underlying = SemaRef.SubstType(D->getUnderlyingType(), TemplateArgs,
+                                          D->getBeginLoc(), D->getDeclName());
+  SemaRef.collectUnexpandedParameterPacks(Underlying, Unexpanded);
 
   // Determine whether the set of unexpanded parameter packs can and should
   // be expanded.
@@ -1096,10 +1099,12 @@ Decl *TemplateDeclInstantiator::instantiateAliasPack(TypeAliasDecl *D) {
          "should never need to retain an expansion for TypeAliasPackDecl");
 
   if (!Expand) {
+    Sema::ArgumentPackSubstitutionIndexRAII SubstIndex(SemaRef, -1);
+    TypeAliasDecl *Pattern = cast_or_null<TypeAliasDecl>(
+        InstantiateTypedefNameDecl(D, /*IsTypeAlias=*/true));
     // We cannot fully expand the pack expansion now, so substitute into the
     // pattern and create a new pack expansion.
-    Sema::ArgumentPackSubstitutionIndexRAII SubstIndex(SemaRef, -1);
-    return InstantiateTypedefNameDecl(D, true);
+    return Pattern;
   }
   // Instantiate the slices of this pack and build a UsingPackDecl.
   SmallVector<TypedefNameDecl *, 8> Expansions;

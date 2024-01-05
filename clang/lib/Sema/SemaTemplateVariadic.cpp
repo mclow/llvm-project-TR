@@ -26,6 +26,44 @@ using namespace clang;
 // Visitor that collects unexpanded parameter packs
 //----------------------------------------------------------------------------
 
+UnexpandedParameterPack::UnexpandedParameterPack(const Type *T,
+                                                 SourceLocation Loc)
+    : Data(T), Loc(Loc), IsTemplateParameter(isa<TemplateTypeParmType>(T)) {}
+UnexpandedParameterPack::UnexpandedParameterPack(NamedDecl *ND,
+                                                 SourceLocation Loc)
+    : Data(ND), Loc(Loc), IsTemplateParameter(ND->isTemplateParameter()) {}
+
+UnexpandedParameterPack::UnexpandedParameterPack(const NestedNameSpecifier *NNS,
+                                                 SourceLocation Loc)
+    : Data(NNS), Loc(Loc), IsTemplateParameter(false) {}
+
+std::pair<unsigned, unsigned>
+UnexpandedParameterPack::getDepthAndIndex() const {
+  assert(IsTemplateParameter && "this pack is not a template parameter");
+  if (const auto *TTP = getAs<const TemplateTypeParmType *>())
+    return std::make_pair(TTP->getDepth(), TTP->getIndex());
+
+  return clang::getDepthAndIndex(getAs<NamedDecl *>());
+}
+
+bool UnexpandedParameterPack::isTemplateParameter() const {
+  return IsTemplateParameter;
+}
+
+const IdentifierInfo *UnexpandedParameterPack::getIdentifier() const {
+  if (const auto *ND = getAs<NamedDecl *>())
+    return ND->getIdentifier();
+  if (const auto *NNS = getAs<const NestedNameSpecifier *>())
+    return NNS->getAsIdentifier();
+  if (const auto *Param = getAs<const TemplateTypeParmType *>())
+    return Param->getIdentifier();
+  if (const auto *Param = getAs<const PackNameType *>())
+    return Param->getIdentifier();
+  if (const auto *Param = getAs<const SubstTemplateTypeParmPackType *>())
+    return Param->getIdentifier();
+  assert(false && "Unsuported pack type");
+}
+
 namespace {
   /// A class that collects unexpanded parameter packs.
   class CollectUnexpandedParameterPacksVisitor :
@@ -53,12 +91,21 @@ namespace {
       } else if (getDepthAndIndex(ND).first >= DepthLimit)
         return;
 
-      Unexpanded.push_back({ND, Loc});
+      Unexpanded.emplace_back(ND, Loc);
     }
     void addUnexpanded(const TemplateTypeParmType *T,
                        SourceLocation Loc = SourceLocation()) {
       if (T->getDepth() < DepthLimit)
-        Unexpanded.push_back({T, Loc});
+        Unexpanded.emplace_back(T, Loc);
+    }
+
+    void addUnexpanded(const Type *T, SourceLocation Loc = SourceLocation()) {
+      Unexpanded.emplace_back(T, Loc);
+    }
+
+    void addUnexpanded(const NestedNameSpecifier *T,
+                       SourceLocation Loc = SourceLocation()) {
+      Unexpanded.emplace_back(T, Loc);
     }
 
   public:
@@ -101,6 +148,29 @@ namespace {
       if (auto *D = dyn_cast<TypeAliasPackDecl>(T.getTypedefNameDecl()))
         addUnexpanded(D, T.getNameLoc());
       return TraverseDecl(T.getTypePtr()->getDecl());
+    }
+
+    bool VisitPackNameType(PackNameType *T) {
+      addUnexpanded(T);
+      return inherited::TraverseType(T->getUnderlyingType());
+    }
+
+    bool VisitPackNameTypeLoc(PackNameTypeLoc T) {
+      addUnexpanded(T.getTypePtr(), T.getEllipsisLoc());
+      return inherited::TraverseTypeLoc(T.getUnderlyingTypeLoc());
+    }
+
+    bool TraverseNestedNameSpecifier(NestedNameSpecifier *NNS) {
+      if (NNS->getKind() == NestedNameSpecifier::PackName)
+        addUnexpanded(NNS);
+      return inherited::TraverseNestedNameSpecifier(NNS);
+    }
+
+    bool TraverseNestedNameSpecifierLoc(NestedNameSpecifierLoc NNS) {
+      if (NNS.getNestedNameSpecifier()->getKind() ==
+          NestedNameSpecifier::PackName)
+        addUnexpanded(NNS.getNestedNameSpecifier(), NNS.getBeginLoc());
+      return inherited::TraverseNestedNameSpecifierLoc(NNS);
     }
 
     /// Record occurrences of function and non-type template
@@ -242,6 +312,17 @@ namespace {
       return inherited::TraverseTemplateArgumentLoc(ArgLoc);
     }
 
+    bool VisitSubstTemplateTypeParmPackType(SubstTemplateTypeParmPackType *T) {
+      addUnexpanded(T);
+      return inherited::VisitSubstTemplateTypeParmPackType(T);
+    }
+
+    bool VisitSubstTemplateTypeParmPackTypeLoc(
+        const SubstTemplateTypeParmPackTypeLoc &Loc) {
+      addUnexpanded(Loc.getTypePtr(), Loc.getBeginLoc());
+      return inherited::VisitSubstTemplateTypeParmPackTypeLoc(Loc);
+    }
+
     /// Suppress traversal of base specifier pack expansions.
     bool TraverseCXXBaseSpecifier(const CXXBaseSpecifier &Base) {
       if (Base.isPackExpansion())
@@ -326,11 +407,11 @@ Sema::DiagnoseUnexpandedParameterPacks(SourceLocation Loc,
   if (auto *LSI = getEnclosingLambda()) {
     for (auto &Pack : Unexpanded) {
       auto DeclaresThisPack = [&](NamedDecl *LocalPack) {
-        if (auto *TTPT = Pack.first.dyn_cast<const TemplateTypeParmType *>()) {
+        if (auto *TTPT = Pack.getAs<const TemplateTypeParmType *>()) {
           auto *TTPD = dyn_cast<TemplateTypeParmDecl>(LocalPack);
           return TTPD && TTPD->getTypeForDecl() == TTPT;
         }
-        return declaresSameEntity(Pack.first.get<NamedDecl *>(), LocalPack);
+        return declaresSameEntity(Pack.getAs<NamedDecl *>(), LocalPack);
       };
       if (llvm::any_of(LSI->LocalPacks, DeclaresThisPack))
         LambdaParamPackReferences.push_back(Pack);
@@ -373,22 +454,16 @@ Sema::DiagnoseUnexpandedParameterPacks(SourceLocation Loc,
   }
 
   SmallVector<SourceLocation, 4> Locations;
-  SmallVector<IdentifierInfo *, 4> Names;
-  llvm::SmallPtrSet<IdentifierInfo *, 4> NamesKnown;
+  SmallVector<const IdentifierInfo *, 4> Names;
+  llvm::SmallPtrSet<const IdentifierInfo *, 4> NamesKnown;
 
   for (unsigned I = 0, N = Unexpanded.size(); I != N; ++I) {
-    IdentifierInfo *Name = nullptr;
-    if (const TemplateTypeParmType *TTP
-          = Unexpanded[I].first.dyn_cast<const TemplateTypeParmType *>())
-      Name = TTP->getIdentifier();
-    else
-      Name = Unexpanded[I].first.get<NamedDecl *>()->getIdentifier();
-
+    const IdentifierInfo *Name = Unexpanded[I].getIdentifier();
     if (Name && NamesKnown.insert(Name).second)
       Names.push_back(Name);
 
-    if (Unexpanded[I].second.isValid())
-      Locations.push_back(Unexpanded[I].second);
+    if (Unexpanded[I].getLocation().isValid())
+      Locations.push_back(Unexpanded[I].getLocation());
   }
 
   auto DB = Diag(Loc, diag::err_unexpanded_parameter_pack)
@@ -452,7 +527,7 @@ bool Sema::DiagnoseUnexpandedParameterPackInRequiresExpr(RequiresExpr *RE) {
   llvm::SmallPtrSet<NamedDecl*, 8> ParmSet(Parms.begin(), Parms.end());
   SmallVector<UnexpandedParameterPack, 2> UnexpandedParms;
   for (auto Parm : Unexpanded)
-    if (ParmSet.contains(Parm.first.dyn_cast<NamedDecl *>()))
+    if (ParmSet.contains(Parm.getAs<NamedDecl *>()))
       UnexpandedParms.push_back(Parm);
   if (UnexpandedParms.empty())
     return false;
@@ -704,46 +779,56 @@ bool Sema::CheckParameterPacksForExpansion(
     bool &RetainExpansion, std::optional<unsigned> &NumExpansions) {
   ShouldExpand = true;
   RetainExpansion = false;
-  std::pair<IdentifierInfo *, SourceLocation> FirstPack;
+  std::pair<const IdentifierInfo *, SourceLocation> FirstPack;
   bool HaveFirstPack = false;
   std::optional<unsigned> NumPartialExpansions;
   SourceLocation PartiallySubstitutedPackLoc;
 
+  using DeclArgumentPack = LocalInstantiationScope::DeclArgumentPack;
+
   for (UnexpandedParameterPack ParmPack : Unexpanded) {
     // Compute the depth and index for this parameter pack.
     unsigned Depth = 0, Index = 0;
-    IdentifierInfo *Name;
+    const IdentifierInfo *Name = ParmPack.getIdentifier();
     bool IsVarDeclPack = false;
-    bool IsNonDependentPack = false;
     unsigned NewPackSize;
 
-    if (const TemplateTypeParmType *TTP =
-            ParmPack.first.dyn_cast<const TemplateTypeParmType *>()) {
-      Depth = TTP->getDepth();
-      Index = TTP->getIndex();
-      Name = TTP->getIdentifier();
-    } else {
-      NamedDecl *ND = ParmPack.first.get<NamedDecl *>();
-      if (const auto *Alias = dyn_cast<const TypeAliasPackDecl>(ND)) {
-        Name = Alias->getIdentifier();
-        NewPackSize = Alias->expansions().size();
-        IsNonDependentPack = true;
-      } else if (isa<VarDecl>(ND))
-        IsVarDeclPack = true;
-      else
-        std::tie(Depth, Index) = getDepthAndIndex(ND);
+    if (ParmPack.isTemplateParameter())
+      std::tie(Depth, Index) = ParmPack.getDepthAndIndex();
 
-      Name = ND->getIdentifier();
+    if (const auto *ND = ParmPack.getAs<const VarDecl *>()) {
+      IsVarDeclPack = true;
+    } else if (const auto *Alias =
+                   ParmPack.getAs<const TypeAliasPackDecl *>()) {
+      NewPackSize = Alias->expansions().size();
+    } else if (const auto *Subst =
+                   ParmPack.getAs<const SubstTemplateTypeParmPackType *>()) {
+      NewPackSize = Subst->getNumArgs();
+    } else if (const auto *Name = ParmPack.getAs<const PackNameType *>()) {
+      if (const auto *ET =
+              dyn_cast<ElaboratedType>(Name->getUnderlyingType())) {
+        QualType Named = ET->getNamedType();
+        if (auto *T = dyn_cast<TypedefType>(Named)) {
+          if (const auto *Alias = dyn_cast<TypeAliasPackDecl>(T->getDecl())) {
+            NewPackSize = Alias->expansions().size();
+          } else {
+            llvm_unreachable("This type does not denote a pack");
+          }
+        } else {
+          llvm_unreachable("This type does not denote a pack");
+        }
+      } else {
+        ShouldExpand = false;
+        continue;
+      }
     }
-
     // Determine the size of this argument pack.
     if (IsVarDeclPack) {
       // Figure out whether we're instantiating to an argument pack or not.
-      typedef LocalInstantiationScope::DeclArgumentPack DeclArgumentPack;
 
       llvm::PointerUnion<Decl *, DeclArgumentPack *> *Instantiation =
           CurrentInstantiationScope->findInstantiationOf(
-              ParmPack.first.get<NamedDecl *>());
+              ParmPack.getAs<NamedDecl *>());
       if (Instantiation->is<DeclArgumentPack *>()) {
         // We could expand this function parameter pack.
         NewPackSize = Instantiation->get<DeclArgumentPack *>()->size();
@@ -753,7 +838,7 @@ bool Sema::CheckParameterPacksForExpansion(
         ShouldExpand = false;
         continue;
       }
-    } else if (!IsNonDependentPack) {
+    } else if (ParmPack.isTemplateParameter()) {
       // If we don't have a template argument at this depth/index, then we
       // cannot expand the pack expansion. Make a note of this, but we still
       // want to check any parameter packs we *do* have arguments for.
@@ -771,7 +856,8 @@ bool Sema::CheckParameterPacksForExpansion(
     //   Template argument deduction can extend the sequence of template
     //   arguments corresponding to a template parameter pack, even when the
     //   sequence contains explicitly specified template arguments.
-    if (!IsVarDeclPack && !IsNonDependentPack && CurrentInstantiationScope) {
+    if (!IsVarDeclPack && ParmPack.isTemplateParameter() &&
+        CurrentInstantiationScope) {
       if (NamedDecl *PartialPack =
               CurrentInstantiationScope->getPartiallySubstitutedPack()) {
         unsigned PartialDepth, PartialIndex;
@@ -780,7 +866,7 @@ bool Sema::CheckParameterPacksForExpansion(
           RetainExpansion = true;
           // We don't actually know the new pack size yet.
           NumPartialExpansions = NewPackSize;
-          PartiallySubstitutedPackLoc = ParmPack.second;
+          PartiallySubstitutedPackLoc = ParmPack.getLocation();
           continue;
         }
       }
@@ -791,7 +877,7 @@ bool Sema::CheckParameterPacksForExpansion(
       // Record it.
       NumExpansions = NewPackSize;
       FirstPack.first = Name;
-      FirstPack.second = ParmPack.second;
+      FirstPack.second = ParmPack.getLocation();
       HaveFirstPack = true;
       continue;
     }
@@ -803,11 +889,12 @@ bool Sema::CheckParameterPacksForExpansion(
       if (HaveFirstPack)
         Diag(EllipsisLoc, diag::err_pack_expansion_length_conflict)
             << FirstPack.first << Name << *NumExpansions << NewPackSize
-            << SourceRange(FirstPack.second) << SourceRange(ParmPack.second);
+            << SourceRange(FirstPack.second)
+            << SourceRange(ParmPack.getLocation());
       else
         Diag(EllipsisLoc, diag::err_pack_expansion_length_conflict_multilevel)
             << Name << *NumExpansions << NewPackSize
-            << SourceRange(ParmPack.second);
+            << SourceRange(ParmPack.getLocation());
       return true;
     }
   }
@@ -850,18 +937,17 @@ std::optional<unsigned> Sema::getNumArgumentsInExpansion(
     unsigned Index;
 
     if (const TemplateTypeParmType *TTP =
-            Unexpanded[I].first.dyn_cast<const TemplateTypeParmType *>()) {
+            Unexpanded[I].getAs<const TemplateTypeParmType *>()) {
       Depth = TTP->getDepth();
       Index = TTP->getIndex();
     } else {
-      NamedDecl *ND = Unexpanded[I].first.get<NamedDecl *>();
+      NamedDecl *ND = Unexpanded[I].getAs<NamedDecl *>();
       if (isa<VarDecl>(ND)) {
         // Function parameter pack or init-capture pack.
         typedef LocalInstantiationScope::DeclArgumentPack DeclArgumentPack;
 
         llvm::PointerUnion<Decl *, DeclArgumentPack *> *Instantiation =
-            CurrentInstantiationScope->findInstantiationOf(
-                Unexpanded[I].first.get<NamedDecl *>());
+            CurrentInstantiationScope->findInstantiationOf(ND);
         if (Instantiation->is<Decl *>())
           // The pattern refers to an unexpanded pack. We're not ready to expand
           // this pack yet.

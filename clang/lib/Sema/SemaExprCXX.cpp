@@ -9020,10 +9020,10 @@ Sema::ActOnTypeRequirement(SourceLocation TypenameKWLoc, CXXScopeSpec &SS,
          "Exactly one of TypeName and TemplateId must be specified.");
   TypeSourceInfo *TSI = nullptr;
   if (TypeName) {
-    QualType T =
-        CheckTypenameType(ElaboratedTypeKeyword::Typename, TypenameKWLoc,
-                          SS.getWithLocInContext(Context), *TypeName, NameLoc,
-                          &TSI, /*DeducedTSTContext=*/false);
+    QualType T = CheckTypenameType(
+        ElaboratedTypeKeyword::Typename, TypenameKWLoc,
+        SS.getWithLocInContext(Context), /*PackInfo=*/nullptr, *TypeName,
+        NameLoc, &TSI, /*DeducedTSTContext=*/false);
     if (T.isNull())
       return nullptr;
   } else {

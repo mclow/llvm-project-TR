@@ -6067,6 +6067,32 @@ public:
   }
 };
 
+class PackNameType : public Type, public llvm::FoldingSetNode {
+  friend class ASTContext;
+  QualType Underlying;
+
+public:
+  PackNameType(QualType Pattern, QualType CanonType)
+      : Type(PackName, CanonType,
+             TypeDependence::UnexpandedPack | Pattern->getDependence()),
+        Underlying(Pattern) {}
+
+  QualType getUnderlyingType() const { return Underlying; }
+
+  bool isSugared() const { return false; }
+  QualType desugar() const { return QualType(this, 0); }
+
+  void Profile(llvm::FoldingSetNodeID &ID) { Profile(ID, Underlying); }
+
+  const IdentifierInfo *getIdentifier() const;
+
+  static void Profile(llvm::FoldingSetNodeID &ID, QualType Pattern) {
+    Pattern.Profile(ID);
+  }
+
+  static bool classof(const Type *T) { return T->getTypeClass() == PackName; }
+};
+
 /// Represents a template specialization type whose template cannot be
 /// resolved, e.g.
 ///   A<T>::template B<T>

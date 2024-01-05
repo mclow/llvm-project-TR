@@ -3226,6 +3226,12 @@ TypeAliasPackDecl::Create(ASTContext &C, DeclContext *DC,
       TypeAliasPackDecl(C, DC, InstantiatedFrom, AliasDecls);
 }
 
+bool TypeAliasPackDecl::isDependentExpansion(ASTContext &C) const {
+  return llvm::any_of(expansions(), [&C](const TypedefNameDecl *D) {
+    return C.getTypeDeclType(D)->isDependentType();
+  });
+}
+
 void TypeAliasPackDecl::anchor() {}
 
 void UnresolvedUsingValueDecl::anchor() {}

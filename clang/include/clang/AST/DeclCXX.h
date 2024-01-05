@@ -3571,6 +3571,8 @@ public:
                           NumExpansions);
   }
 
+  bool isDependentExpansion(ASTContext &C) const;
+
   static TypeAliasPackDecl *Create(ASTContext &C, DeclContext *DC,
                                    TypedefNameDecl *InstantiatedFrom,
                                    ArrayRef<TypedefNameDecl *> AliasDecls);

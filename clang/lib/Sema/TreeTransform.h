@@ -1247,6 +1247,28 @@ public:
                                              T);
   }
 
+  QualType RebuildPackNameType(SourceLocation EllipsisLoc,
+                               QualType Underlying) {
+    bool IsPackName = false;
+    if (isa<DependentNameType>(Underlying))
+      IsPackName = true;
+    else {
+      const ElaboratedType *ET = cast<ElaboratedType>(Underlying);
+      QualType Named = ET->getNamedType();
+      if (auto *T = dyn_cast<TypedefType>(Named)) {
+        if (isa<TypeAliasPackDecl>(T->getDecl()))
+          IsPackName = true;
+        else if (auto *AD = dyn_cast<TypeAliasDecl>(T->getDecl()))
+          IsPackName = AD->isPack();
+      }
+    }
+    if (IsPackName)
+      return SemaRef.Context.getPackNameType(Underlying);
+
+    SemaRef.Diag(EllipsisLoc, diag::err_expected_name_of_pack) << Underlying;
+    return QualType();
+  }
+
   /// Build a new pack expansion type.
   ///
   /// By default, builds a new PackExpansionType type from the given pattern.
@@ -7356,10 +7378,28 @@ QualType TreeTransform<Derived>::TransformDependentNameType(
   return Result;
 }
 
-template<typename Derived>
-QualType TreeTransform<Derived>::
-          TransformDependentTemplateSpecializationType(TypeLocBuilder &TLB,
-                                 DependentTemplateSpecializationTypeLoc TL) {
+template <typename Derived>
+QualType
+TreeTransform<Derived>::TransformPackNameType(clang::TypeLocBuilder &TLB,
+                                              PackNameTypeLoc TL) {
+  QualType Underlying =
+      getDerived().TransformType(TLB, TL.getUnderlyingTypeLoc());
+  if (Underlying.isNull())
+    return QualType();
+
+  QualType Result =
+      getDerived().RebuildPackNameType(TL.getEllipsisLoc(), Underlying);
+  if (Result.isNull())
+    return QualType();
+
+  PackNameTypeLoc NewTL = TLB.push<PackNameTypeLoc>(Result);
+  NewTL.setEllipsisLoc(TL.getEllipsisLoc());
+  return Result;
+}
+
+template <typename Derived>
+QualType TreeTransform<Derived>::TransformDependentTemplateSpecializationType(
+    TypeLocBuilder &TLB, DependentTemplateSpecializationTypeLoc TL) {
   NestedNameSpecifierLoc QualifierLoc;
   if (TL.getQualifierLoc()) {
     QualifierLoc

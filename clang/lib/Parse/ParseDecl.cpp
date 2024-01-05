@@ -3625,9 +3625,45 @@ void Parser::ParseDeclarationSpecifiers(
         AnnotateTemplateIdTokenAsType(SS, AllowImplicitTypename);
         continue;
       }
+      SourceLocation DependentEllipsisLoc;
+      if (Next.is(tok::ellipsis) && GetLookAheadToken(2).is(tok::identifier)) {
+        DependentEllipsisLoc = Next.getLocation();
+        IdentifierInfo *II = GetLookAheadToken(2).getIdentifierInfo();
 
-      if (Next.isNot(tok::identifier))
+        SuppressAccessChecks SAC(*this, IsTemplateSpecOrInst);
+
+        ParsedType TypeRep = Actions.getPackName(
+            DependentEllipsisLoc, *II, GetLookAheadToken(2).getLocation(),
+            getCurScope(), &SS, false, false, nullptr, AllowImplicitTypename);
+
+        if (IsTemplateSpecOrInst)
+          SAC.done();
+
+        if (!TypeRep) {
+          // Todo corentin: recover ?
+          goto DoneWithDeclSpec;
+        }
+
+        DS.getTypeSpecScope() = SS;
+        ConsumeAnnotationToken(); // The C++ scope.
+
+        isInvalid = DS.SetTypeSpecType(DeclSpec::TST_typename, Loc, PrevSpec,
+                                       DiagID, TypeRep, Policy);
+        if (isInvalid)
+          break;
+
+        // Consume the ellipsis
+        ConsumeToken();
+
+        DS.SetRangeEnd(Tok.getLocation());
+        // consume the identifier
+        ConsumeToken();
+        continue;
+      }
+
+      if (Next.isNot(tok::identifier)) {
         goto DoneWithDeclSpec;
+      }
 
       // Check whether this is a constructor declaration. If we're in a
       // context where the identifier could be a class name, and it has the
@@ -6297,7 +6333,9 @@ void Parser::ParseDeclaratorInternal(Declarator &D,
       (Tok.is(tok::coloncolon) || Tok.is(tok::kw_decltype) ||
        (Tok.is(tok::identifier) &&
         (NextToken().is(tok::coloncolon) || NextToken().is(tok::less))) ||
-       Tok.is(tok::annot_cxxscope))) {
+       Tok.is(tok::annot_cxxscope) ||
+       (Tok.is(tok::coloncolon) && NextToken().is(tok::ellipsis) &&
+        GetLookAheadToken(2).is(tok::identifier)))) {
     bool EnteringContext = D.getContext() == DeclaratorContext::File ||
                            D.getContext() == DeclaratorContext::Member;
     CXXScopeSpec SS;

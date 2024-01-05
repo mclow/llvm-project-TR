@@ -3156,6 +3156,17 @@ StringRef TypeWithKeyword::getKeywordName(ElaboratedTypeKeyword Keyword) {
   llvm_unreachable("Unknown elaborated type keyword.");
 }
 
+const IdentifierInfo *PackNameType::getIdentifier() const {
+  if (const auto *ET = dyn_cast<ElaboratedType>(Underlying)) {
+    QualType Named = ET->getNamedType();
+    if (auto *T = dyn_cast<TypedefType>(Named)) {
+      return T->getDecl()->getIdentifier();
+    }
+    llvm_unreachable("This type does not denote a pack");
+  }
+  return cast<DependentNameType>(Underlying)->getIdentifier();
+}
+
 DependentTemplateSpecializationType::DependentTemplateSpecializationType(
     ElaboratedTypeKeyword Keyword, NestedNameSpecifier *NNS,
     const IdentifierInfo *Name, ArrayRef<TemplateArgument> Args, QualType Canon)
@@ -4549,6 +4560,7 @@ bool Type::canHaveNullability(bool ResultIfUnknown) const {
   case Type::TemplateTypeParm:
   case Type::SubstTemplateTypeParmPack:
   case Type::DependentName:
+  case Type::PackName:
   case Type::DependentTemplateSpecialization:
   case Type::Auto:
     return ResultIfUnknown;

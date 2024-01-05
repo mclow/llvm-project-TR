@@ -6493,6 +6493,10 @@ bool UnnamedLocalNoLinkageFinder::VisitDependentNameType(
   return VisitNestedNameSpecifier(T->getQualifier());
 }
 
+bool UnnamedLocalNoLinkageFinder::VisitPackNameType(const PackNameType *T) {
+  return Visit(T->getUnderlyingType());
+}
+
 bool UnnamedLocalNoLinkageFinder::VisitDependentTemplateSpecializationType(
                                  const DependentTemplateSpecializationType* T) {
   if (auto *Q = T->getQualifier())
@@ -11004,7 +11008,8 @@ TypeResult Sema::ActOnTypenameType(Scope *S, SourceLocation TypenameLoc,
                                    const CXXScopeSpec &SS,
                                    const IdentifierInfo &II,
                                    SourceLocation IdLoc,
-                                   ImplicitTypenameContext IsImplicitTypename) {
+                                   ImplicitTypenameContext IsImplicitTypename,
+                                   const ParsedPackInfo *PackInfo) {
   if (SS.isInvalid())
     return true;
 
@@ -11022,7 +11027,7 @@ TypeResult Sema::ActOnTypenameType(Scope *S, SourceLocation TypenameLoc,
                          IsImplicitTypename == ImplicitTypenameContext::Yes)
                             ? ElaboratedTypeKeyword::Typename
                             : ElaboratedTypeKeyword::None,
-                        TypenameLoc, QualifierLoc, II, IdLoc, &TSI,
+                        TypenameLoc, QualifierLoc, PackInfo, II, IdLoc, &TSI,
                         /*DeducedTSTContext=*/true);
   if (T.isNull())
     return true;
@@ -11162,32 +11167,39 @@ static bool isEnableIf(NestedNameSpecifierLoc NNS, const IdentifierInfo &II,
   return true;
 }
 
-QualType
-Sema::CheckTypenameType(ElaboratedTypeKeyword Keyword,
-                        SourceLocation KeywordLoc,
-                        NestedNameSpecifierLoc QualifierLoc,
-                        const IdentifierInfo &II,
-                        SourceLocation IILoc,
-                        TypeSourceInfo **TSI,
-                        bool DeducedTSTContext) {
-  QualType T = CheckTypenameType(Keyword, KeywordLoc, QualifierLoc, II, IILoc,
-                                 DeducedTSTContext);
+QualType Sema::CheckTypenameType(ElaboratedTypeKeyword Keyword,
+                                 SourceLocation KeywordLoc,
+                                 NestedNameSpecifierLoc QualifierLoc,
+                                 const ParsedPackInfo *PackInfo,
+                                 const IdentifierInfo &II, SourceLocation IILoc,
+                                 TypeSourceInfo **TSI, bool DeducedTSTContext) {
+  QualType T = CheckTypenameType(Keyword, KeywordLoc, QualifierLoc, PackInfo,
+                                 II, IILoc, DeducedTSTContext);
   if (T.isNull())
     return QualType();
 
-  *TSI = Context.CreateTypeSourceInfo(T);
-  if (isa<DependentNameType>(T)) {
-    DependentNameTypeLoc TL =
-        (*TSI)->getTypeLoc().castAs<DependentNameTypeLoc>();
+  TypeLocBuilder TLB;
+
+  if (auto *Pack = dyn_cast<PackNameType>(T)) {
+    auto InnerTL = TLB.push<DependentNameTypeLoc>(Pack->getUnderlyingType());
+    InnerTL.setElaboratedKeywordLoc(KeywordLoc);
+    InnerTL.setQualifierLoc(QualifierLoc);
+    InnerTL.setNameLoc(IILoc);
+    auto TL = TLB.push<PackNameTypeLoc>(T);
+    TL.setEllipsisLoc(PackInfo->EllipsisLoc);
+  } else if (isa<DependentNameType>(T)) {
+    auto TL = TLB.push<DependentNameTypeLoc>(T);
     TL.setElaboratedKeywordLoc(KeywordLoc);
     TL.setQualifierLoc(QualifierLoc);
     TL.setNameLoc(IILoc);
   } else {
-    ElaboratedTypeLoc TL = (*TSI)->getTypeLoc().castAs<ElaboratedTypeLoc>();
+    auto TL = TLB.push<ElaboratedTypeLoc>(T);
+    // ElaboratedTypeLoc TL = (*TSI)->getTypeLoc().castAs<ElaboratedTypeLoc>();
     TL.setElaboratedKeywordLoc(KeywordLoc);
     TL.setQualifierLoc(QualifierLoc);
     TL.getNamedTypeLoc().castAs<TypeSpecTypeLoc>().setNameLoc(IILoc);
   }
+  *TSI = TLB.getTypeSourceInfo(getASTContext(), T);
   return T;
 }
 
@@ -11376,6 +11388,21 @@ Sema::CheckTypenameType(ElaboratedTypeKeyword Keyword,
              : diag::note_typename_refers_here)
       << Name;
   return QualType();
+}
+
+QualType Sema::CheckTypenameType(ElaboratedTypeKeyword Keyword,
+                                 SourceLocation KeywordLoc,
+                                 NestedNameSpecifierLoc QualifierLoc,
+                                 const ParsedPackInfo *PackInfo,
+                                 const IdentifierInfo &II, SourceLocation IILoc,
+                                 bool DeducedTSTContext) {
+  QualType Pattern = CheckTypenameType(Keyword, KeywordLoc, QualifierLoc, II,
+                                       IILoc, DeducedTSTContext);
+  if (!PackInfo || Pattern.isNull())
+    return Pattern;
+  assert(PackInfo->EllipsisLoc.isValid() && "expected a pack");
+  assert(isa<DependentNameType>(Pattern));
+  return Context.getPackNameType(Pattern);
 }
 
 namespace {

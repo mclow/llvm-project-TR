@@ -1127,6 +1127,9 @@ DEF_TRAVERSE_TYPE(ElaboratedType, {
 DEF_TRAVERSE_TYPE(DependentNameType,
                   { TRY_TO(TraverseNestedNameSpecifier(T->getQualifier())); })
 
+DEF_TRAVERSE_TYPE(PackNameType,
+                  { TRY_TO(TraverseType(T->getUnderlyingType())); })
+
 DEF_TRAVERSE_TYPE(DependentTemplateSpecializationType, {
   TRY_TO(TraverseNestedNameSpecifier(T->getQualifier()));
   TRY_TO(TraverseTemplateArguments(T->template_arguments()));
@@ -1414,6 +1417,9 @@ DEF_TRAVERSE_TYPELOC(ElaboratedType, {
 DEF_TRAVERSE_TYPELOC(DependentNameType, {
   TRY_TO(TraverseNestedNameSpecifierLoc(TL.getQualifierLoc()));
 })
+
+DEF_TRAVERSE_TYPELOC(PackNameType,
+                     { TRY_TO(TraverseTypeLoc(TL.getUnderlyingTypeLoc())); })
 
 DEF_TRAVERSE_TYPELOC(DependentTemplateSpecializationType, {
   if (TL.getQualifierLoc()) {

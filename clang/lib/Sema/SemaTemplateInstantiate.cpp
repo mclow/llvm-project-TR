@@ -2267,10 +2267,7 @@ TemplateInstantiator::TransformTemplateTypeParmType(TypeLocBuilder &TLB,
     auto [AssociatedDecl, Final] =
         TemplateArgs.getAssociatedDecl(T->getDepth());
     std::optional<unsigned> PackIndex;
-    if (T->isParameterPack()) {
-      assert(Arg.getKind() == TemplateArgument::Pack &&
-             "Missing argument pack");
-
+    if (T->isParameterPack() && Arg.getKind() == TemplateArgument::Pack) {
       if (getSema().ArgumentPackSubstitutionIndex == -1) {
         // We have the template argument pack, but we're not expanding the
         // enclosing pack expansion yet. Just save the template argument
@@ -2758,6 +2755,31 @@ void Sema::SubstExceptionSpec(FunctionDecl *New, const FunctionProtoType *Proto,
     ESI.Type = EST_None;
 
   UpdateExceptionSpec(New, ESI);
+}
+
+QualType Sema::ExpandNonDependentPack(QualType T, SourceLocation Loc) {
+
+  QualType Pattern;
+  if (auto *PIT = dyn_cast<PackIndexingType>(T.getTypePtr())) {
+    Pattern = PIT->getPattern();
+  } else {
+    assert(false && "can't substitute this type");
+  }
+
+  SmallVector<UnexpandedParameterPack, 2> Unexpanded;
+  collectUnexpandedParameterPacks(Pattern, Unexpanded);
+  assert(!Unexpanded.empty() && "Pack expansion does not unexpanded packs");
+  for (const auto &P : Unexpanded) {
+    if (auto *AliasPack = P.getAs<TypeAliasPackDecl *>()) {
+      if (AliasPack->isDependentExpansion(getASTContext()))
+        return T;
+    }
+    return T;
+  }
+
+  MultiLevelTemplateArgumentList MTAL;
+  TemplateInstantiator Instantiator(*this, MTAL, Loc, DeclarationName());
+  return Instantiator.TransformType(T);
 }
 
 namespace {

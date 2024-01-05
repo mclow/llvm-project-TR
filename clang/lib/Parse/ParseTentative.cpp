@@ -1362,6 +1362,16 @@ Parser::isCXXDeclarationSpecifier(ImplicitTypenameContext AllowImplicitTypename,
              GetLookAheadToken(Lookahead + 1).isOneOf(tok::amp, tok::ampamp)));
   };
   switch (Tok.getKind()) {
+  case tok::ellipsis: {
+    if (NextToken().is(tok::identifier)) {
+      if (TryAnnotateTypeOrScopeToken())
+        return TPResult::Error;
+      if (Tok.is(tok::ellipsis))
+        return TPResult::False;
+    }
+    return isCXXDeclarationSpecifier(ImplicitTypenameContext::No,
+                                     BracedCastResult, InvalidAsDeclSpec);
+  }
   case tok::identifier: {
     if (GetLookAheadToken(1).is(tok::ellipsis) &&
         GetLookAheadToken(2).is(tok::l_square)) {

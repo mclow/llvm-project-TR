@@ -333,7 +333,8 @@ static ParsedType buildNamedType(Sema &S, const CXXScopeSpec *SS, QualType T,
 /// determine whether the name refers to a type. If so, returns an
 /// opaque pointer (actually a QualType) corresponding to that
 /// type. Otherwise, returns NULL.
-ParsedType Sema::getTypeName(const IdentifierInfo &II, SourceLocation NameLoc,
+ParsedType Sema::getTypeName(const ParsedPackInfo *PackInfo,
+                             const IdentifierInfo &II, SourceLocation NameLoc,
                              Scope *S, CXXScopeSpec *SS, bool isClassName,
                              bool HasTrailingDot, ParsedType ObjectTypePtr,
                              bool IsCtorOrDtorName,
@@ -384,16 +385,18 @@ ParsedType Sema::getTypeName(const IdentifierInfo &II, SourceLocation NameLoc,
 
         // We know from the grammar that this name refers to a type,
         // so build a dependent node to describe the type.
-        if (WantNontrivialTypeSourceInfo)
+        if (WantNontrivialTypeSourceInfo) {
           return ActOnTypenameType(S, SourceLocation(), *SS, II, NameLoc,
-                                   (ImplicitTypenameContext)IsImplicitTypename)
+                                   (ImplicitTypenameContext)IsImplicitTypename,
+                                   PackInfo)
               .get();
+        }
 
         NestedNameSpecifierLoc QualifierLoc = SS->getWithLocInContext(Context);
         QualType T = CheckTypenameType(
             IsImplicitTypename ? ElaboratedTypeKeyword::Typename
                                : ElaboratedTypeKeyword::None,
-            SourceLocation(), QualifierLoc, II, NameLoc);
+            SourceLocation(), QualifierLoc, PackInfo, II, NameLoc);
         return ParsedType::make(T);
       }
 
@@ -601,6 +604,36 @@ ParsedType Sema::getTypeName(const IdentifierInfo &II, SourceLocation NameLoc,
     T = Context.getUsingType(FoundUsingShadow, T);
 
   return buildNamedType(*this, SS, T, NameLoc, WantNontrivialTypeSourceInfo);
+}
+
+ParsedType Sema::getTypeName(const IdentifierInfo &II, SourceLocation NameLoc,
+                             Scope *S, CXXScopeSpec *SS, bool isClassName,
+                             bool HasTrailingDot, ParsedType ObjectTypePtr,
+                             bool IsCtorOrDtorName,
+                             bool WantNontrivialTypeSourceInfo,
+                             bool IsClassTemplateDeductionContext,
+                             ImplicitTypenameContext AllowImplicitTypename,
+                             IdentifierInfo **CorrectedII) {
+  return getTypeName(
+      nullptr, II, NameLoc, S, SS, isClassName, HasTrailingDot, ObjectTypePtr,
+      IsCtorOrDtorName, WantNontrivialTypeSourceInfo,
+      IsClassTemplateDeductionContext, AllowImplicitTypename, CorrectedII);
+}
+
+ParsedType Sema::getPackName(SourceLocation EllipsisLoc,
+                             const IdentifierInfo &II, SourceLocation NameLoc,
+                             Scope *S, CXXScopeSpec *SS, bool isClassName,
+                             bool HasTrailingDot, ParsedType ObjectType,
+                             ImplicitTypenameContext AllowImplicitTypename,
+                             IdentifierInfo **CorrectedII) {
+  assert(EllipsisLoc.isValid());
+  ParsedPackInfo PackInfo{EllipsisLoc};
+  return getTypeName(&PackInfo, II, NameLoc, S, SS, isClassName, HasTrailingDot,
+                     ObjectType,
+                     /*IsCtorOrDtorName=*/false,
+                     /*WantNontrivialTypeSourceInfo=*/true,
+                     /*IsClassTemplateDeductionContext=*/true,
+                     AllowImplicitTypename, CorrectedII);
 }
 
 // Builds a fake NNS for the given decl context.

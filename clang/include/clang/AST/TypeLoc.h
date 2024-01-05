@@ -2413,6 +2413,33 @@ public:
   void initializeLocal(ASTContext &Context, SourceLocation Loc);
 };
 
+struct PackNameLocInfo {
+  SourceLocation EllipsisLoc;
+};
+
+class PackNameTypeLoc : public ConcreteTypeLoc<UnqualTypeLoc, PackNameTypeLoc,
+                                               PackNameType, PackNameLocInfo> {
+public:
+  SourceLocation getEllipsisLoc() const {
+    return this->getLocalData()->EllipsisLoc;
+  }
+  SourceLocation setEllipsisLoc(SourceLocation Loc) const {
+    return this->getLocalData()->EllipsisLoc = Loc;
+  }
+
+  TypeLoc getUnderlyingTypeLoc() const { return getInnerTypeLoc(); }
+
+  QualType getInnerType() const { return getTypePtr()->getUnderlyingType(); }
+
+  SourceRange getLocalSourceRange() const LLVM_READONLY {
+    return getUnderlyingTypeLoc().getSourceRange();
+  }
+
+  void initializeLocal(ASTContext &Context, SourceLocation Loc) {
+    setEllipsisLoc(Loc);
+  }
+};
+
 struct DependentTemplateSpecializationLocInfo : DependentNameLocInfo {
   SourceLocation TemplateKWLoc;
   SourceLocation LAngleLoc;

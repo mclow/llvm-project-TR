@@ -5129,6 +5129,24 @@ QualType ASTContext::getDependentNameType(ElaboratedTypeKeyword Keyword,
   return QualType(T, 0);
 }
 
+QualType ASTContext::getPackNameType(QualType Pattern, QualType Canon) const {
+  if (Canon.isNull() && !Pattern.isCanonical())
+    Canon = getPackNameType(getCanonicalType(Pattern));
+
+  llvm::FoldingSetNodeID ID;
+  PackNameType::Profile(ID, Pattern);
+
+  void *InsertPos = nullptr;
+  PackNameType *T = PackNameTypes.FindNodeOrInsertPos(ID, InsertPos);
+  if (T)
+    return QualType(T, 0);
+
+  T = new (*this, alignof(PackNameType)) PackNameType(Pattern, Canon);
+  Types.push_back(T);
+  PackNameTypes.InsertNode(T, InsertPos);
+  return QualType(T, 0);
+}
+
 QualType ASTContext::getDependentTemplateSpecializationType(
     ElaboratedTypeKeyword Keyword, NestedNameSpecifier *NNS,
     const IdentifierInfo *Name, ArrayRef<TemplateArgumentLoc> Args) const {

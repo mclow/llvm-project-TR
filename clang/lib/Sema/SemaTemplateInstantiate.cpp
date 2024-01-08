@@ -2759,6 +2759,8 @@ void Sema::SubstExceptionSpec(FunctionDecl *New, const FunctionProtoType *Proto,
 
 QualType Sema::ExpandNonDependentPack(QualType T, SourceLocation Loc) {
 
+  return T;
+
   QualType Pattern;
   if (auto *PIT = dyn_cast<PackIndexingType>(T.getTypePtr())) {
     Pattern = PIT->getPattern();
@@ -2768,7 +2770,7 @@ QualType Sema::ExpandNonDependentPack(QualType T, SourceLocation Loc) {
 
   SmallVector<UnexpandedParameterPack, 2> Unexpanded;
   collectUnexpandedParameterPacks(Pattern, Unexpanded);
-  assert(!Unexpanded.empty() && "Pack expansion does not unexpanded packs");
+  assert(!Unexpanded.empty() && "Pack expansion does not refer to unexpanded packs");
   for (const auto &P : Unexpanded) {
     if (auto *AliasPack = P.getAs<TypeAliasPackDecl *>()) {
       if (AliasPack->isDependentExpansion(getASTContext()))

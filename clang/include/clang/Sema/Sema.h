@@ -243,6 +243,7 @@ class UnexpandedParameterPack {
       Data;
   SourceLocation Loc;
   bool IsTemplateParameter : 1;
+  bool NeedsInstantiation  : 1;
 
 public:
   UnexpandedParameterPack(const Type *, SourceLocation);
@@ -251,6 +252,7 @@ public:
 
   std::pair<unsigned, unsigned> getDepthAndIndex() const;
   bool isTemplateParameter() const;
+  bool needsInstantiation() const;
 
   const IdentifierInfo *getIdentifier() const;
 

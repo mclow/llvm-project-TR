@@ -1990,7 +1990,8 @@ bool Parser::TryKeywordIdentFallback(bool DisableKeyword) {
 /// as the current tokens, so only call it in contexts where these are invalid.
 bool Parser::TryAnnotateTypeOrScopeToken(
     ImplicitTypenameContext AllowImplicitTypename) {
-  assert((Tok.is(tok::identifier) || Tok.is(tok::coloncolon) ||
+  assert((Tok.is(tok::ellipsis) ||
+          Tok.is(tok::identifier) || Tok.is(tok::coloncolon) ||
           Tok.is(tok::kw_typename) || Tok.is(tok::annot_cxxscope) ||
           Tok.is(tok::kw_decltype) || Tok.is(tok::annot_template_id) ||
           Tok.is(tok::kw___super) || Tok.is(tok::kw_auto) ||

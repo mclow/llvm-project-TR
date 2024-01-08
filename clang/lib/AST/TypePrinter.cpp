@@ -1706,10 +1706,7 @@ void TypePrinter::printPackNameBefore(const PackNameType *T, raw_ostream &OS) {
     ElaboratedTypePolicyRAII PolicyRAII(Policy);
     printBefore(ET->getNamedType(), OS);
   } else {
-    OS << TypeWithKeyword::getKeywordName(ET->getKeyword());
-    if (ET->getKeyword() != ElaboratedTypeKeyword::None)
-      OS << " ";
-    auto DN = cast<DependentNameType>(T);
+    auto DN = cast<DependentNameType>(Underlying);
     DN->getQualifier()->print(OS, Policy);
     OS << "..." << T->getIdentifier()->getName();
     spaceBeforePlaceHolder(OS);

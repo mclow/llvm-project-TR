@@ -6422,26 +6422,25 @@ template<typename Derived>
 QualType TreeTransform<Derived>::TransformTypedefType(TypeLocBuilder &TLB,
                                                       TypedefTypeLoc TL) {
   const TypedefType *T = TL.getTypePtr();
-  TypedefNameDecl *Typedef = nullptr;
+  TypedefNameDecl *Typedef = cast_or_null<TypedefNameDecl>(
+      getDerived().TransformDecl(TL.getNameLoc(), T->getDecl()));
 
-  if (auto *D = dyn_cast<TypeAliasPackDecl>(T->getDecl());
+  if (auto *D = dyn_cast_if_present<TypeAliasPackDecl>(Typedef);
       D && SemaRef.ArgumentPackSubstitutionIndex != -1) {
     Typedef = cast_or_null<TypedefNameDecl>(getDerived().TransformDecl(
         TL.getNameLoc(),
         D->expansions()[SemaRef.ArgumentPackSubstitutionIndex]));
-  } else {
-    Typedef = cast_or_null<TypedefNameDecl>(
-        getDerived().TransformDecl(TL.getNameLoc(), T->getDecl()));
   }
+
   if (!Typedef)
     return QualType();
 
-  QualType Result = getDerived().TransformType(Typedef->getUnderlyingType());
-  if (Result.isNull())
-    return QualType();
-  Result = getDerived().RebuildTypedefType(Typedef, Result);
-  if (Result.isNull())
-    return QualType();
+  QualType Result = TL.getType();
+  if (getDerived().AlwaysRebuild() || Typedef != T->getDecl()) {
+      Result = getDerived().RebuildTypedefType(Typedef, QualType());
+     if (Result.isNull())
+       return QualType();
+  }
 
   TypedefTypeLoc NewTL = TLB.push<TypedefTypeLoc>(Result);
   NewTL.setNameLoc(TL.getNameLoc());
@@ -7386,6 +7385,9 @@ TreeTransform<Derived>::TransformPackNameType(clang::TypeLocBuilder &TLB,
       getDerived().TransformType(TLB, TL.getUnderlyingTypeLoc());
   if (Underlying.isNull())
     return QualType();
+
+  if(!Underlying->containsUnexpandedParameterPack())
+      return Underlying;
 
   QualType Result =
       getDerived().RebuildPackNameType(TL.getEllipsisLoc(), Underlying);
@@ -14243,6 +14245,10 @@ TreeTransform<Derived>::TransformSizeOfPackExpr(SizeOfPackExpr *E) {
       if (auto *TTPD = dyn_cast<TemplateTypeParmDecl>(Pack)) {
         ArgStorage = getSema().Context.getPackExpansionType(
             getSema().Context.getTypeDeclType(TTPD), std::nullopt);
+      } else if (auto *Alias = dyn_cast<TypeAliasDecl>(Pack)) {
+          ArgStorage = getSema().Context.getPackExpansionType(getSema().Context.getTypeDeclType(Alias), std::nullopt);
+      } else if (auto *Alias = dyn_cast<TypeAliasPackDecl>(Pack)) {
+        ArgStorage = getSema().Context.getPackExpansionType(getSema().Context.getTypeDeclType(Alias), std::nullopt);
       } else if (auto *TTPD = dyn_cast<TemplateTemplateParmDecl>(Pack)) {
         ArgStorage = TemplateArgument(TemplateName(TTPD), std::nullopt);
       } else {

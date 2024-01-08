@@ -11128,23 +11128,25 @@ QualType Sema::CheckTypenameType(ElaboratedTypeKeyword Keyword,
   TypeLocBuilder TLB;
 
   if (auto *Pack = dyn_cast<PackNameType>(T)) {
-    auto InnerTL = TLB.push<DependentNameTypeLoc>(Pack->getUnderlyingType());
-    InnerTL.setElaboratedKeywordLoc(KeywordLoc);
-    InnerTL.setQualifierLoc(QualifierLoc);
-    InnerTL.setNameLoc(IILoc);
-    auto TL = TLB.push<PackNameTypeLoc>(T);
-    TL.setEllipsisLoc(PackInfo->EllipsisLoc);
+      auto InnerTL = TLB.push<DependentNameTypeLoc>(Pack->getUnderlyingType());
+      InnerTL.setElaboratedKeywordLoc(KeywordLoc);
+      InnerTL.setQualifierLoc(QualifierLoc);
+      InnerTL.setNameLoc(IILoc);
+      auto TL = TLB.push<PackNameTypeLoc>(T);
+      TL.setEllipsisLoc(PackInfo->EllipsisLoc);
   } else if (isa<DependentNameType>(T)) {
-    auto TL = TLB.push<DependentNameTypeLoc>(T);
-    TL.setElaboratedKeywordLoc(KeywordLoc);
-    TL.setQualifierLoc(QualifierLoc);
-    TL.setNameLoc(IILoc);
+      auto TL = TLB.push<DependentNameTypeLoc>(T);
+      TL.setElaboratedKeywordLoc(KeywordLoc);
+      TL.setQualifierLoc(QualifierLoc);
+      TL.setNameLoc(IILoc);
   } else {
-    auto TL = TLB.push<ElaboratedTypeLoc>(T);
-    // ElaboratedTypeLoc TL = (*TSI)->getTypeLoc().castAs<ElaboratedTypeLoc>();
-    TL.setElaboratedKeywordLoc(KeywordLoc);
-    TL.setQualifierLoc(QualifierLoc);
-    TL.getNamedTypeLoc().castAs<TypeSpecTypeLoc>().setNameLoc(IILoc);
+      auto *ET = cast<ElaboratedType>(T);
+      QualType NamedT = ET->getNamedType();
+      TLB.pushTypeSpec(NamedT);
+      auto TL = TLB.push<ElaboratedTypeLoc>(T);
+      TL.setElaboratedKeywordLoc(KeywordLoc);
+      TL.setQualifierLoc(QualifierLoc);
+      TL.getNamedTypeLoc().castAs<TypeSpecTypeLoc>().setNameLoc(IILoc);
   }
   *TSI = TLB.getTypeSourceInfo(getASTContext(), T);
   return T;

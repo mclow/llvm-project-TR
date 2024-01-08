@@ -1367,9 +1367,10 @@ Parser::isCXXDeclarationSpecifier(ImplicitTypenameContext AllowImplicitTypename,
         return TPResult::Error;
       if (Tok.is(tok::ellipsis))
         return TPResult::False;
+      return isCXXDeclarationSpecifier(ImplicitTypenameContext::No,
+                                       BracedCastResult, InvalidAsDeclSpec);
     }
-    return isCXXDeclarationSpecifier(ImplicitTypenameContext::No,
-                                     BracedCastResult, InvalidAsDeclSpec);
+    break;
   }
   case tok::identifier: {
     if (GetLookAheadToken(1).is(tok::ellipsis) &&

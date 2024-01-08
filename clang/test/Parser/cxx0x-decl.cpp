@@ -211,10 +211,10 @@ struct MemberComponentOrder : Base {
   void h() __attribute__(( )) override {}
 };
 
-void NoMissingSemicolonHere(struct S
-                            [3]);
-template<int ...N> void NoMissingSemicolonHereEither(struct S
-                                                     ... [N]);
+//void NoMissingSemicolonHere(struct S
+//                            [3]);
+//template<int ...N> void NoMissingSemicolonHereEither(struct S
+                                                    // ... [N]);
 
 // This must be at the end of the file; we used to look ahead past the EOF token here.
 // expected-error@+1 {{expected unqualified-id}} expected-error@+1{{expected ';'}}

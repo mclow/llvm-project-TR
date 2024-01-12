@@ -3717,13 +3717,16 @@ void FunctionProtoType::Profile(llvm::FoldingSetNodeID &ID,
           getExtProtoInfo(), Ctx, isCanonicalUnqualified());
 }
 
+static TypeDependence computeTypedefTypeDependence(QualType T, const TypedefNameDecl *D) {
+  TypeDependence Dep = toSemanticDependence(T->getDependence());
+  if(const auto* Alias = dyn_cast<TypeAliasDecl>(D); Alias && Alias->getEllipsisLoc().isValid())
+    Dep |= TypeDependence::UnexpandedPack;
+  return Dep;
+}
+
 TypedefType::TypedefType(TypeClass tc, const TypedefNameDecl *D,
                          QualType Underlying, QualType can)
-    : Type(tc, can,
-           toSemanticDependence(can->getDependence()) |
-               (can->containsUnexpandedParameterPack()
-                    ? TypeDependence::UnexpandedPack
-                    : TypeDependence::None)),
+    : Type(tc, can, computeTypedefTypeDependence(can, D)),
       Decl(const_cast<TypedefNameDecl *>(D)) {
 
   assert(!isa<TypedefType>(can) && "Invalid canonical type");

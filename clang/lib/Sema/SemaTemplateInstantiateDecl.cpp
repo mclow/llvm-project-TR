@@ -1015,7 +1015,8 @@ Decl *TemplateDeclInstantiator::InstantiateTypedefNameDecl(TypedefNameDecl *D,
   if (IsTypeAlias)
     Typedef = TypeAliasDecl::Create(SemaRef.Context, Owner, D->getBeginLoc(),
                                     D->getLocation(), D->getIdentifier(), DI,
-                                    cast<TypeAliasDecl>(D)->getEllipsisLoc());
+                                    SemaRef.ArgumentPackSubstitutionIndex == -1 ?
+                                        cast<TypeAliasDecl>(D)->getEllipsisLoc() : SourceLocation());
   else
     Typedef = TypedefDecl::Create(SemaRef.Context, Owner, D->getBeginLoc(),
                                   D->getLocation(), D->getIdentifier(), DI);
@@ -6067,6 +6068,17 @@ static bool isInstantiationOfStaticDataMember(VarDecl *Pattern,
   return false;
 }
 
+static bool isInstantiationOfTypeAliasDecl(TypeAliasDecl *Pattern, Decl *Instance) {
+   auto* ND = dyn_cast<NamedDecl>(Instance);
+   if(!ND)
+       return false;
+
+   if(isa<TypeAliasDecl, TypeAliasPackDecl>(Instance))
+       return Pattern->getDeclName() == ND->getDeclName();
+
+  return false;
+}
+
 // Other is the prospective instantiation
 // D is the prospective pattern
 static bool isInstantiationOf(ASTContext &Ctx, NamedDecl *D, Decl *Other) {
@@ -6075,6 +6087,9 @@ static bool isInstantiationOf(ASTContext &Ctx, NamedDecl *D, Decl *Other) {
 
   if (auto *UUD = dyn_cast<UnresolvedUsingValueDecl>(D))
     return isInstantiationOfUnresolvedUsingDecl(UUD, Other, Ctx);
+
+  if (auto *Alias = dyn_cast<TypeAliasDecl>(D))
+    return isInstantiationOfTypeAliasDecl(Alias, Other);
 
   if (D->getKind() != Other->getKind())
     return false;

@@ -792,13 +792,14 @@ ExprResult Sema::CheckPackExpansion(Expr *Pattern, SourceLocation EllipsisLoc,
     PackExpansionExpr(Context.DependentTy, Pattern, EllipsisLoc, NumExpansions);
 }
 
-UnexpandedParameterPack static findInstantiation(const Sema & SemaRef,
-                                                 UnexpandedParameterPack Pack) {
+UnexpandedParameterPack static findInstantiation(Sema & SemaRef,
+                                                 UnexpandedParameterPack Pack,
+                                                 const MultiLevelTemplateArgumentList &TemplateArgs) {
   if(!Pack.needsInstantiation() || !SemaRef.CurrentInstantiationScope)
     return Pack;
   NamedDecl* D = Pack.getAs<NamedDecl*>();
   assert(D && "Only decls can be instantiated");
-  auto* Instantiated = cast<NamedDecl>(SemaRef.CurrentInstantiationScope->findInstantiationOf(D)->get<Decl *>());
+  auto* Instantiated = SemaRef.FindInstantiatedDecl(D->getLocation(), D, TemplateArgs);
   return UnexpandedParameterPack(Instantiated, Pack.getLocation());
 }
 
@@ -823,7 +824,7 @@ bool Sema::CheckParameterPacksForExpansion(
     bool IsVarDeclPack = false;
     unsigned NewPackSize;
 
-    ParmPack = findInstantiation(*this, ParmPack);
+    ParmPack = findInstantiation(*this, ParmPack, TemplateArgs);
 
     if (ParmPack.isTemplateParameter())
       std::tie(Depth, Index) = ParmPack.getDepthAndIndex();

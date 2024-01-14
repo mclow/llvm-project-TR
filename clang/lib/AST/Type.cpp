@@ -3700,6 +3700,8 @@ static TypeDependence computeTypedefTypeDependence(QualType T, const TypedefName
   TypeDependence Dep = toSemanticDependence(T->getDependence());
   if(const auto* Alias = dyn_cast<TypeAliasDecl>(D); Alias && Alias->getEllipsisLoc().isValid())
     Dep |= TypeDependence::UnexpandedPack;
+  if(const auto* Alias = dyn_cast<TypeAliasPackDecl>(D))
+    Dep |= TypeDependence::UnexpandedPack;
   return Dep;
 }
 

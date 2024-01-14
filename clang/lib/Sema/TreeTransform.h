@@ -4819,8 +4819,22 @@ bool TreeTransform<Derived>::TransformTemplateArguments(
         = getSema().getTemplateArgumentPackExpansionPattern(
               In, Ellipsis, OrigNumExpansions);
 
+
+      // Always transform once to resolve dependent packs
+      // TODO: optimize for the nested specifier case?
+      TemplateArgumentLoc OutPattern = Pattern;
+      {
+        bool Old = SemaRef.DoNotSubstituteTemplateParam;
+        SemaRef.DoNotSubstituteTemplateParam = true;
+        if (getDerived().TransformTemplateArgument(Pattern, OutPattern, Uneval))  {
+             SemaRef.DoNotSubstituteTemplateParam = Old;
+            return true;
+        }
+        SemaRef.DoNotSubstituteTemplateParam = Old;
+      }
+
       SmallVector<UnexpandedParameterPack, 2> Unexpanded;
-      getSema().collectUnexpandedParameterPacks(Pattern, Unexpanded);
+      getSema().collectUnexpandedParameterPacks(OutPattern, Unexpanded);
       assert(!Unexpanded.empty() && "Pack expansion without parameter packs?");
 
       // Determine whether the set of unexpanded parameter packs can and should
@@ -4829,7 +4843,7 @@ bool TreeTransform<Derived>::TransformTemplateArguments(
       bool RetainExpansion = false;
       std::optional<unsigned> NumExpansions = OrigNumExpansions;
       if (getDerived().TryExpandParameterPacks(Ellipsis,
-                                               Pattern.getSourceRange(),
+                                               OutPattern.getSourceRange(),
                                                Unexpanded,
                                                Expand,
                                                RetainExpansion,
@@ -4840,11 +4854,8 @@ bool TreeTransform<Derived>::TransformTemplateArguments(
         // The transform has determined that we should perform a simple
         // transformation on the pack expansion, producing another pack
         // expansion.
-        TemplateArgumentLoc OutPattern;
-        Sema::ArgumentPackSubstitutionIndexRAII SubstIndex(getSema(), -1);
-        if (getDerived().TransformTemplateArgument(Pattern, OutPattern, Uneval))
-          return true;
-
+        if (getDerived().TransformTemplateArgument(OutPattern, OutPattern, Uneval))
+              return true;
         Out = getDerived().RebuildPackExpansion(OutPattern, Ellipsis,
                                                 NumExpansions);
         if (Out.getArgument().isNull())
@@ -4859,7 +4870,7 @@ bool TreeTransform<Derived>::TransformTemplateArguments(
       for (unsigned I = 0; I != *NumExpansions; ++I) {
         Sema::ArgumentPackSubstitutionIndexRAII SubstIndex(getSema(), I);
 
-        if (getDerived().TransformTemplateArgument(Pattern, Out, Uneval))
+        if (getDerived().TransformTemplateArgument(OutPattern, Out, Uneval))
           return true;
 
         if (Out.getArgument().containsUnexpandedParameterPack()) {
@@ -4877,7 +4888,7 @@ bool TreeTransform<Derived>::TransformTemplateArguments(
       if (RetainExpansion) {
         ForgetPartiallySubstitutedPackRAII Forget(getDerived());
 
-        if (getDerived().TransformTemplateArgument(Pattern, Out, Uneval))
+        if (getDerived().TransformTemplateArgument(OutPattern, Out, Uneval))
           return true;
 
         Out = getDerived().RebuildPackExpansion(Out, Ellipsis,
@@ -14191,7 +14202,7 @@ ExprResult
 TreeTransform<Derived>::TransformSizeOfPackExpr(SizeOfPackExpr *E) {
   // If E is not value-dependent, then nothing will change when we transform it.
   // Note: This is an instantiation-centric view.
-  if (!E->isValueDependent())
+  if (!E->isValueDependent() || SemaRef.DoNotSubstituteTemplateParam)
     return E;
 
   EnterExpressionEvaluationContext Unevaluated(

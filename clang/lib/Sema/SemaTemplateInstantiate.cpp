@@ -1755,6 +1755,10 @@ TemplateName TemplateInstantiator::TransformTemplateName(
     bool AllowInjectedClassName) {
   if (TemplateTemplateParmDecl *TTP
        = dyn_cast_or_null<TemplateTemplateParmDecl>(Name.getAsTemplateDecl())) {
+
+    if(SemaRef.DoNotSubstituteTemplateParam)
+      return Name;
+
     if (TTP->getDepth() < TemplateArgs.getNumLevels()) {
       // If the corresponding template argument is NULL or non-existent, it's
       // because we are performing instantiation from explicitly-specified
@@ -1812,7 +1816,7 @@ TemplateName TemplateInstantiator::TransformTemplateName(
 
   if (SubstTemplateTemplateParmPackStorage *SubstPack
       = Name.getAsSubstTemplateTemplateParmPack()) {
-    if (getSema().ArgumentPackSubstitutionIndex == -1)
+    if (getSema().DoNotSubstituteTemplateParam || getSema().ArgumentPackSubstitutionIndex == -1)
       return Name;
 
     TemplateArgument Pack = SubstPack->getArgumentPack();
@@ -1845,7 +1849,7 @@ TemplateInstantiator::TransformTemplateParmRefExpr(DeclRefExpr *E,
   // because we are performing instantiation from explicitly-specified
   // template arguments in a function template, but there were some
   // arguments left unspecified.
-  if (!TemplateArgs.hasTemplateArgument(NTTP->getDepth(),
+  if (SemaRef.DoNotSubstituteTemplateParam || !TemplateArgs.hasTemplateArgument(NTTP->getDepth(),
                                         NTTP->getPosition()))
     return E;
 
@@ -2013,7 +2017,7 @@ ExprResult TemplateInstantiator::transformNonTypeTemplateParmRef(
 ExprResult
 TemplateInstantiator::TransformSubstNonTypeTemplateParmPackExpr(
                                           SubstNonTypeTemplateParmPackExpr *E) {
-  if (getSema().ArgumentPackSubstitutionIndex == -1) {
+  if (SemaRef.DoNotSubstituteTemplateParam || getSema().ArgumentPackSubstitutionIndex == -1) {
     // We aren't expanding the parameter pack, so just return ourselves.
     return E;
   }
@@ -2077,7 +2081,7 @@ ExprResult TemplateInstantiator::RebuildVarDeclRefExpr(VarDecl *PD,
 
 ExprResult
 TemplateInstantiator::TransformFunctionParmPackExpr(FunctionParmPackExpr *E) {
-  if (getSema().ArgumentPackSubstitutionIndex != -1) {
+  if (SemaRef.DoNotSubstituteTemplateParam || getSema().ArgumentPackSubstitutionIndex != -1) {
     // We can expand this parameter pack now.
     VarDecl *D = E->getExpansion(getSema().ArgumentPackSubstitutionIndex);
     VarDecl *VD = cast_or_null<VarDecl>(TransformDecl(E->getExprLoc(), D));
@@ -2121,7 +2125,7 @@ TemplateInstantiator::TransformFunctionParmPackRefExpr(DeclRefExpr *E,
   if (DeclArgumentPack *Pack = Found->dyn_cast<DeclArgumentPack *>()) {
     // If this is a reference to a function parameter pack which we can
     // substitute but can't yet expand, build a FunctionParmPackExpr for it.
-    if (getSema().ArgumentPackSubstitutionIndex == -1) {
+    if (SemaRef.DoNotSubstituteTemplateParam || getSema().ArgumentPackSubstitutionIndex == -1) {
       QualType T = TransformType(E->getType());
       if (T.isNull())
         return ExprError();
@@ -2143,6 +2147,9 @@ TemplateInstantiator::TransformFunctionParmPackRefExpr(DeclRefExpr *E,
 ExprResult
 TemplateInstantiator::TransformDeclRefExpr(DeclRefExpr *E) {
   NamedDecl *D = E->getDecl();
+
+  if (SemaRef.DoNotSubstituteTemplateParam)
+    return E;
 
   // Handle references to non-type template parameters and non-type template
   // parameter packs.
@@ -2228,6 +2235,13 @@ QualType
 TemplateInstantiator::TransformTemplateTypeParmType(TypeLocBuilder &TLB,
                                                     TemplateTypeParmTypeLoc TL,
                                                     bool SuppressObjCLifetime) {
+  if(SemaRef.DoNotSubstituteTemplateParam) {
+    TemplateTypeParmTypeLoc NewTL
+        = TLB.push<TemplateTypeParmTypeLoc>(TL.getType());
+    NewTL.setNameLoc(TL.getNameLoc());
+    return TL.getType();
+  }
+
   const TemplateTypeParmType *T = TL.getTypePtr();
   if (T->getDepth() < TemplateArgs.getNumLevels()) {
     // Replace the template type parameter with its corresponding
@@ -2316,7 +2330,7 @@ QualType TemplateInstantiator::TransformSubstTemplateTypeParmPackType(
 
   Decl *NewReplaced = TransformDecl(TL.getNameLoc(), T->getAssociatedDecl());
 
-  if (getSema().ArgumentPackSubstitutionIndex == -1) {
+  if (SemaRef.DoNotSubstituteTemplateParam || getSema().ArgumentPackSubstitutionIndex == -1) {
     // We aren't expanding the parameter pack, so just return ourselves.
     QualType Result = TL.getType();
     if (NewReplaced != T->getAssociatedDecl())

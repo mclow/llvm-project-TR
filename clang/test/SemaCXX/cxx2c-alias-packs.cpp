@@ -38,3 +38,31 @@ struct ok {
     using ...b = S<Ts...>::...types::a;
 };
 
+
+
+namespace DependentNNS {
+
+template <typename...Ts>
+struct S {
+    using ... A = Ts;
+};
+
+template <typename T>
+struct Inner {
+    using type = T;
+};
+
+template <typename...Ts>
+struct AAAA {
+};
+
+template <typename... T>
+void f() {
+    AAAA<typename S<T...>::...A::type...> t;
+}
+
+int test() {
+    f<Inner<int>, Inner<long>, Inner<bool>, Inner<float>>();
+}
+
+}

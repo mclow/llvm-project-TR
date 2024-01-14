@@ -829,6 +829,24 @@ bool Sema::CheckParameterPacksForExpansion(
     if (ParmPack.isTemplateParameter())
       std::tie(Depth, Index) = ParmPack.getDepthAndIndex();
 
+    auto HandlePackNameType = [&](const Type * T) {
+      if (const auto *Name = ParmPack.getAs<const PackNameType *>()) {
+        if (const auto *ET = dyn_cast<ElaboratedType>(Name->getUnderlyingType())) {
+          QualType Named = ET->getNamedType();
+          if (auto *TT = dyn_cast<TypedefType>(Named)) {
+            T = TT;
+          }
+        }
+      }
+      if (auto *TT = dyn_cast<TypedefType>(T)) {
+        if (const auto *Alias = dyn_cast<TypeAliasPackDecl>(TT->getDecl())) {
+          NewPackSize = Alias->expansions().size();
+          return true;
+        }
+      }
+      llvm_unreachable("This type does not denote a pack");
+    };
+
     if (const auto *ND = ParmPack.getAs<const VarDecl *>()) {
       IsVarDeclPack = true;
     } else if (const auto *Alias =
@@ -837,20 +855,18 @@ bool Sema::CheckParameterPacksForExpansion(
     } else if (const auto *Subst =
                    ParmPack.getAs<const SubstTemplateTypeParmPackType *>()) {
       NewPackSize = Subst->getNumArgs();
-    } else if (const auto *Name = ParmPack.getAs<const PackNameType *>()) {
-      if (const auto *ET =
-              dyn_cast<ElaboratedType>(Name->getUnderlyingType())) {
-        QualType Named = ET->getNamedType();
-        if (auto *T = dyn_cast<TypedefType>(Named)) {
-          if (const auto *Alias = dyn_cast<TypeAliasPackDecl>(T->getDecl())) {
-            NewPackSize = Alias->expansions().size();
-          } else {
-            llvm_unreachable("This type does not denote a pack");
-          }
-        } else {
-          llvm_unreachable("This type does not denote a pack");
-        }
-      } else {
+    } else if (const auto * TT = ParmPack.getAs<const TypedefType *>()) {
+      if(!HandlePackNameType(TT)) {
+        ShouldExpand = false;
+        continue;
+      }
+    } else if (const auto *NNS =
+               ParmPack.getAs<const NestedNameSpecifier *>()) {
+      if(NNS->getKind() == NestedNameSpecifier::PackName) {
+        ShouldExpand = false;
+        continue;
+      }
+      if(!HandlePackNameType(NNS->getAsType())) {
         ShouldExpand = false;
         continue;
       }

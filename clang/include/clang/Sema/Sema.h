@@ -9830,6 +9830,8 @@ public:
   /// which argument within the parameter pack will be used for substitution.
   int ArgumentPackSubstitutionIndex;
 
+  bool DoNotSubstituteTemplateParam;
+
   /// RAII object used to change the argument pack substitution index
   /// within a \c Sema object.
   ///

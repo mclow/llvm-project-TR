@@ -1889,28 +1889,6 @@ fastParseASCIIIdentifier(const char *CurPtr,
 
 bool Lexer::LexIdentifierContinue(Token &Result, const char *CurPtr) {
   // Match [_A-Za-z0-9]*, we have already matched an identifier start.
-  enum {
-    C_NOT_IDENTIFIER = 0,
-    C_ID_CONTINUE = 1,
-    C_SPECIAL = 2,
-    C_DOLLAR = 3,
-    C_UNICODE = 4
-  };
-
-  static constexpr unsigned char JUMP_TABLE[256] = {
-      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-      1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 2, 0, 1, 1, 1, 1, 1, 1, 1,
-      1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 2, 0, 0, 1,
-      0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-      1, 1, 1, 0, 0, 0, 0, 0, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
-      4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
-      4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
-      4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
-      4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
-      4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
-  };
-
   auto HandleDollar = [&](unsigned Size) {
     // If we hit a $ and they are not supported in identifiers, we are done.
     if (!LangOpts.DollarIdents)
@@ -1925,22 +1903,31 @@ bool Lexer::LexIdentifierContinue(Token &Result, const char *CurPtr) {
 
   while (true) {
     CurPtr = fastParseASCIIIdentifier(CurPtr, BufferEnd);
-    switch(JUMP_TABLE[static_cast<unsigned char>(*CurPtr)]) {
-      case C_NOT_IDENTIFIER:
-        goto Done;
+    switch(static_cast<unsigned char>(*CurPtr)) {
+      case 0: case 1: case 2: case 3: case 4: case 5: case 6: case 7: case 8: case 9:
+      case 10: case 11: case 12: case 13: case 14: case 15: case 16: case 17: case 18:
+      case 19: case 20: case 21: case 22: case 23: case 24: case 25: case 26: case 27:
+      case 28: case 29: case 30: case 31: case 32: case 33: case 34: case 35: case 37:
+      case 38: case 39: case 40: case 41: case 42: case 43: case 44: case 45: case 46:
+      case 47: case 58: case 59: case 60: case 61: case 62: case 64: case 91: case 93:
+      case 94: case 96: case 123: case 124: case 125: case 126:
+          goto Done;
         break;
-      case C_ID_CONTINUE:
+      case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7':
+      case '8': case '9': case 'A': case 'B': case 'C': case 'D': case 'E': case 'F':
+      case 'G': case 'H': case 'I': case 'J': case 'K': case 'L': case 'M': case 'N':
+      case 'O': case 'P': case 'Q': case 'R': case 'S': case 'T': case 'U': case 'V':
+      case 'W': case 'X': case 'Y': case 'Z': case '_': case 'a': case 'b': case 'c':
+      case 'd': case 'e': case 'f': case 'g': case 'h': case 'i': case 'j': case 'k':
+      case 'l': case 'm': case 'n': case 'o': case 'p': case 'q': case 'r': case 's':
+      case 't': case 'u': case 'v': case 'w': case 'x': case 'y': case 'z':
         CurPtr++;
         break;
-      case C_DOLLAR:
+      case '$':
         if(!HandleDollar(1))
           goto Done;
         break;
-      case C_UNICODE:
-        if(!tryConsumeIdentifierUTF8Char(CurPtr, Result))
-          goto Done;
-        break;
-      case C_SPECIAL: {
+      case '?': case '\\':  {
         unsigned Size;
         // Slow path: handle trigraph, unicode codepoints, UCNs.
         unsigned char C = getCharAndSize(CurPtr, Size);
@@ -1956,8 +1943,11 @@ bool Lexer::LexIdentifierContinue(Token &Result, const char *CurPtr) {
           break;
         goto Done;
       }
-      default:
-        llvm_unreachable("Missing case");
+      default: {
+        if(!tryConsumeIdentifierUTF8Char(CurPtr, Result))
+          goto Done;
+        break;
+      }
     }
   }
   Done:

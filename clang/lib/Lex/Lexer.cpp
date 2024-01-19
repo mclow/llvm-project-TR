@@ -1889,36 +1889,78 @@ fastParseASCIIIdentifier(const char *CurPtr,
 
 bool Lexer::LexIdentifierContinue(Token &Result, const char *CurPtr) {
   // Match [_A-Za-z0-9]*, we have already matched an identifier start.
+  enum {
+    C_NOT_IDENTIFIER = 0,
+    C_ID_CONTINUE = 1,
+    C_SPECIAL = 2,
+    C_DOLLAR = 3,
+    C_UNICODE = 4
+  };
+
+  static constexpr unsigned char JUMP_TABLE[256] = {
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 2, 0, 1, 1, 1, 1, 1, 1, 1,
+      1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 2, 0, 0, 1,
+      0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+      1, 1, 1, 0, 0, 0, 0, 0, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+      4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+      4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+      4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+      4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+      4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+  };
+
+  auto HandleDollar = [&](unsigned Size) {
+    // If we hit a $ and they are not supported in identifiers, we are done.
+    if (!LangOpts.DollarIdents)
+      return false;
+    // Otherwise, emit a diagnostic and continue.
+    if (!isLexingRawMode())
+      Diag(CurPtr, diag::ext_dollar_in_identifier);
+    CurPtr = ConsumeChar(CurPtr, Size, Result);
+    return true;
+  };
+
 
   while (true) {
-
     CurPtr = fastParseASCIIIdentifier(CurPtr, BufferEnd);
-
-    unsigned Size;
-    // Slow path: handle trigraph, unicode codepoints, UCNs.
-    unsigned char C = getCharAndSize(CurPtr, Size);
-    if (isAsciiIdentifierContinue(C)) {
-      CurPtr = ConsumeChar(CurPtr, Size, Result);
-      continue;
-    }
-    if (C == '$') {
-      // If we hit a $ and they are not supported in identifiers, we are done.
-      if (!LangOpts.DollarIdents)
+    switch(JUMP_TABLE[static_cast<unsigned char>(*CurPtr)]) {
+      case C_NOT_IDENTIFIER:
+        goto Done;
         break;
-      // Otherwise, emit a diagnostic and continue.
-      if (!isLexingRawMode())
-        Diag(CurPtr, diag::ext_dollar_in_identifier);
-      CurPtr = ConsumeChar(CurPtr, Size, Result);
-      continue;
+      case C_ID_CONTINUE:
+        CurPtr++;
+        break;
+      case C_DOLLAR:
+        if(!HandleDollar(1))
+          goto Done;
+        break;
+      case C_UNICODE:
+        if(!tryConsumeIdentifierUTF8Char(CurPtr, Result))
+          goto Done;
+        break;
+      case C_SPECIAL: {
+        unsigned Size;
+        // Slow path: handle trigraph, unicode codepoints, UCNs.
+        unsigned char C = getCharAndSize(CurPtr, Size);
+        if (isAsciiIdentifierContinue(C)) {
+          CurPtr = ConsumeChar(CurPtr, Size, Result);
+          break;
+        }
+        else if (C == '$' && HandleDollar(Size))
+          break;
+        else if (C == '\\' && tryConsumeIdentifierUCN(CurPtr, Size, Result))
+          break;
+        else if (!isASCII(C) && tryConsumeIdentifierUTF8Char(CurPtr, Result))
+          break;
+        goto Done;
+      }
+      default:
+        llvm_unreachable("Missing case");
     }
-    if (C == '\\' && tryConsumeIdentifierUCN(CurPtr, Size, Result))
-      continue;
-    if (!isASCII(C) && tryConsumeIdentifierUTF8Char(CurPtr, Result))
-      continue;
-    // Neither an expected Unicode codepoint nor a UCN.
-    break;
   }
-
+  Done:
   const char *IdStart = BufferPtr;
   FormTokenWithChars(Result, CurPtr, tok::raw_identifier);
   Result.setRawIdentifierData(IdStart);

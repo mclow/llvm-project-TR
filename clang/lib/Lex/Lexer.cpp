@@ -1889,18 +1889,6 @@ fastParseASCIIIdentifier(const char *CurPtr,
 
 bool Lexer::LexIdentifierContinue(Token &Result, const char *CurPtr) {
   // Match [_A-Za-z0-9]*, we have already matched an identifier start.
-  auto HandleDollar = [&](unsigned Size) {
-    // If we hit a $ and they are not supported in identifiers, we are done.
-    if (!LangOpts.DollarIdents)
-      return false;
-    // Otherwise, emit a diagnostic and continue.
-    if (!isLexingRawMode())
-      Diag(CurPtr, diag::ext_dollar_in_identifier);
-    CurPtr = ConsumeChar(CurPtr, Size, Result);
-    return true;
-  };
-
-
   while (true) {
     CurPtr = fastParseASCIIIdentifier(CurPtr, BufferEnd);
     switch(static_cast<unsigned char>(*CurPtr)) {
@@ -1923,11 +1911,7 @@ bool Lexer::LexIdentifierContinue(Token &Result, const char *CurPtr) {
       case 't': case 'u': case 'v': case 'w': case 'x': case 'y': case 'z':
         CurPtr++;
         break;
-      case '$':
-        if(!HandleDollar(1))
-          goto Done;
-        break;
-      case '?': case '\\':  {
+      case '?': case '\\': case '$':  {
         unsigned Size;
         // Slow path: handle trigraph, unicode codepoints, UCNs.
         unsigned char C = getCharAndSize(CurPtr, Size);
@@ -1935,8 +1919,16 @@ bool Lexer::LexIdentifierContinue(Token &Result, const char *CurPtr) {
           CurPtr = ConsumeChar(CurPtr, Size, Result);
           break;
         }
-        else if (C == '$' && HandleDollar(Size))
+        else if (C == '$') {
+          // If we hit a $ and they are not supported in identifiers, we are done.
+          if (!LangOpts.DollarIdents)
+            goto Done;
+          // Otherwise, emit a diagnostic and continue.
+          if (!isLexingRawMode())
+            Diag(CurPtr, diag::ext_dollar_in_identifier);
+          CurPtr = ConsumeChar(CurPtr, Size, Result);
           break;
+        }
         else if (C == '\\' && tryConsumeIdentifierUCN(CurPtr, Size, Result))
           break;
         else if (!isASCII(C) && tryConsumeIdentifierUTF8Char(CurPtr, Result))

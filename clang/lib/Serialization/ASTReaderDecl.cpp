@@ -371,6 +371,7 @@ namespace clang {
         VarTemplatePartialSpecializationDecl *D);
     void VisitTemplateTypeParmDecl(TemplateTypeParmDecl *D);
     void VisitValueDecl(ValueDecl *VD);
+    void VisitValuePackDecl(ValuePackDecl *VPD);
     void VisitEnumConstantDecl(EnumConstantDecl *ECD);
     void VisitUnresolvedUsingValueDecl(UnresolvedUsingValueDecl *D);
     void VisitDeclaratorDecl(DeclaratorDecl *DD);
@@ -909,6 +910,10 @@ void ASTDeclReader::VisitValueDecl(ValueDecl *VD) {
     DeferredTypeID = Record.getGlobalTypeID(Record.readInt());
   else
     VD->setType(Record.readType());
+}
+
+void ASTDeclReader::VisitValuePackDecl(ValuePackDecl *VPD) {
+  assert(false && "TODO");
 }
 
 void ASTDeclReader::VisitEnumConstantDecl(EnumConstantDecl *ECD) {

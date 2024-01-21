@@ -887,6 +887,10 @@ void JSONNodeDumper::VisitUsingShadowDecl(const UsingShadowDecl *USD) {
   JOS.attribute("target", createBareDeclRef(USD->getTargetDecl()));
 }
 
+void JSONNodeDumper::VisitValuePackDecl(const ValuePackDecl *VPD) {
+  assert(false && "todo");
+}
+
 void JSONNodeDumper::VisitVarDecl(const VarDecl *VD) {
   VisitNamedDecl(VD);
   JOS.attribute("type", createQualType(VD->getType()));

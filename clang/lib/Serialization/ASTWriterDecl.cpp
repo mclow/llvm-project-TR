@@ -84,6 +84,7 @@ namespace clang {
         VarTemplatePartialSpecializationDecl *D);
     void VisitTemplateTypeParmDecl(TemplateTypeParmDecl *D);
     void VisitValueDecl(ValueDecl *D);
+    void VisitValuePackDecl(ValuePackDecl *VPD);
     void VisitEnumConstantDecl(EnumConstantDecl *D);
     void VisitUnresolvedUsingValueDecl(UnresolvedUsingValueDecl *D);
     void VisitDeclaratorDecl(DeclaratorDecl *D);
@@ -565,6 +566,10 @@ void ASTDeclWriter::VisitRecordDecl(RecordDecl *D) {
 void ASTDeclWriter::VisitValueDecl(ValueDecl *D) {
   VisitNamedDecl(D);
   Record.AddTypeRef(D->getType());
+}
+
+void ASTDeclWriter::VisitValuePackDecl(ValuePackDecl *VPD) {
+  assert(false && "TODO");
 }
 
 void ASTDeclWriter::VisitEnumConstantDecl(EnumConstantDecl *D) {

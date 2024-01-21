@@ -728,6 +728,11 @@ enum class TemplateSubstitutionKind : char {
                                          bool InstantiatingPackElement = false);
 
     Decl *instantiateAliasPack(TypeAliasDecl *);
+
+    FieldDecl *InstantiateFieldDecl(FieldDecl *D, TypeLoc Type);
+
+    template <typename VarType>
+    Decl *instantiateValuePack(DeclaratorDecl *D);
   };
 
 } // namespace clang

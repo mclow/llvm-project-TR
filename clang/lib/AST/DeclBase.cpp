@@ -221,6 +221,9 @@ bool Decl::isParameterPack() const {
   if (const auto *Var = dyn_cast<VarDecl>(this))
     return Var->isParameterPack();
 
+  if (const auto *Field = dyn_cast<FieldDecl>(this))
+    return Field->isParameterPack();
+
   if (const auto *UD = dyn_cast<TypeAliasDecl>(this))
     return UD->getEllipsisLoc().isValid();
 
@@ -882,6 +885,7 @@ unsigned Decl::getIdentifierNamespaceForKind(Kind DeclKind) {
     case ObjCProtocol:
       return IDNS_ObjCProtocol;
 
+    case ValuePack:
     case Field:
     case ObjCAtDefsField:
     case ObjCIvar:

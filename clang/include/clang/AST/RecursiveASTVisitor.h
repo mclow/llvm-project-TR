@@ -2086,6 +2086,13 @@ DEF_TRAVERSE_DECL(UnresolvedUsingValueDecl, {
 
 DEF_TRAVERSE_DECL(IndirectFieldDecl, {})
 
+
+DEF_TRAVERSE_DECL(ValuePackDecl, {
+  for(auto *Child : D->expansions())
+    TRY_TO(TraverseDecl(Child));
+})
+
+
 template <typename Derived>
 bool RecursiveASTVisitor<Derived>::TraverseDeclaratorHelper(DeclaratorDecl *D) {
   TRY_TO(TraverseDeclTemplateParameterLists(D));

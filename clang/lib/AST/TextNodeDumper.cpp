@@ -1857,6 +1857,14 @@ void TextNodeDumper::VisitEnumConstantDecl(const EnumConstantDecl *D) {
   dumpType(D->getType());
 }
 
+void TextNodeDumper::VisitValuePackDecl(const ValuePackDecl *D) {
+  dumpName(D);
+  dumpType(D->getType());
+
+  for (const auto *Child : D->expansions())
+    dumpDeclRef(Child);
+}
+
 void TextNodeDumper::VisitIndirectFieldDecl(const IndirectFieldDecl *D) {
   dumpName(D);
   dumpType(D->getType());

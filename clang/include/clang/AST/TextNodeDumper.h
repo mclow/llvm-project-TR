@@ -342,6 +342,7 @@ public:
   void VisitEnumDecl(const EnumDecl *D);
   void VisitRecordDecl(const RecordDecl *D);
   void VisitEnumConstantDecl(const EnumConstantDecl *D);
+  void VisitValuePackDecl(const ValuePackDecl *D);
   void VisitIndirectFieldDecl(const IndirectFieldDecl *D);
   void VisitFunctionDecl(const FunctionDecl *D);
   void VisitFieldDecl(const FieldDecl *D);

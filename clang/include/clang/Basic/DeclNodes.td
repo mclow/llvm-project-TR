@@ -35,6 +35,7 @@ def Named : DeclNode<Decl, "named declarations", 1>;
               : DeclNode<ClassTemplateSpecialization>;
     def TemplateTypeParm : DeclNode<Type>;
   def Value : DeclNode<Named, "value declarations", 1>;
+    def ValuePack : DeclNode<Value>;
     def EnumConstant : DeclNode<Value, "enumerators">;
     def UnresolvedUsingValue : DeclNode<Value>;
     def IndirectField : DeclNode<Value>;

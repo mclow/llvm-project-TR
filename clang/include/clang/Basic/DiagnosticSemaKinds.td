@@ -5718,6 +5718,11 @@ def err_pack_expansion_member_init : Error<
 def err_function_parameter_pack_without_parameter_packs : Error<
   "type %0 of function parameter pack does not contain any unexpanded "
   "parameter packs">;
+
+def err_variable_pack_without_parameter_packs : Error<
+  "type %0 of variable pack does not contain any unexpanded "
+  "parameter packs">;
+
 def err_ellipsis_in_declarator_not_parameter : Error<
   "only function and template parameters can be parameter packs">;
 
@@ -5735,6 +5740,9 @@ def ext_pack_indexing : ExtWarn<
 def warn_cxx23_pack_indexing : Warning<
   "pack indexing is incompatible with C++ standards before C++2c">,
   DefaultIgnore, InGroup<CXXPre26Compat>;
+
+def warn_variable_packs : Warning<
+  "variable packs are a C++26 extension, at least it would be great if they were">;
 
 def err_fold_expression_packs_both_sides : Error<
   "binary fold expression has unexpanded parameter packs in both operands">;

@@ -485,6 +485,7 @@ namespace clang {
     ExpectedDecl VisitCXXDestructorDecl(CXXDestructorDecl *D);
     ExpectedDecl VisitCXXConversionDecl(CXXConversionDecl *D);
     ExpectedDecl VisitCXXDeductionGuideDecl(CXXDeductionGuideDecl *D);
+    ExpectedDecl VisitValuePackDecl(ValuePackDecl *D);
     ExpectedDecl VisitFieldDecl(FieldDecl *D);
     ExpectedDecl VisitIndirectFieldDecl(IndirectFieldDecl *D);
     ExpectedDecl VisitFriendDecl(FriendDecl *D);
@@ -4062,6 +4063,10 @@ ExpectedDecl ASTNodeImporter::VisitCXXConversionDecl(CXXConversionDecl *D) {
 ExpectedDecl
 ASTNodeImporter::VisitCXXDeductionGuideDecl(CXXDeductionGuideDecl *D) {
   return VisitFunctionDecl(D);
+}
+
+ExpectedDecl ASTNodeImporter::VisitValuePackDecl(ValuePackDecl *D) {
+    assert(false && "TODO");
 }
 
 ExpectedDecl ASTNodeImporter::VisitFieldDecl(FieldDecl *D) {

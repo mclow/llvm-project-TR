@@ -765,6 +765,65 @@ struct QualifierInfo {
                                      ArrayRef<TemplateParameterList *> TPLists);
 };
 
+
+class ValuePackDecl final
+    : public ValueDecl,
+      private llvm::TrailingObjects<ValuePackDecl, ValueDecl *> {
+
+  ValueDecl *InstantiatedFrom;
+  unsigned NumExpansions;
+
+  ValuePackDecl(DeclContext *DC, ValueDecl *InstantiatedFrom,
+                    ArrayRef<ValueDecl *> Decls, QualType Type)
+      : ValueDecl(ValuePack, DC, InstantiatedFrom->getLocation(),
+                  InstantiatedFrom->getDeclName(), Type),
+        InstantiatedFrom(InstantiatedFrom), NumExpansions(Decls.size()) {
+    std::uninitialized_copy(Decls.begin(), Decls.end(),
+                            getTrailingObjects<ValueDecl *>());
+  }
+
+  void anchor() override;
+
+public:
+  friend class ASTDeclReader;
+  friend class ASTDeclWriter;
+  friend TrailingObjects;
+
+  ValueDecl *getInstantiatedFromValueDecl() const {
+    return InstantiatedFrom;
+  }
+
+  ValueDecl* getPattern() const {
+    if (auto *Inner =
+        dyn_cast<ValuePackDecl>(getInstantiatedFromValueDecl()))
+      return Inner->getPattern();
+    return cast<ValueDecl>(getInstantiatedFromValueDecl());
+  }
+
+  ArrayRef<ValueDecl *> expansions() const {
+    return llvm::ArrayRef(getTrailingObjects<ValueDecl *>(),
+                          NumExpansions);
+  }
+
+  bool isDependentExpansion(ASTContext &C) const;
+
+  static ValuePackDecl *Create(ASTContext &C, DeclContext *DC,
+                                   ValueDecl *InstantiatedFrom,
+                                   ArrayRef<ValueDecl *> Decls);
+
+  static ValuePackDecl *CreateDeserialized(ASTContext &C, unsigned ID,
+                                               unsigned NumExpansions);
+
+  SourceRange getSourceRange() const override LLVM_READONLY {
+    return InstantiatedFrom->getSourceRange();
+  }
+
+  static bool classof(const Decl *D) { return classofKind(D->getKind()); }
+  static bool classofKind(Kind K) { return K == ValuePack; }
+};
+
+
+
 /// Represents a ValueDecl that came out of a declarator.
 /// Contains type source information through TypeSourceInfo.
 class DeclaratorDecl : public ValueDecl {
@@ -3184,6 +3243,10 @@ public:
   bool hasNonNullInClassInitializer() const {
     return hasInClassInitializer() && (BitField ? InitAndBitWidth->Init : Init);
   }
+
+  bool isParameterPack() const {
+    return isa<PackExpansionType>(getType());
+  };
 
   /// Get the C++11 default member initializer for this member, or null if one
   /// has not been set. If a valid declaration has a default member initializer,

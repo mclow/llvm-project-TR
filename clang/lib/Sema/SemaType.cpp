@@ -6003,6 +6003,22 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
     //   only be used in a parameter-declaration. Such a parameter-declaration
     //   is a parameter pack (14.5.3). [...]
     switch (D.getContext()) {
+    case DeclaratorContext::File:
+    case DeclaratorContext::Member:
+    case DeclaratorContext::Block:
+        if (!T->containsUnexpandedParameterPack()) {
+          S.Diag(D.getEllipsisLoc(),
+               diag::err_variable_pack_without_parameter_packs)
+            << T <<  D.getSourceRange();
+          D.setEllipsisLoc(SourceLocation());
+        } else {
+            S.Diag(D.getEllipsisLoc(),
+                 diag::warn_variable_packs)
+                    << T <<  D.getSourceRange();
+          T = Context.getPackExpansionType(T, std::nullopt,
+                                           /*ExpectPackInType=*/false);
+        }
+        break;
     case DeclaratorContext::Prototype:
     case DeclaratorContext::LambdaExprParameter:
     case DeclaratorContext::RequiresExpr:
@@ -6044,7 +6060,6 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
                  : diag::ext_variadic_templates);
       break;
 
-    case DeclaratorContext::File:
     case DeclaratorContext::KNRTypeList:
     case DeclaratorContext::ObjCParameter: // FIXME: special diagnostic here?
     case DeclaratorContext::ObjCResult:    // FIXME: special diagnostic here?
@@ -6053,8 +6068,6 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
     case DeclaratorContext::CXXNew:
     case DeclaratorContext::AliasDecl:
     case DeclaratorContext::AliasTemplate:
-    case DeclaratorContext::Member:
-    case DeclaratorContext::Block:
     case DeclaratorContext::ForInit:
     case DeclaratorContext::SelectionInit:
     case DeclaratorContext::Condition:

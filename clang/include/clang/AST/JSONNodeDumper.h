@@ -251,6 +251,7 @@ public:
   void VisitUsingDecl(const UsingDecl *UD);
   void VisitUsingEnumDecl(const UsingEnumDecl *UED);
   void VisitUsingShadowDecl(const UsingShadowDecl *USD);
+  void VisitValuePackDecl(const ValuePackDecl *VPD);
   void VisitVarDecl(const VarDecl *VD);
   void VisitFieldDecl(const FieldDecl *FD);
   void VisitFunctionDecl(const FunctionDecl *FD);

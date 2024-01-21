@@ -5304,6 +5304,23 @@ bool ValueDecl::isInitCapture() const {
   return false;
 }
 
+ValuePackDecl *
+ValuePackDecl::Create(ASTContext &C, DeclContext *DC, ValueDecl *InstantiatedFrom,
+                      ArrayRef<ValueDecl *> Decls) {
+  size_t Extra = additionalSizeToAlloc<ValueDecl *>(Decls.size());
+  return new (C, DC, Extra)
+      ValuePackDecl(DC, InstantiatedFrom, Decls, InstantiatedFrom->getType());
+}
+
+bool ValuePackDecl::isDependentExpansion([[maybe_unused]] ASTContext &C) const {
+  return llvm::any_of(expansions(), [](const ValueDecl *D) {
+    return D->getType()->isDependentType();
+  });
+}
+
+void ValuePackDecl::anchor() {}
+
+
 void ImplicitParamDecl::anchor() {}
 
 ImplicitParamDecl *ImplicitParamDecl::Create(ASTContext &C, DeclContext *DC,

@@ -13674,6 +13674,17 @@ Decl *Sema::BuildAliasPackDeclaration(TypedefNameDecl *InstantiatedFrom,
   return T;
 }
 
+ValueDecl *Sema::BuildValuePackDeclaration(ValueDecl *InstantiatedFrom,
+                                           ArrayRef<ValueDecl *> Expansions) {
+    assert((isa<FieldDecl, VarDecl, ValuePackDecl>(InstantiatedFrom)) &&
+           "an value pack can only be built from a  variable or field declaration");
+
+    auto *D = ValuePackDecl::Create(Context, CurContext, InstantiatedFrom,
+                                        Expansions);
+    D->setAccess(InstantiatedFrom->getAccess());
+    return D;
+}
+
 Decl *Sema::ActOnNamespaceAliasDef(Scope *S, SourceLocation NamespaceLoc,
                                    SourceLocation AliasLoc,
                                    IdentifierInfo *Alias, CXXScopeSpec &SS,

@@ -34,7 +34,7 @@ UnexpandedParameterPack::UnexpandedParameterPack(const Type *T,
 UnexpandedParameterPack::UnexpandedParameterPack(NamedDecl *ND,
                                                  SourceLocation Loc)
     : Data(ND), Loc(Loc), IsTemplateParameter(ND->isTemplateParameter()),
-                          NeedsInstantiation(isa<TypeAliasDecl>(ND)) {}
+                          NeedsInstantiation(isa<TypeAliasDecl, FieldDecl>(ND)) {}
 
 UnexpandedParameterPack::UnexpandedParameterPack(const NestedNameSpecifier *NNS,
                                                  SourceLocation Loc)
@@ -96,7 +96,7 @@ namespace {
         auto *FTD = FD ? FD->getDescribedFunctionTemplate() : nullptr;
         if (FTD && FTD->getTemplateParameters()->getDepth() >= DepthLimit)
           return;
-      } else if (isa<TypeAliasPackDecl, TypeAliasDecl>(ND)) {
+      } else if (isa<TypeAliasPackDecl, TypeAliasDecl, FieldDecl>(ND)) {
         // do nothing
       } else if (getDepthAndIndex(ND).first >= DepthLimit)
         return;
@@ -199,6 +199,13 @@ namespace {
 
       return true;
     }
+
+    bool VisitMemberExpr(MemberExpr *E) {
+      if (E->getMemberDecl()->isParameterPack())
+        addUnexpanded(E->getMemberDecl(), E->getMemberLoc());
+      return true;
+    }
+
 
     /// Record occurrences of template template parameter packs.
     bool TraverseTemplateName(TemplateName Template) {
@@ -849,6 +856,8 @@ bool Sema::CheckParameterPacksForExpansion(
 
     if (const auto *ND = ParmPack.getAs<const VarDecl *>()) {
       IsVarDeclPack = true;
+    } else if (const auto *Subst = ParmPack.getAs<const ValuePackDecl *>()) {
+      NewPackSize = Subst->expansions().size();
     } else if (const auto *Alias =
                    ParmPack.getAs<const TypeAliasPackDecl *>()) {
       NewPackSize = Alias->expansions().size();
@@ -860,6 +869,9 @@ bool Sema::CheckParameterPacksForExpansion(
         ShouldExpand = false;
         continue;
       }
+    } else if (const auto * TT = ParmPack.getAs<const FieldDecl *>()) {
+      ShouldExpand = false;
+      continue;
     } else if (const auto *NNS =
                ParmPack.getAs<const NestedNameSpecifier *>()) {
       if(NNS->getKind() == NestedNameSpecifier::PackName) {

@@ -13,12 +13,14 @@
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/ASTMutationListener.h"
+#include "clang/AST/Decl.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/DeclVisitor.h"
 #include "clang/AST/DependentDiagnostic.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/PrettyDeclStackTrace.h"
+#include "clang/AST/Type.h"
 #include "clang/AST/TypeLoc.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TargetInfo.h"
@@ -1218,6 +1220,8 @@ Decl *TemplateDeclInstantiator::VisitValuePackDecl(ValuePackDecl *VPD) {
     }
     auto *NewD = SemaRef.BuildValuePackDeclaration(VPD->getInstantiatedFromValueDecl(), Expansions);
     Owner->addDecl(NewD);
+    if (isDeclWithinFunction(VPD))
+      SemaRef.CurrentInstantiationScope->InstantiatedLocal(VPD, NewD);
     return NewD;
 }
 
@@ -1448,8 +1452,8 @@ Decl *TemplateDeclInstantiator::VisitFieldDecl(FieldDecl *D) {
         return nullptr;
 
     if (CXXRecordDecl *Parent= dyn_cast<CXXRecordDecl>(Field->getDeclContext())) {
-      if (Parent->isAnonymousStructOrUnion() &&
-          Parent->getRedeclContext()->isFunctionOrMethod())
+      if (isa<ValuePackDecl>(Field) || (Parent->isAnonymousStructOrUnion() &&
+          Parent->getRedeclContext()->isFunctionOrMethod()))
         SemaRef.CurrentInstantiationScope->InstantiatedLocal(D, Field);
     }
     Owner->addDecl(Field);
@@ -6158,6 +6162,17 @@ static bool isInstantiationOfTypeAliasDecl(TypeAliasDecl *Pattern, Decl *Instanc
   return false;
 }
 
+static bool isInstantiationOfValueDecl(ValueDecl *Pattern, Decl *Instance) {
+   auto* ND = dyn_cast<NamedDecl>(Instance);
+   if(!ND)
+       return false;
+
+   if(isa<FieldDecl, ValuePackDecl>(Instance))
+       return Pattern->getDeclName() == ND->getDeclName();
+
+  return false;
+}
+
 // Other is the prospective instantiation
 // D is the prospective pattern
 static bool isInstantiationOf(ASTContext &Ctx, NamedDecl *D, Decl *Other) {
@@ -6169,6 +6184,9 @@ static bool isInstantiationOf(ASTContext &Ctx, NamedDecl *D, Decl *Other) {
 
   if (auto *Alias = dyn_cast<TypeAliasDecl>(D))
     return isInstantiationOfTypeAliasDecl(Alias, Other);
+
+  if (auto *Field = dyn_cast<FieldDecl>(D); isInstantiationOfValueDecl(Field, Other))
+      return true;
 
   if (D->getKind() != Other->getKind())
     return false;

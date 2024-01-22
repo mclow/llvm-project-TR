@@ -476,6 +476,13 @@ public:
     return D;
   }
 
+
+  Decl* TransformPotentialValuePackDecl(SourceLocation Loc, Decl *D) {
+      if(ValuePackDecl* VPD = dyn_cast<ValuePackDecl>(D); VPD && SemaRef.ArgumentPackSubstitutionIndex != -1)
+          return getDerived().TransformDecl(Loc, VPD->expansions()[SemaRef.ArgumentPackSubstitutionIndex]);
+      return getDerived().TransformDecl(Loc, D);
+  }
+
   /// Transform the specified condition.
   ///
   /// By default, this transforms the variable and expression and rebuilds
@@ -11662,7 +11669,7 @@ TreeTransform<Derived>::TransformMemberExpr(MemberExpr *E) {
   SourceLocation TemplateKWLoc = E->getTemplateKeywordLoc();
 
   ValueDecl *Member
-    = cast_or_null<ValueDecl>(getDerived().TransformDecl(E->getMemberLoc(),
+    = cast_or_null<ValueDecl>(getDerived().TransformPotentialValuePackDecl(E->getMemberLoc(),
                                                          E->getMemberDecl()));
   if (!Member)
     return ExprError();
@@ -11672,7 +11679,7 @@ TreeTransform<Derived>::TransformMemberExpr(MemberExpr *E) {
     FoundDecl = Member;
   } else {
     FoundDecl = cast_or_null<NamedDecl>(
-                   getDerived().TransformDecl(E->getMemberLoc(), FoundDecl));
+                   getDerived().TransformPotentialValuePackDecl(E->getMemberLoc(), FoundDecl));
     if (!FoundDecl)
       return ExprError();
   }

@@ -651,9 +651,12 @@ ExprDependence clang::computeDependence(MemberExpr *E) {
     }
 
     // Bitfield with value-dependent width is type-dependent.
-    if (FD && FD->isBitField() && FD->getBitWidth()->isValueDependent()) {
+    if (FD->isBitField() && FD->getBitWidth()->isValueDependent()) {
       D |= ExprDependence::Type;
     }
+
+    if(FD->isParameterPack())
+      D |= ExprDependence::UnexpandedPack;
   }
   // FIXME: move remaining dependence computation from MemberExpr::Create()
   return D;

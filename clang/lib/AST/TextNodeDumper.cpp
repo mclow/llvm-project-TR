@@ -2165,8 +2165,8 @@ void TextNodeDumper::VisitTypeAliasDecl(const TypeAliasDecl *D) {
 }
 
 void TextNodeDumper::VisitTypeAliasPackDecl(const TypeAliasPackDecl *D) {
-  dumpName(D);
-  dumpType(D->getUnderlyingType());
+  // dumpName(D);
+  // dumpType(D->getUnderlyingType());
 }
 
 void TextNodeDumper::VisitTypeAliasTemplateDecl(

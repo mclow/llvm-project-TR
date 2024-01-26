@@ -1457,6 +1457,12 @@ Decl *TemplateDeclInstantiator::VisitFieldDecl(FieldDecl *D) {
         SemaRef.CurrentInstantiationScope->InstantiatedLocal(D, Field);
     }
     Owner->addDecl(Field);
+
+    if(ValuePackDecl* VPD = dyn_cast<ValuePackDecl>(Field)) {
+        for(Decl* C : VPD->expansions())
+            Owner->addHiddenDecl(C);
+    }
+
     return Field;
 }
 

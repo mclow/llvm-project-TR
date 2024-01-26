@@ -1604,6 +1604,9 @@ Decl *TemplateInstantiator::TransformDecl(SourceLocation Loc, Decl *D) {
   if (!D)
     return nullptr;
 
+  if(ValuePackDecl* VPD = dyn_cast<ValuePackDecl>(D); VPD && SemaRef.ArgumentPackSubstitutionIndex != -1)
+    return getDerived().TransformDecl(Loc, VPD->expansions()[SemaRef.ArgumentPackSubstitutionIndex]);
+
   if (TemplateTemplateParmDecl *TTP = dyn_cast<TemplateTemplateParmDecl>(D)) {
     if (TTP->getDepth() < TemplateArgs.getNumLevels()) {
       // If the corresponding template argument is NULL or non-existent, it's

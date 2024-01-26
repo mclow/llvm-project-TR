@@ -96,7 +96,7 @@ namespace {
         auto *FTD = FD ? FD->getDescribedFunctionTemplate() : nullptr;
         if (FTD && FTD->getTemplateParameters()->getDepth() >= DepthLimit)
           return;
-      } else if (isa<TypeAliasPackDecl, TypeAliasDecl, FieldDecl>(ND)) {
+      } else if (isa<TypeAliasPackDecl, TypeAliasDecl, FieldDecl, ValuePackDecl>(ND)) {
         // do nothing
       } else if (getDepthAndIndex(ND).first >= DepthLimit)
         return;
@@ -201,8 +201,10 @@ namespace {
     }
 
     bool VisitMemberExpr(MemberExpr *E) {
-      if (E->getMemberDecl()->isParameterPack())
-        addUnexpanded(E->getMemberDecl(), E->getMemberLoc());
+      if(ValueDecl* VD = E->getMemberDecl()) {
+        if (VD->isParameterPack() || isa<ValuePackDecl>(VD))
+          addUnexpanded(VD, E->getMemberLoc());
+      }
       return true;
     }
 

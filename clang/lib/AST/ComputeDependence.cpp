@@ -640,7 +640,15 @@ ExprDependence clang::computeDependence(MemberExpr *E) {
                           ~NestedNameSpecifierDependence::Dependent);
 
   auto *MemberDecl = E->getMemberDecl();
-  if (FieldDecl *FD = dyn_cast<FieldDecl>(MemberDecl)) {
+  FieldDecl *FD = dyn_cast<FieldDecl>(MemberDecl);
+  if(!FD) {
+    if(ValuePackDecl *Pack = dyn_cast<ValuePackDecl>(MemberDecl)) {
+      D |= ExprDependence::UnexpandedPack | ExprDependence::Type;
+      if(FieldDecl *Underlying = dyn_cast<FieldDecl>(Pack->getInstantiatedFromValueDecl()))
+        FD = Underlying;
+    }
+  }
+  if (FD) {
     DeclContext *DC = MemberDecl->getDeclContext();
     // dyn_cast_or_null is used to handle objC variables which do not
     // have a declaration context.

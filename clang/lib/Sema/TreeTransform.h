@@ -11669,7 +11669,7 @@ TreeTransform<Derived>::TransformMemberExpr(MemberExpr *E) {
   SourceLocation TemplateKWLoc = E->getTemplateKeywordLoc();
 
   ValueDecl *Member
-    = cast_or_null<ValueDecl>(getDerived().TransformPotentialValuePackDecl(E->getMemberLoc(),
+    = cast_or_null<ValueDecl>(getDerived().TransformDecl(E->getMemberLoc(),
                                                          E->getMemberDecl()));
   if (!Member)
     return ExprError();
@@ -11679,7 +11679,7 @@ TreeTransform<Derived>::TransformMemberExpr(MemberExpr *E) {
     FoundDecl = Member;
   } else {
     FoundDecl = cast_or_null<NamedDecl>(
-                   getDerived().TransformPotentialValuePackDecl(E->getMemberLoc(), FoundDecl));
+                   getDerived().TransformDecl(E->getMemberLoc(), FoundDecl));
     if (!FoundDecl)
       return ExprError();
   }
@@ -14471,10 +14471,15 @@ TreeTransform<Derived>::TransformCXXFoldExpr(CXXFoldExpr *E) {
     Callee = cast<UnresolvedLookupExpr>(CalleeResult.get());
   }
 
-  Expr *Pattern = E->getPattern();
+  bool Old = SemaRef.DoNotSubstituteTemplateParam;
+  SemaRef.DoNotSubstituteTemplateParam = true;
+  ExprResult Pattern = getDerived().TransformExpr(E->getPattern());
+  if (Pattern.isInvalid())
+    return true;
+  SemaRef.DoNotSubstituteTemplateParam = Old;
 
   SmallVector<UnexpandedParameterPack, 2> Unexpanded;
-  getSema().collectUnexpandedParameterPacks(Pattern, Unexpanded);
+  getSema().collectUnexpandedParameterPacks(Pattern.get(), Unexpanded);
   assert(!Unexpanded.empty() && "Pack expansion without parameter packs?");
 
   // Determine whether the set of unexpanded parameter packs can and should
@@ -14484,7 +14489,7 @@ TreeTransform<Derived>::TransformCXXFoldExpr(CXXFoldExpr *E) {
   std::optional<unsigned> OrigNumExpansions = E->getNumExpansions(),
                           NumExpansions = OrigNumExpansions;
   if (getDerived().TryExpandParameterPacks(E->getEllipsisLoc(),
-                                           Pattern->getSourceRange(),
+                                           Pattern.get()->getSourceRange(),
                                            Unexpanded,
                                            Expand, RetainExpansion,
                                            NumExpansions))
@@ -14495,23 +14500,18 @@ TreeTransform<Derived>::TransformCXXFoldExpr(CXXFoldExpr *E) {
     // expression.
     Sema::ArgumentPackSubstitutionIndexRAII SubstIndex(getSema(), -1);
 
-    ExprResult LHS =
-        E->getLHS() ? getDerived().TransformExpr(E->getLHS()) : ExprResult();
-    if (LHS.isInvalid())
-      return true;
-
-    ExprResult RHS =
-        E->getRHS() ? getDerived().TransformExpr(E->getRHS()) : ExprResult();
-    if (RHS.isInvalid())
+    ExprResult Init =
+        E->getInit() ? getDerived().TransformExpr(E->getInit()) : ExprResult();
+    if (Init.isInvalid())
       return true;
 
     if (!getDerived().AlwaysRebuild() &&
-        LHS.get() == E->getLHS() && RHS.get() == E->getRHS())
+        Init.get() == E->getInit() && Pattern.get() == E->getPattern())
       return E;
 
     return getDerived().RebuildCXXFoldExpr(
-        Callee, E->getBeginLoc(), LHS.get(), E->getOperator(),
-        E->getEllipsisLoc(), RHS.get(), E->getEndLoc(), NumExpansions);
+        Callee, E->getBeginLoc(), (E->isLeftFold()? Init : Pattern).get(), E->getOperator(),
+        E->getEllipsisLoc(), (E->isLeftFold()? Pattern : Init).get(), E->getEndLoc(), NumExpansions);
   }
 
   // Formally a fold expression expands to nested parenthesized expressions.
@@ -14538,7 +14538,7 @@ TreeTransform<Derived>::TransformCXXFoldExpr(CXXFoldExpr *E) {
   if (!LeftFold && RetainExpansion) {
     ForgetPartiallySubstitutedPackRAII Forget(getDerived());
 
-    ExprResult Out = getDerived().TransformExpr(Pattern);
+    ExprResult Out = getDerived().TransformExpr(Pattern.get());
     if (Out.isInvalid())
       return true;
 
@@ -14552,7 +14552,7 @@ TreeTransform<Derived>::TransformCXXFoldExpr(CXXFoldExpr *E) {
   for (unsigned I = 0; I != *NumExpansions; ++I) {
     Sema::ArgumentPackSubstitutionIndexRAII SubstIndex(
         getSema(), LeftFold ? I : *NumExpansions - I - 1);
-    ExprResult Out = getDerived().TransformExpr(Pattern);
+    ExprResult Out = getDerived().TransformExpr(Pattern.get());
     if (Out.isInvalid())
       return true;
 
@@ -14590,7 +14590,7 @@ TreeTransform<Derived>::TransformCXXFoldExpr(CXXFoldExpr *E) {
   if (LeftFold && RetainExpansion) {
     ForgetPartiallySubstitutedPackRAII Forget(getDerived());
 
-    ExprResult Out = getDerived().TransformExpr(Pattern);
+    ExprResult Out = getDerived().TransformExpr(Pattern.get());
     if (Out.isInvalid())
       return true;
 

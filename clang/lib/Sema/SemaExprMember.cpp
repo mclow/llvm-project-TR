@@ -1149,6 +1149,13 @@ Sema::BuildMemberReferenceExpr(Expr *BaseExpr, QualType BaseExprType,
                            VK_LValue, OK_Ordinary);
   }
 
+  if (ValuePackDecl *Pack = dyn_cast<ValuePackDecl>(MemberDecl)) {
+    return BuildMemberExpr(BaseExpr, IsArrow, OpLoc, &SS, TemplateKWLoc, Pack,
+                           FoundDecl, /*HadMultipleCandidates=*/false,
+                           MemberNameInfo, Pack->getType().getNonReferenceType(),
+                           VK_LValue, OK_Ordinary);
+  }
+
   if (CXXMethodDecl *MemberFn = dyn_cast<CXXMethodDecl>(MemberDecl)) {
     ExprValueKind valueKind;
     QualType type;

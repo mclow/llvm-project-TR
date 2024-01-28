@@ -9795,6 +9795,22 @@ public:
     }
   };
 
+  class DisableTemplateParametersSubstitutionRAII {
+    Sema &Self;
+    bool Disabled;
+
+  public:
+    DisableTemplateParametersSubstitutionRAII(Sema &Self)
+      : Self(Self), Disabled(Self.DoNotSubstituteTemplateParam) {
+      Self.DoNotSubstituteTemplateParam = true;
+    }
+
+    ~DisableTemplateParametersSubstitutionRAII() {
+      Self.DoNotSubstituteTemplateParam = Disabled;
+    }
+  };
+
+
   friend class ArgumentPackSubstitutionRAII;
 
   /// For each declaration that involved template argument deduction, the

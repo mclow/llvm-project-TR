@@ -6191,7 +6191,8 @@ static bool isInstantiationOf(ASTContext &Ctx, NamedDecl *D, Decl *Other) {
   if (auto *Alias = dyn_cast<TypeAliasDecl>(D))
     return isInstantiationOfTypeAliasDecl(Alias, Other);
 
-  if (auto *Field = dyn_cast<FieldDecl>(D); isInstantiationOfValueDecl(Field, Other))
+  if (auto *Field = dyn_cast<FieldDecl>(D); Field &&
+          isInstantiationOfValueDecl(Field, Other))
       return true;
 
   if (D->getKind() != Other->getKind())

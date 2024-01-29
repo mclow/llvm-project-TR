@@ -1444,7 +1444,7 @@ FieldDecl *TemplateDeclInstantiator::InstantiateFieldDecl(FieldDecl *D, TypeLoc 
     Field->setAccess(D->getAccess());
 
     if(Expansion) {
-        Field->SetInstantiatedFromPack(Expansion);
+        //Field->SetInstantiatedFromPack(Expansion);
         Owner->addHiddenDecl(Field);
     }
     else {

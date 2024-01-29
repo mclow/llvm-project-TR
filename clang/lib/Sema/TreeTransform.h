@@ -309,26 +309,15 @@ public:
 
 
   ExprResult SubstituteNonDependentPacks(Expr* Expr) {
-      if(getSema().DoNotSubstituteTemplateParam)
-          return Expr;
-      Sema::DisableTemplateParametersSubstitutionRAII RAII(getSema());
-      return getDerived().TransformExpr(Expr);
+      return Expr;
   }
 
   QualType SubstituteNonDependentPacks(QualType Type) {
-      if(getSema().DoNotSubstituteTemplateParam)
-          return Type;
-      Sema::DisableTemplateParametersSubstitutionRAII RAII(getSema());
-      return getDerived().TransformType(Type);
+      return Type;
   }
 
   TypeLoc SubstituteNonDependentPacks(TypeLoc Type) {
-      if(getSema().DoNotSubstituteTemplateParam)
-          return Type;
-      TypeLocBuilder TLB;
-      Sema::DisableTemplateParametersSubstitutionRAII RAII(getSema());
-      QualType T = getDerived().TransformType(TLB, Type);
-      return TLB.getTypeLocInContext(getSema().getASTContext(), T);
+      return Type;
   }
 
   /// Transforms the given type into another type.
@@ -4856,12 +4845,6 @@ bool TreeTransform<Derived>::TransformTemplateArguments(
       // Always transform once to resolve dependent packs
       // TODO: optimize for the nested specifier case?
       TemplateArgumentLoc OutPattern = Pattern;
-      {
-        Sema::DisableTemplateParametersSubstitutionRAII RAII(getSema());
-        if (getDerived().TransformTemplateArgument(Pattern, OutPattern, Uneval))
-            return true;
-      }
-
       SmallVector<UnexpandedParameterPack, 2> Unexpanded;
       getSema().collectUnexpandedParameterPacks(OutPattern, Unexpanded);
       assert(!Unexpanded.empty() && "Pack expansion without parameter packs?");
@@ -14257,7 +14240,7 @@ ExprResult
 TreeTransform<Derived>::TransformSizeOfPackExpr(SizeOfPackExpr *E) {
   // If E is not value-dependent, then nothing will change when we transform it.
   // Note: This is an instantiation-centric view.
-  if (!E->isValueDependent() || SemaRef.DoNotSubstituteTemplateParam)
+  if (!E->isValueDependent())
     return E;
 
   EnterExpressionEvaluationContext Unevaluated(

@@ -227,6 +227,9 @@ bool Decl::isParameterPack() const {
   if (const auto *UD = dyn_cast<TypeAliasDecl>(this))
     return UD->getEllipsisLoc().isValid();
 
+  if (const auto *UD = dyn_cast<ValuePackDecl>(this))
+    return true;
+
   return isTemplateParameterPack();
 }
 

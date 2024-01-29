@@ -1582,7 +1582,7 @@ bool DeclContext::containsDeclAndLoad(Decl *D) const {
 /// within its semantic context should be invisible to qualified name lookup.
 static bool shouldBeHidden(NamedDecl *D) {
   // Skip unnamed declarations.
-  if (!D->getDeclName())
+  if (!D->getDeclName() || D->isInstantiatedFromPack())
     return true;
 
   // Skip entities that can't be found by name lookup into a particular

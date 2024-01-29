@@ -1617,27 +1617,6 @@ static bool shouldBeHidden(NamedDecl *D) {
   return false;
 }
 
-void DeclContext::specific_decl_iterator_base::SkipToNextDeclImpl() {
-  if(PackSize != -1 && PackIndex + 1 == PackSize) {
-    PackSize = -1;
-    ++CurrentImpl;
-  }
-  if (PackSize != -1) {
-    PackIndex++;
-    Current = decl_iterator(cast<ValuePackDecl>(*Current)->expansions()[PackIndex]);
-  }
-  else if(const auto* Pack = dyn_cast_or_null<ValuePackDecl>(*CurrentImpl)) {
-    PackSize  = Pack->expansions().size();
-    PackIndex = 0;
-    Current = decl_iterator(cast<ValuePackDecl>(*CurrentImpl)->expansions()[PackIndex]);
-  }
-  else if(*CurrentImpl) {
-    Current = CurrentImpl;
-    CurrentImpl++;
-  }
-}
-
-
 void DeclContext::removeDecl(Decl *D) {
   assert(D->getLexicalDeclContext() == this &&
          "decl being removed from non-lexical context");

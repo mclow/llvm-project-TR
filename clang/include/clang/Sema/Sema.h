@@ -9834,8 +9834,6 @@ public:
   /// which argument within the parameter pack will be used for substitution.
   int ArgumentPackSubstitutionIndex;
 
-  bool DoNotSubstituteTemplateParam;
-
   /// RAII object used to change the argument pack substitution index
   /// within a \c Sema object.
   ///
@@ -9854,22 +9852,6 @@ public:
       Self.ArgumentPackSubstitutionIndex = OldSubstitutionIndex;
     }
   };
-
-  class DisableTemplateParametersSubstitutionRAII {
-    Sema &Self;
-    bool Disabled;
-
-  public:
-    DisableTemplateParametersSubstitutionRAII(Sema &Self)
-      : Self(Self), Disabled(Self.DoNotSubstituteTemplateParam) {
-      Self.DoNotSubstituteTemplateParam = true;
-    }
-
-    ~DisableTemplateParametersSubstitutionRAII() {
-      Self.DoNotSubstituteTemplateParam = Disabled;
-    }
-  };
-
 
   friend class ArgumentPackSubstitutionRAII;
 

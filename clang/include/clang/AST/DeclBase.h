@@ -2331,39 +2331,24 @@ public:
   decl_iterator noload_decls_begin() const { return decl_iterator(FirstDecl); }
   decl_iterator noload_decls_end() const { return decl_iterator(); }
 
-
-  class specific_decl_iterator_base {
-  protected:
-    specific_decl_iterator_base() = default;
-
-    specific_decl_iterator_base(DeclContext::decl_iterator c)
-        : CurrentImpl(c), Current(CurrentImpl) {}
-    /// Current - The current, underlying declaration iterator, which
-    /// will either be NULL or will point to a declaration of
-    /// type SpecificDecl.
-    DeclContext::decl_iterator CurrentImpl;
-    DeclContext::decl_iterator Current;
-    int PackIndex = -1;
-    int PackSize  = -1;
-    void SkipToNextDeclImpl();
-  };
-
   /// specific_decl_iterator - Iterates over a subrange of
   /// declarations stored in a DeclContext, providing only those that
   /// are of type SpecificDecl (or a class derived from it). This
   /// iterator is used, for example, to provide iteration over just
   /// the fields within a RecordDecl (with SpecificDecl = FieldDecl).
   template<typename SpecificDecl>
-  class specific_decl_iterator : public specific_decl_iterator_base {
+  class specific_decl_iterator {
+    /// Current - The current, underlying declaration iterator, which
+    /// will either be NULL or will point to a declaration of
+    /// type SpecificDecl.
+    DeclContext::decl_iterator Current;
 
-
-    // SkipToNextDecl - Advances the current position up to the next
+    /// SkipToNextDecl - Advances the current position up to the next
     /// declaration of type SpecificDecl that also meets the criteria
     /// required by Acceptable.
-
     void SkipToNextDecl() {
       while (*Current && !isa<SpecificDecl>(*Current))
-        SkipToNextDeclImpl();
+        ++Current;
     }
 
   public:
@@ -2386,8 +2371,7 @@ public:
     /// of iterators. For example, if you want Objective-C instance
     /// methods, SpecificDecl will be ObjCMethodDecl and A will be
     /// &ObjCMethodDecl::isInstanceMethod.
-    explicit specific_decl_iterator(DeclContext::decl_iterator C)
-        : specific_decl_iterator_base(C) {
+    explicit specific_decl_iterator(DeclContext::decl_iterator C) : Current(C) {
       SkipToNextDecl();
     }
 
@@ -2397,6 +2381,7 @@ public:
     value_type operator->() const { return **this; }
 
     specific_decl_iterator& operator++() {
+      ++Current;
       SkipToNextDecl();
       return *this;
     }

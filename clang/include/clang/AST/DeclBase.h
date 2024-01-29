@@ -319,6 +319,9 @@ private:
   LLVM_PREFERRED_TYPE(bool)
   unsigned TopLevelDeclInObjCContainer : 1;
 
+  LLVM_PREFERRED_TYPE(bool)
+  unsigned InstantiatedFromPack : 1;
+
   /// Whether statistic collection is enabled.
   static bool StatisticsEnabled;
 
@@ -395,7 +398,7 @@ protected:
       : NextInContextAndBits(nullptr, getModuleOwnershipKindForChildOf(DC)),
         DeclCtx(DC), Loc(L), DeclKind(DK), InvalidDecl(false), HasAttrs(false),
         Implicit(false), Used(false), Referenced(false),
-        TopLevelDeclInObjCContainer(false), Access(AS_none), FromASTFile(0),
+        TopLevelDeclInObjCContainer(false), InstantiatedFromPack(false), Access(AS_none), FromASTFile(0),
         IdentifierNamespace(getIdentifierNamespaceForKind(DK)),
         CacheValidAndLinkage(llvm::to_underlying(Linkage::Invalid)) {
     if (StatisticsEnabled) add(DK);
@@ -404,6 +407,7 @@ protected:
   Decl(Kind DK, EmptyShell Empty)
       : DeclKind(DK), InvalidDecl(false), HasAttrs(false), Implicit(false),
         Used(false), Referenced(false), TopLevelDeclInObjCContainer(false),
+        InstantiatedFromPack(false),
         Access(AS_none), FromASTFile(0),
         IdentifierNamespace(getIdentifierNamespaceForKind(DK)),
         CacheValidAndLinkage(llvm::to_underlying(Linkage::Invalid)) {
@@ -636,6 +640,14 @@ public:
 
   void setTopLevelDeclInObjCContainer(bool V = true) {
     TopLevelDeclInObjCContainer = V;
+  }
+
+  bool isInstantiatedFromPack() const {
+    return InstantiatedFromPack;
+  }
+
+  void SetInstantiatedFromPack(bool V = true) {
+    InstantiatedFromPack = V;
   }
 
   /// Looks on this and related declarations for an applicable

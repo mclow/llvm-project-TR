@@ -1604,8 +1604,11 @@ Decl *TemplateInstantiator::TransformDecl(SourceLocation Loc, Decl *D) {
   if (!D)
     return nullptr;
 
-  if(ValuePackDecl* VPD = dyn_cast<ValuePackDecl>(D); VPD && SemaRef.ArgumentPackSubstitutionIndex != -1)
-    return getDerived().TransformDecl(Loc, VPD->expansions()[SemaRef.ArgumentPackSubstitutionIndex]);
+  auto Substitute = [&](Decl* ToSubstitute) {
+    if(ValuePackDecl* VPD = dyn_cast_if_present<ValuePackDecl>(ToSubstitute); VPD && SemaRef.ArgumentPackSubstitutionIndex != -1)
+      return getDerived().TransformDecl(Loc, VPD->expansions()[SemaRef.ArgumentPackSubstitutionIndex]);
+    return ToSubstitute;
+  };
 
   if (TemplateTemplateParmDecl *TTP = dyn_cast<TemplateTemplateParmDecl>(D)) {
     if (TTP->getDepth() < TemplateArgs.getNumLevels()) {
@@ -1615,7 +1618,7 @@ Decl *TemplateInstantiator::TransformDecl(SourceLocation Loc, Decl *D) {
       // arguments left unspecified.
       if (!TemplateArgs.hasTemplateArgument(TTP->getDepth(),
                                             TTP->getPosition()))
-        return D;
+        return Substitute(D);
 
       TemplateArgument Arg = TemplateArgs(TTP->getDepth(), TTP->getPosition());
 
@@ -1628,14 +1631,14 @@ Decl *TemplateInstantiator::TransformDecl(SourceLocation Loc, Decl *D) {
       TemplateName Template = Arg.getAsTemplate().getNameToSubstitute();
       assert(!Template.isNull() && Template.getAsTemplateDecl() &&
              "Wrong kind of template template argument");
-      return Template.getAsTemplateDecl();
+      return Substitute(Template.getAsTemplateDecl());
     }
 
     // Fall through to find the instantiated declaration for this template
     // template parameter.
   }
 
-  return SemaRef.FindInstantiatedDecl(Loc, cast<NamedDecl>(D), TemplateArgs);
+  return Substitute(SemaRef.FindInstantiatedDecl(Loc, cast<NamedDecl>(D), TemplateArgs));
 }
 
 Decl *TemplateInstantiator::TransformDefinition(SourceLocation Loc, Decl *D) {

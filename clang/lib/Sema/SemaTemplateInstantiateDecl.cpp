@@ -1360,16 +1360,17 @@ Decl *TemplateDeclInstantiator::instantiateValuePack(DeclaratorDecl *D) {
     Sema::ArgumentPackSubstitutionIndexRAII SubstIndex(SemaRef, I);
     Decl *Elem = nullptr;
     if(FieldDecl* FD = dyn_cast<FieldDecl>(D))
-        Elem = InstantiateFieldDecl(FD, Pattern);
+        Elem = InstantiateFieldDecl(FD, Pattern, /*Expansion*/true);
     else
         assert(false && "TODO");;
     Expansions.push_back(cast<ValueDecl>(Elem));
   }
   auto *NewD = SemaRef.BuildValuePackDeclaration(D, Expansions);
+  Owner->addDecl(NewD);
   return NewD;
 }
 
-FieldDecl *TemplateDeclInstantiator::InstantiateFieldDecl(FieldDecl *D, TypeLoc Type) {
+FieldDecl *TemplateDeclInstantiator::InstantiateFieldDecl(FieldDecl *D, TypeLoc Type, bool Expansion) {
     bool Invalid = false;
     TypeSourceInfo* DI = D->getTypeSourceInfo();
     if (Type.getType() != D->getType() ||
@@ -1435,12 +1436,20 @@ FieldDecl *TemplateDeclInstantiator::InstantiateFieldDecl(FieldDecl *D, TypeLoc 
     if (Invalid)
       Field->setInvalidDecl();
 
-    if (!Field->getDeclName()) {
+    if (!D->getDeclName()) {
       // Keep track of where this decl came from.
       SemaRef.Context.setInstantiatedFromUnnamedFieldDecl(Field, D);
     }
     Field->setImplicit(D->isImplicit());
     Field->setAccess(D->getAccess());
+
+    if(Expansion) {
+        Field->SetInstantiatedFromPack(Expansion);
+        Owner->addHiddenDecl(Field);
+    }
+    else {
+        Owner->addDecl(Field);
+    }
 
     return Field;
 }
@@ -1455,12 +1464,6 @@ Decl *TemplateDeclInstantiator::VisitFieldDecl(FieldDecl *D) {
       if (isa<ValuePackDecl>(Field) || (Parent->isAnonymousStructOrUnion() &&
           Parent->getRedeclContext()->isFunctionOrMethod()))
         SemaRef.CurrentInstantiationScope->InstantiatedLocal(D, Field);
-    }
-    Owner->addDecl(Field);
-
-    if(ValuePackDecl* VPD = dyn_cast<ValuePackDecl>(Field)) {
-        for(Decl* C : VPD->expansions())
-            Owner->addHiddenDecl(C);
     }
 
     return Field;

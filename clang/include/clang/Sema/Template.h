@@ -729,7 +729,7 @@ enum class TemplateSubstitutionKind : char {
 
     Decl *instantiateAliasPack(TypeAliasDecl *);
 
-    FieldDecl *InstantiateFieldDecl(FieldDecl *D, TypeLoc Type);
+    FieldDecl *InstantiateFieldDecl(FieldDecl *D, TypeLoc Type, bool Expansion = false);
 
     template <typename VarType>
     Decl *instantiateValuePack(DeclaratorDecl *D);

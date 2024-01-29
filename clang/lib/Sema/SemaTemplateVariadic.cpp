@@ -1248,6 +1248,10 @@ static bool isParameterPack(Expr *PackExpression) {
     ValueDecl *VD = D->getDecl();
     return VD->isParameterPack();
   }
+  if (auto D = dyn_cast<MemberExpr>(PackExpression); D) {
+    ValueDecl *VD = D->getMemberDecl();
+    return VD->isParameterPack();
+  }
   return false;
 }
 

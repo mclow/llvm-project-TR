@@ -2315,6 +2315,10 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
         LHS = Actions.CreateRecoveryExpr(OrigLHS->getBeginLoc(),
                                          Name.getEndLoc(), {OrigLHS});
       }
+
+      if(Tok.is(tok::ellipsis) && GetLookAheadToken(1).is(tok::l_square)) {
+        LHS = ParseCXXPackIndexingExpression(LHS);
+      }
       break;
     }
     case tok::plusplus:    // postfix-expression: postfix-expression '++'

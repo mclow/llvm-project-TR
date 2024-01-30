@@ -896,6 +896,12 @@ def Launder : Builtin {
   let Prototype = "void*(void*)";
 }
 
+def CharCast : Builtin {
+  let Spellings = ["__builtin_char_cast"];
+  let Attributes = [NoThrow, CustomTypeChecking, Constexpr];
+  let Prototype = "void*(void*)";
+}
+
 def IsConstantEvaluated : LangBuiltin<"CXX_LANG"> {
   let Spellings = ["__builtin_is_constant_evaluated"];
   let Attributes = [NoThrow, Constexpr];
@@ -1065,7 +1071,7 @@ def FPrintfChk : Builtin {
 def PrintfChk : Builtin {
   let Spellings = ["__builtin___printf_chk"];
   let Attributes = [FunctionWithBuiltinPrefix, PrintfFormat<1>];
-  let Prototype = "int(int, int, char const* restrict, ...)";
+  let Prototype = "int(int, char const* restrict, ...)";
 }
 
 def VFPrintfChk : Builtin {

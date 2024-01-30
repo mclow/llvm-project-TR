@@ -2480,7 +2480,7 @@ DeduceTemplateArguments(Sema &S, TemplateParameterList *TemplateParams,
 
   case TemplateArgument::Expression:
     if (NonTypeOrVarTemplateParmDecl NTTP =
-            getDeducedParameterFromExpr(Info, P.getAsExpr())) {
+            getDeducedNTTParameterFromExpr(Info, P.getAsExpr())) {
       switch (A.getKind()) {
       case TemplateArgument::Integral:
       case TemplateArgument::Expression:

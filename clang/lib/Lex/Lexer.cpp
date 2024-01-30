@@ -4004,9 +4004,18 @@ LexStart:
       CurPtr += SizeTmp;
     } else if (Char == '.' &&
                getCharAndSize(CurPtr+SizeTmp, SizeTmp2) == '.') {
-      Kind = tok::ellipsis;
-      CurPtr = ConsumeChar(ConsumeChar(CurPtr, SizeTmp, Result),
-                           SizeTmp2, Result);
+      //.... is parsed as . ...)
+      unsigned SizeTmp3, SizeTmp4;
+      char Char3 = getCharAndSize(CurPtr+SizeTmp+SizeTmp2, SizeTmp3);
+      char Char4 = getCharAndSize(CurPtr+SizeTmp+SizeTmp2+SizeTmp3, SizeTmp4);
+      if(Char3 == '.' && Char4 != '.') {
+        Kind = tok::period;
+      }
+      else {
+        Kind = tok::ellipsis;
+        CurPtr = ConsumeChar(ConsumeChar(CurPtr, SizeTmp, Result),
+                             SizeTmp2, Result);
+      }
     } else {
       Kind = tok::period;
     }

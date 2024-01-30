@@ -767,6 +767,7 @@ bool RecursiveASTVisitor<Derived>::TraverseNestedNameSpecifier(
 
   switch (NNS->getKind()) {
   case NestedNameSpecifier::Identifier:
+  case NestedNameSpecifier::PackName:
   case NestedNameSpecifier::Namespace:
   case NestedNameSpecifier::NamespaceAlias:
   case NestedNameSpecifier::Global:
@@ -792,6 +793,7 @@ bool RecursiveASTVisitor<Derived>::TraverseNestedNameSpecifierLoc(
 
   switch (NNS.getNestedNameSpecifier()->getKind()) {
   case NestedNameSpecifier::Identifier:
+  case NestedNameSpecifier::PackName:
   case NestedNameSpecifier::Namespace:
   case NestedNameSpecifier::NamespaceAlias:
   case NestedNameSpecifier::Global:
@@ -860,6 +862,7 @@ bool RecursiveASTVisitor<Derived>::TraverseTemplateArgument(
   case TemplateArgument::Declaration:
   case TemplateArgument::Integral:
   case TemplateArgument::NullPtr:
+  case TemplateArgument::StructuralValue:
     return true;
 
   case TemplateArgument::Type:
@@ -907,6 +910,7 @@ bool RecursiveASTVisitor<Derived>::TraverseTemplateArgumentLoc(
   case TemplateArgument::Declaration:
   case TemplateArgument::Integral:
   case TemplateArgument::NullPtr:
+  case TemplateArgument::StructuralValue:
     return true;
 
   case TemplateArgument::Type: {
@@ -1093,6 +1097,7 @@ DEF_TRAVERSE_TYPE(FunctionProtoType, {
 DEF_TRAVERSE_TYPE(UsingType, {})
 DEF_TRAVERSE_TYPE(UnresolvedUsingType, {})
 DEF_TRAVERSE_TYPE(TypedefType, {})
+DEF_TRAVERSE_TYPE(SubstTypedefPackType, {})
 
 DEF_TRAVERSE_TYPE(TypeOfExprType,
                   { TRY_TO(TraverseStmt(T->getUnderlyingExpr())); })
@@ -1101,6 +1106,11 @@ DEF_TRAVERSE_TYPE(TypeOfType, { TRY_TO(TraverseType(T->getUnmodifiedType())); })
 
 DEF_TRAVERSE_TYPE(DecltypeType,
                   { TRY_TO(TraverseStmt(T->getUnderlyingExpr())); })
+
+DEF_TRAVERSE_TYPE(PackIndexingType, {
+  TRY_TO(TraverseType(T->getPattern()));
+  TRY_TO(TraverseStmt(T->getIndexExpr()));
+})
 
 DEF_TRAVERSE_TYPE(UnaryTransformType, {
   TRY_TO(TraverseType(T->getBaseType()));
@@ -1155,6 +1165,9 @@ DEF_TRAVERSE_TYPE(ElaboratedType, {
 
 DEF_TRAVERSE_TYPE(DependentNameType,
                   { TRY_TO(TraverseNestedNameSpecifier(T->getQualifier())); })
+
+DEF_TRAVERSE_TYPE(PackNameType,
+                  { TRY_TO(TraverseType(T->getUnderlyingType())); })
 
 DEF_TRAVERSE_TYPE(DependentTemplateSpecializationType, {
   TRY_TO(TraverseNestedNameSpecifier(T->getQualifier()));
@@ -1367,6 +1380,7 @@ DEF_TRAVERSE_TYPELOC(FunctionProtoType, {
 DEF_TRAVERSE_TYPELOC(UsingType, {})
 DEF_TRAVERSE_TYPELOC(UnresolvedUsingType, {})
 DEF_TRAVERSE_TYPELOC(TypedefType, {})
+DEF_TRAVERSE_TYPELOC(SubstTypedefPackType, {})
 
 DEF_TRAVERSE_TYPELOC(TypeOfExprType,
                      { TRY_TO(TraverseStmt(TL.getUnderlyingExpr())); })
@@ -1378,6 +1392,11 @@ DEF_TRAVERSE_TYPELOC(TypeOfType, {
 // FIXME: location of underlying expr
 DEF_TRAVERSE_TYPELOC(DecltypeType, {
   TRY_TO(TraverseStmt(TL.getTypePtr()->getUnderlyingExpr()));
+})
+
+DEF_TRAVERSE_TYPELOC(PackIndexingType, {
+  TRY_TO(TraverseType(TL.getPattern()));
+  TRY_TO(TraverseStmt(TL.getTypePtr()->getIndexExpr()));
 })
 
 DEF_TRAVERSE_TYPELOC(UnaryTransformType, {
@@ -1437,6 +1456,9 @@ DEF_TRAVERSE_TYPELOC(ElaboratedType, {
 DEF_TRAVERSE_TYPELOC(DependentNameType, {
   TRY_TO(TraverseNestedNameSpecifierLoc(TL.getQualifierLoc()));
 })
+
+DEF_TRAVERSE_TYPELOC(PackNameType,
+                     { TRY_TO(TraverseTypeLoc(TL.getUnderlyingTypeLoc())); })
 
 DEF_TRAVERSE_TYPELOC(DependentTemplateSpecializationType, {
   if (TL.getQualifierLoc()) {
@@ -1972,6 +1994,8 @@ DEF_TRAVERSE_DECL(TypeAliasTemplateDecl, {
   TRY_TO(TraverseTemplateParameterListHelper(D->getTemplateParameters()));
 })
 
+DEF_TRAVERSE_DECL(TypeAliasPackDecl, {})
+
 DEF_TRAVERSE_DECL(ConceptDecl, {
   TRY_TO(TraverseTemplateParameterListHelper(D->getTemplateParameters()));
   TRY_TO(TraverseStmt(D->getConstraintExpr()));
@@ -2104,6 +2128,13 @@ DEF_TRAVERSE_DECL(UnresolvedUsingValueDecl, {
 })
 
 DEF_TRAVERSE_DECL(IndirectFieldDecl, {})
+
+
+DEF_TRAVERSE_DECL(ValuePackDecl, {
+  for(auto *Child : D->expansions())
+    TRY_TO(TraverseDecl(Child));
+})
+
 
 template <typename Derived>
 bool RecursiveASTVisitor<Derived>::TraverseDeclaratorHelper(DeclaratorDecl *D) {
@@ -2893,6 +2924,7 @@ DEF_TRAVERSE_STMT(CompoundAssignOperator, {})
 DEF_TRAVERSE_STMT(CXXNoexceptExpr, {})
 DEF_TRAVERSE_STMT(PackExpansionExpr, {})
 DEF_TRAVERSE_STMT(SizeOfPackExpr, {})
+DEF_TRAVERSE_STMT(PackIndexingExpr, {})
 DEF_TRAVERSE_STMT(SubstNonTypeTemplateParmPackExpr, {})
 DEF_TRAVERSE_STMT(SubstNonTypeTemplateParmExpr, {})
 DEF_TRAVERSE_STMT(FunctionParmPackExpr, {})

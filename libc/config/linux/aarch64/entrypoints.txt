@@ -89,6 +89,13 @@ set(TARGET_LIBC_ENTRYPOINTS
     libc.src.inttypes.strtoimax
     libc.src.inttypes.strtoumax
 
+    # stdbit.h entrypoints
+    libc.src.stdbit.stdc_leading_zeros_uc
+    libc.src.stdbit.stdc_leading_zeros_us
+    libc.src.stdbit.stdc_leading_zeros_ui
+    libc.src.stdbit.stdc_leading_zeros_ul
+    libc.src.stdbit.stdc_leading_zeros_ull
+
     # stdlib.h entrypoints
     libc.src.stdlib.abs
     libc.src.stdlib.atoi
@@ -136,6 +143,7 @@ set(TARGET_LIBC_ENTRYPOINTS
     libc.src.sys.mman.mprotect
     libc.src.sys.mman.munmap
     libc.src.sys.mman.posix_madvise
+    libc.src.sys.mman.mincore
 
     # sys/random.h entrypoints
     libc.src.sys.random.getrandom
@@ -167,6 +175,9 @@ set(TARGET_LIBC_ENTRYPOINTS
 
     # sys/prctl.h entrypoints
     libc.src.sys.prctl.prctl
+
+    # sys/auxv.h entrypoints
+    libc.src.sys.auxv.getauxval
 
     # termios.h entrypoints
     libc.src.termios.cfgetispeed
@@ -357,7 +368,8 @@ set(TARGET_LIBM_ENTRYPOINTS
 if(LIBC_COMPILER_HAS_FLOAT128)
   list(APPEND TARGET_LIBM_ENTRYPOINTS
     # math.h C23 _Float128 entrypoints
-    libc.src.math.fabsf128
+    # Temporarily disabled since float128 isn't working on the aarch64 buildbot
+    # libc.src.math.fabsf128
   )
 endif()
 

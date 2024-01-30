@@ -238,6 +238,7 @@ bool TypePrinter::canPrefixQualifiers(const Type *T,
     case Type::TemplateSpecialization:
     case Type::InjectedClassName:
     case Type::DependentName:
+    case Type::PackName:
     case Type::DependentTemplateSpecialization:
     case Type::ObjCObject:
     case Type::ObjCTypeParam:
@@ -295,6 +296,11 @@ bool TypePrinter::canPrefixQualifiers(const Type *T,
       const auto *AttrTy = cast<AttributedType>(UnderlyingType);
       CanPrefixQualifiers = AttrTy->getAttrKind() == attr::AddressSpace;
       break;
+    }
+    case Type::PackIndexing: {
+      return canPrefixQualifiers(
+          cast<PackIndexingType>(UnderlyingType)->getPattern().getTypePtr(),
+          NeedARCStrongQualifier);
     }
   }
 
@@ -694,6 +700,7 @@ void TypePrinter::printVectorBefore(const VectorType *T, raw_ostream &OS) {
     printBefore(T->getElementType(), OS);
     break;
   case VectorKind::RVVFixedLengthData:
+  case VectorKind::RVVFixedLengthMask:
     // FIXME: We prefer to print the size directly here, but have no way
     // to get the size of the type.
     OS << "__attribute__((__riscv_rvv_vector_bits__(";
@@ -773,6 +780,7 @@ void TypePrinter::printDependentVectorBefore(
     printBefore(T->getElementType(), OS);
     break;
   case VectorKind::RVVFixedLengthData:
+  case VectorKind::RVVFixedLengthMask:
     // FIXME: We prefer to print the size directly here, but have no way
     // to get the size of the type.
     OS << "__attribute__((__riscv_rvv_vector_bits__(";
@@ -937,15 +945,28 @@ void TypePrinter::printFunctionProtoAfter(const FunctionProtoType *T,
   OS << ')';
 
   FunctionType::ExtInfo Info = T->getExtInfo();
+  unsigned SMEBits = T->getAArch64SMEAttributes();
 
-  if ((T->getAArch64SMEAttributes() & FunctionType::SME_PStateSMCompatibleMask))
+  if (SMEBits & FunctionType::SME_PStateSMCompatibleMask)
     OS << " __arm_streaming_compatible";
-  if ((T->getAArch64SMEAttributes() & FunctionType::SME_PStateSMEnabledMask))
+  if (SMEBits & FunctionType::SME_PStateSMEnabledMask)
     OS << " __arm_streaming";
-  if ((T->getAArch64SMEAttributes() & FunctionType::SME_PStateZASharedMask))
-    OS << " __arm_shared_za";
-  if ((T->getAArch64SMEAttributes() & FunctionType::SME_PStateZAPreservedMask))
-    OS << " __arm_preserves_za";
+  if (FunctionType::getArmZAState(SMEBits) == FunctionType::ARM_Preserves)
+    OS << " __arm_preserves(\"za\")";
+  if (FunctionType::getArmZAState(SMEBits) == FunctionType::ARM_In)
+    OS << " __arm_in(\"za\")";
+  if (FunctionType::getArmZAState(SMEBits) == FunctionType::ARM_Out)
+    OS << " __arm_out(\"za\")";
+  if (FunctionType::getArmZAState(SMEBits) == FunctionType::ARM_InOut)
+    OS << " __arm_inout(\"za\")";
+  if (FunctionType::getArmZT0State(SMEBits) == FunctionType::ARM_Preserves)
+    OS << " __arm_preserves(\"zt0\")";
+  if (FunctionType::getArmZT0State(SMEBits) == FunctionType::ARM_In)
+    OS << " __arm_in(\"zt0\")";
+  if (FunctionType::getArmZT0State(SMEBits) == FunctionType::ARM_Out)
+    OS << " __arm_out(\"zt0\")";
+  if (FunctionType::getArmZT0State(SMEBits) == FunctionType::ARM_InOut)
+    OS << " __arm_inout(\"zt0\")";
 
   printFunctionAfter(Info, OS);
 
@@ -1126,6 +1147,14 @@ void TypePrinter::printTypedefBefore(const TypedefType *T, raw_ostream &OS) {
   printTypeSpec(T->getDecl(), OS);
 }
 
+void TypePrinter::printTypedefAfter(const TypedefType *T, raw_ostream &OS) {}
+
+void TypePrinter::printSubstTypedefPackBefore(const SubstTypedefPackType *T,
+                                              raw_ostream &OS) {}
+
+void TypePrinter::printSubstTypedefPackAfter(const SubstTypedefPackType *T,
+                                             raw_ostream &OS) {}
+
 void TypePrinter::printMacroQualifiedBefore(const MacroQualifiedType *T,
                                             raw_ostream &OS) {
   StringRef MacroName = T->getMacroIdentifier()->getName();
@@ -1140,8 +1169,6 @@ void TypePrinter::printMacroQualifiedAfter(const MacroQualifiedType *T,
                                            raw_ostream &OS) {
   printAfter(T->getModifiedType(), OS);
 }
-
-void TypePrinter::printTypedefAfter(const TypedefType *T, raw_ostream &OS) {}
 
 void TypePrinter::printTypeOfExprBefore(const TypeOfExprType *T,
                                         raw_ostream &OS) {
@@ -1172,6 +1199,18 @@ void TypePrinter::printDecltypeBefore(const DecltypeType *T, raw_ostream &OS) {
   OS << ')';
   spaceBeforePlaceHolder(OS);
 }
+
+void TypePrinter::printPackIndexingBefore(const PackIndexingType *T,
+                                          raw_ostream &OS) {
+  if (T->isInstantiationDependentType())
+    OS << T->getPattern() << "...[" << T->getIndexExpr() << "]";
+  else
+    OS << T->getSelectedType();
+  spaceBeforePlaceHolder(OS);
+}
+
+void TypePrinter::printPackIndexingAfter(const PackIndexingType *T,
+                                         raw_ostream &OS) {}
 
 void TypePrinter::printDecltypeAfter(const DecltypeType *T, raw_ostream &OS) {}
 
@@ -1653,6 +1692,29 @@ void TypePrinter::printDependentNameBefore(const DependentNameType *T,
 void TypePrinter::printDependentNameAfter(const DependentNameType *T,
                                           raw_ostream &OS) {}
 
+void TypePrinter::printPackNameBefore(const PackNameType *T, raw_ostream &OS) {
+
+  const Type *Underlying = T->getUnderlyingType().getTypePtr();
+  if (auto ET = dyn_cast<ElaboratedType>(Underlying)) {
+    OS << TypeWithKeyword::getKeywordName(ET->getKeyword());
+    if (ET->getKeyword() != ElaboratedTypeKeyword::None)
+      OS << " ";
+    NestedNameSpecifier *Qualifier = ET->getQualifier();
+    if (Qualifier)
+      Qualifier->print(OS, Policy);
+    OS << "...";
+    ElaboratedTypePolicyRAII PolicyRAII(Policy);
+    printBefore(ET->getNamedType(), OS);
+  } else {
+    auto DN = cast<DependentNameType>(Underlying);
+    DN->getQualifier()->print(OS, Policy);
+    OS << "..." << T->getIdentifier()->getName();
+    spaceBeforePlaceHolder(OS);
+  }
+}
+
+void TypePrinter::printPackNameAfter(const PackNameType *T, raw_ostream &OS) {}
+
 void TypePrinter::printDependentTemplateSpecializationBefore(
         const DependentTemplateSpecializationType *T, raw_ostream &OS) {
   IncludeStrongLifetimeRAII Strong(Policy);
@@ -1788,14 +1850,6 @@ void TypePrinter::printAttributedAfter(const AttributedType *T,
     OS << "__arm_streaming_compatible";
     return;
   }
-  if (T->getAttrKind() == attr::ArmSharedZA) {
-    OS << "__arm_shared_za";
-    return;
-  }
-  if (T->getAttrKind() == attr::ArmPreservesZA) {
-    OS << "__arm_preserves_za";
-    return;
-  }
 
   OS << " __attribute__((";
   switch (T->getAttrKind()) {
@@ -1839,8 +1893,10 @@ void TypePrinter::printAttributedAfter(const AttributedType *T,
   case attr::WebAssemblyFuncref:
   case attr::ArmStreaming:
   case attr::ArmStreamingCompatible:
-  case attr::ArmSharedZA:
-  case attr::ArmPreservesZA:
+  case attr::ArmIn:
+  case attr::ArmOut:
+  case attr::ArmInOut:
+  case attr::ArmPreserves:
     llvm_unreachable("This attribute should have been handled already");
 
   case attr::NSReturnsRetained:

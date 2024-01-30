@@ -13,6 +13,7 @@
 #ifndef LLVM_CLANG_AST_DECL_H
 #define LLVM_CLANG_AST_DECL_H
 
+#include "clang/AST/APNumericStorage.h"
 #include "clang/AST/APValue.h"
 #include "clang/AST/ASTContextAllocate.h"
 #include "clang/AST/DeclAccessPair.h"
@@ -763,6 +764,65 @@ struct QualifierInfo {
   void setTemplateParameterListsInfo(ASTContext &Context,
                                      ArrayRef<TemplateParameterList *> TPLists);
 };
+
+
+class ValuePackDecl final
+    : public ValueDecl,
+      private llvm::TrailingObjects<ValuePackDecl, ValueDecl *> {
+
+  ValueDecl *InstantiatedFrom;
+  unsigned NumExpansions;
+
+  ValuePackDecl(DeclContext *DC, ValueDecl *InstantiatedFrom,
+                    ArrayRef<ValueDecl *> Decls, QualType Type)
+      : ValueDecl(ValuePack, DC, InstantiatedFrom->getLocation(),
+                  InstantiatedFrom->getDeclName(), Type),
+        InstantiatedFrom(InstantiatedFrom), NumExpansions(Decls.size()) {
+    std::uninitialized_copy(Decls.begin(), Decls.end(),
+                            getTrailingObjects<ValueDecl *>());
+  }
+
+  void anchor() override;
+
+public:
+  friend class ASTDeclReader;
+  friend class ASTDeclWriter;
+  friend TrailingObjects;
+
+  ValueDecl *getInstantiatedFromValueDecl() const {
+    return InstantiatedFrom;
+  }
+
+  ValueDecl* getPattern() const {
+    if (auto *Inner =
+        dyn_cast<ValuePackDecl>(getInstantiatedFromValueDecl()))
+      return Inner->getPattern();
+    return cast<ValueDecl>(getInstantiatedFromValueDecl());
+  }
+
+  ArrayRef<ValueDecl *> expansions() const {
+    return llvm::ArrayRef(getTrailingObjects<ValueDecl *>(),
+                          NumExpansions);
+  }
+
+  bool isDependentExpansion(ASTContext &C) const;
+
+  static ValuePackDecl *Create(ASTContext &C, DeclContext *DC,
+                                   ValueDecl *InstantiatedFrom,
+                                   ArrayRef<ValueDecl *> Decls);
+
+  static ValuePackDecl *CreateDeserialized(ASTContext &C, unsigned ID,
+                                               unsigned NumExpansions);
+
+  SourceRange getSourceRange() const override LLVM_READONLY {
+    return InstantiatedFrom->getSourceRange();
+  }
+
+  static bool classof(const Decl *D) { return classofKind(D->getKind()); }
+  static bool classofKind(Kind K) { return K == ValuePack; }
+};
+
+
 
 /// Represents a ValueDecl that came out of a declarator.
 /// Contains type source information through TypeSourceInfo.
@@ -2293,8 +2353,8 @@ public:
 
   /// Whether this virtual function is pure, i.e. makes the containing class
   /// abstract.
-  bool isPure() const { return FunctionDeclBits.IsPure; }
-  void setPure(bool P = true);
+  bool isPureVirtual() const { return FunctionDeclBits.IsPureVirtual; }
+  void setIsPureVirtual(bool P = true);
 
   /// Whether this templated function will be late parsed.
   bool isLateTemplateParsed() const {
@@ -3184,6 +3244,10 @@ public:
     return hasInClassInitializer() && (BitField ? InitAndBitWidth->Init : Init);
   }
 
+  bool isParameterPack() const {
+    return isa<PackExpansionType>(getType());
+  };
+
   /// Get the C++11 default member initializer for this member, or null if one
   /// has not been set. If a valid declaration has a default member initializer,
   /// but this returns null, then we have not parsed and attached it yet.
@@ -3251,15 +3315,16 @@ public:
 /// that is defined.  For example, in "enum X {a,b}", each of a/b are
 /// EnumConstantDecl's, X is an instance of EnumDecl, and the type of a/b is a
 /// TagType for the X EnumDecl.
-class EnumConstantDecl : public ValueDecl, public Mergeable<EnumConstantDecl> {
+class EnumConstantDecl : public ValueDecl,
+                         public Mergeable<EnumConstantDecl>,
+                         public APIntStorage {
   Stmt *Init; // an integer constant expression
-  llvm::APSInt Val; // The value.
+  bool IsUnsigned;
 
 protected:
-  EnumConstantDecl(DeclContext *DC, SourceLocation L,
+  EnumConstantDecl(const ASTContext &C, DeclContext *DC, SourceLocation L,
                    IdentifierInfo *Id, QualType T, Expr *E,
-                   const llvm::APSInt &V)
-    : ValueDecl(EnumConstant, DC, L, Id, T), Init((Stmt*)E), Val(V) {}
+                   const llvm::APSInt &V);
 
 public:
   friend class StmtIteratorBase;
@@ -3272,10 +3337,15 @@ public:
 
   const Expr *getInitExpr() const { return (const Expr*) Init; }
   Expr *getInitExpr() { return (Expr*) Init; }
-  const llvm::APSInt &getInitVal() const { return Val; }
+  llvm::APSInt getInitVal() const {
+    return llvm::APSInt(getValue(), IsUnsigned);
+  }
 
   void setInitExpr(Expr *E) { Init = (Stmt*) E; }
-  void setInitVal(const llvm::APSInt &V) { Val = V; }
+  void setInitVal(const ASTContext &C, const llvm::APSInt &V) {
+    setValue(C, V);
+    IsUnsigned = V.isUnsigned();
+  }
 
   SourceRange getSourceRange() const override LLVM_READONLY;
 
@@ -3499,33 +3569,6 @@ public:
   // Implement isa/cast/dyncast/etc.
   static bool classof(const Decl *D) { return classofKind(D->getKind()); }
   static bool classofKind(Kind K) { return K == Typedef; }
-};
-
-/// Represents the declaration of a typedef-name via a C++11
-/// alias-declaration.
-class TypeAliasDecl : public TypedefNameDecl {
-  /// The template for which this is the pattern, if any.
-  TypeAliasTemplateDecl *Template;
-
-  TypeAliasDecl(ASTContext &C, DeclContext *DC, SourceLocation StartLoc,
-                SourceLocation IdLoc, IdentifierInfo *Id, TypeSourceInfo *TInfo)
-      : TypedefNameDecl(TypeAlias, C, DC, StartLoc, IdLoc, Id, TInfo),
-        Template(nullptr) {}
-
-public:
-  static TypeAliasDecl *Create(ASTContext &C, DeclContext *DC,
-                               SourceLocation StartLoc, SourceLocation IdLoc,
-                               IdentifierInfo *Id, TypeSourceInfo *TInfo);
-  static TypeAliasDecl *CreateDeserialized(ASTContext &C, unsigned ID);
-
-  SourceRange getSourceRange() const override LLVM_READONLY;
-
-  TypeAliasTemplateDecl *getDescribedAliasTemplate() const { return Template; }
-  void setDescribedAliasTemplate(TypeAliasTemplateDecl *TAT) { Template = TAT; }
-
-  // Implement isa/cast/dyncast/etc.
-  static bool classof(const Decl *D) { return classofKind(D->getKind()); }
-  static bool classofKind(Kind K) { return K == TypeAlias; }
 };
 
 /// Represents the declaration of a struct/union/class/enum.

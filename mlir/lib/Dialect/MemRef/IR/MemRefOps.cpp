@@ -792,7 +792,7 @@ struct FoldCopyOfCast : public OpRewritePattern<CopyOp> {
       if (fromType && toType) {
         if (fromType.getShape() == toType.getShape() &&
             fromType.getElementType() == toType.getElementType()) {
-          rewriter.updateRootInPlace(copyOp, [&] {
+          rewriter.modifyOpInPlace(copyOp, [&] {
             copyOp.getSourceMutable().assign(castOp.getSource());
           });
           modified = true;
@@ -808,7 +808,7 @@ struct FoldCopyOfCast : public OpRewritePattern<CopyOp> {
       if (fromType && toType) {
         if (fromType.getShape() == toType.getShape() &&
             fromType.getElementType() == toType.getElementType()) {
-          rewriter.updateRootInPlace(copyOp, [&] {
+          rewriter.modifyOpInPlace(copyOp, [&] {
             copyOp.getTargetMutable().assign(castOp.getSource());
           });
           modified = true;
@@ -1366,7 +1366,7 @@ static bool replaceConstantUsesOf(OpBuilder &rewriter, Location loc,
         loc, llvm::cast<IntegerAttr>(maybeConstant.template get<Attribute>())
                  .getInt());
     for (Operation *op : llvm::make_early_inc_range(result.getUsers())) {
-      // updateRootInplace: lambda cannot capture structured bindings in C++17
+      // modifyOpInPlace: lambda cannot capture structured bindings in C++17
       // yet.
       op->replaceUsesOfWith(result, constantVal);
       atLeastOneReplacement = true;
@@ -2436,7 +2436,7 @@ public:
         op.getReassociationIndices());
 
     if (newResultType == op.getResultType()) {
-      rewriter.updateRootInPlace(
+      rewriter.modifyOpInPlace(
           op, [&]() { op.getSrcMutable().assign(cast.getSource()); });
     } else {
       Value newOp = rewriter.create<CollapseShapeOp>(
@@ -3227,8 +3227,6 @@ OpFoldResult TransposeOp::fold(FoldAdaptor) {
   // result types are identical already.
   if (getPermutation().isIdentity() && getType() == getIn().getType())
     return getIn();
-  if (succeeded(foldMemRefCast(*this)))
-    return getResult();
   // Fold two consecutive memref.transpose Ops into one by composing their
   // permutation maps.
   if (auto otherTransposeOp = getIn().getDefiningOp<memref::TransposeOp>()) {

@@ -12,6 +12,7 @@
 #ifndef LLVM_CLANG_SEMA_TEMPLATE_H
 #define LLVM_CLANG_SEMA_TEMPLATE_H
 
+#include "clang/AST/DeclCXX.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/DeclVisitor.h"
 #include "clang/AST/TemplateBase.h"
@@ -725,6 +726,13 @@ enum class TemplateSubstitutionKind : char {
     template<typename T>
     Decl *instantiateUnresolvedUsingDecl(T *D,
                                          bool InstantiatingPackElement = false);
+
+    Decl *instantiateAliasPack(TypeAliasDecl *);
+
+    FieldDecl *InstantiateFieldDecl(FieldDecl *D, TypeLoc Type, bool Expansion = false);
+
+    template <typename VarType>
+    Decl *instantiateValuePack(DeclaratorDecl *D);
   };
 
 } // namespace clang

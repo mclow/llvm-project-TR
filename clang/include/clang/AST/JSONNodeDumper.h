@@ -244,12 +244,14 @@ public:
   void VisitNamedDecl(const NamedDecl *ND);
   void VisitTypedefDecl(const TypedefDecl *TD);
   void VisitTypeAliasDecl(const TypeAliasDecl *TAD);
+  void VisitTypeAliasPackDecl(const TypeAliasPackDecl *TAD);
   void VisitNamespaceDecl(const NamespaceDecl *ND);
   void VisitUsingDirectiveDecl(const UsingDirectiveDecl *UDD);
   void VisitNamespaceAliasDecl(const NamespaceAliasDecl *NAD);
   void VisitUsingDecl(const UsingDecl *UD);
   void VisitUsingEnumDecl(const UsingEnumDecl *UED);
   void VisitUsingShadowDecl(const UsingShadowDecl *USD);
+  void VisitValuePackDecl(const ValuePackDecl *VPD);
   void VisitVarDecl(const VarDecl *VD);
   void VisitFieldDecl(const FieldDecl *FD);
   void VisitFunctionDecl(const FunctionDecl *FD);

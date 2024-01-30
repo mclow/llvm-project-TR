@@ -386,11 +386,17 @@ let Class = TypedefType in {
   def : Property<"underlyingType", QualType> {
     let Read = [{ node->desugar() }];
   }
-
   def : Creator<[{
     return ctx.getTypedefType(cast<TypedefNameDecl>(declaration), underlyingType);
   }]>;
 }
+
+let Class = SubstTypedefPackType in {
+  def : Creator<[{
+    return {};
+  }]>;
+}
+
 
 let Class = TypeOfExprType in {
   def : Property<"expression", ExprRef> {
@@ -432,6 +438,20 @@ let Class = DecltypeType in {
     return ctx.getDecltypeType(expression, underlyingType);
   }]>;
 }
+
+let Class = PackIndexingType in {
+  def : Property<"pattern", QualType> {
+    let Read = [{ node->getPattern() }];
+  }
+  def : Property<"indexExpression", ExprRef> {
+    let Read = [{ node->getIndexExpr() }];
+  }
+
+  def : Creator<[{
+    return ctx.getPackIndexingType(pattern, indexExpression);
+  }]>;
+}
+
 
 let Class = UnaryTransformType in {
   def : Property<"baseType", QualType> {
@@ -854,6 +874,19 @@ let Class = DependentNameType in {
     return ctx.getDependentNameType(keyword, qualifier, name, canon);
   }]>;
 }
+
+let Class = PackNameType in {
+  def : Property<"underlyingType", QualType> {
+    let Read = [{
+      node->getUnderlyingType()
+    }];
+  }
+
+  def : Creator<[{
+    return ctx.getPackNameType(ctx.getCanonicalType(underlyingType));
+  }]>;
+}
+
 
 let Class = ObjCObjectType in {
   def : Property<"baseType", QualType> {

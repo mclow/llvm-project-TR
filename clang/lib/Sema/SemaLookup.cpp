@@ -2989,6 +2989,7 @@ addAssociatedClassesAndNamespaces(AssociatedLookup &Result,
     case TemplateArgument::Integral:
     case TemplateArgument::Expression:
     case TemplateArgument::NullPtr:
+    case TemplateArgument::StructuralValue:
       // [Note: non-type template arguments do not contribute to the set of
       //  associated namespaces. ]
       break;
@@ -4535,6 +4536,7 @@ static void getNestedNameSpecifierIdentifiers(
   const IdentifierInfo *II = nullptr;
 
   switch (NNS->getKind()) {
+  case NestedNameSpecifier::PackName:
   case NestedNameSpecifier::Identifier:
     II = NNS->getAsIdentifier();
     break;

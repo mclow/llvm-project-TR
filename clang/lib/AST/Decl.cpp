@@ -348,6 +348,10 @@ LinkageComputer::getLVForTemplateArgumentList(ArrayRef<TemplateArgument> Args,
       LV.merge(getTypeLinkageAndVisibility(Arg.getNullPtrType()));
       continue;
 
+    case TemplateArgument::StructuralValue:
+      LV.merge(getLVForValue(Arg.getAsStructuralValue(), computation));
+      continue;
+
     case TemplateArgument::Template:
     case TemplateArgument::TemplateExpansion:
       if (TemplateDecl *Template =
@@ -3051,7 +3055,7 @@ FunctionDecl::FunctionDecl(Kind DK, ASTContext &C, DeclContext *DC,
   FunctionDeclBits.IsInline = isInlineSpecified;
   FunctionDeclBits.IsInlineSpecified = isInlineSpecified;
   FunctionDeclBits.IsVirtualAsWritten = false;
-  FunctionDeclBits.IsPure = false;
+  FunctionDeclBits.IsPureVirtual = false;
   FunctionDeclBits.HasInheritedPrototype = false;
   FunctionDeclBits.HasWrittenPrototype = true;
   FunctionDeclBits.IsDeleted = false;
@@ -3218,8 +3222,8 @@ void FunctionDecl::setBody(Stmt *B) {
     EndRangeLoc = B->getEndLoc();
 }
 
-void FunctionDecl::setPure(bool P) {
-  FunctionDeclBits.IsPure = P;
+void FunctionDecl::setIsPureVirtual(bool P) {
+  FunctionDeclBits.IsPureVirtual = P;
   if (P)
     if (auto *Parent = dyn_cast<CXXRecordDecl>(getDeclContext()))
       Parent->markedVirtualFunctionPure();
@@ -5315,6 +5319,23 @@ bool ValueDecl::isInitCapture() const {
   return false;
 }
 
+ValuePackDecl *
+ValuePackDecl::Create(ASTContext &C, DeclContext *DC, ValueDecl *InstantiatedFrom,
+                      ArrayRef<ValueDecl *> Decls) {
+  size_t Extra = additionalSizeToAlloc<ValueDecl *>(Decls.size());
+  return new (C, DC, Extra)
+      ValuePackDecl(DC, InstantiatedFrom, Decls, InstantiatedFrom->getType());
+}
+
+bool ValuePackDecl::isDependentExpansion([[maybe_unused]] ASTContext &C) const {
+  return llvm::any_of(expansions(), [](const ValueDecl *D) {
+    return D->getType()->isDependentType();
+  });
+}
+
+void ValuePackDecl::anchor() {}
+
+
 void ImplicitParamDecl::anchor() {}
 
 ImplicitParamDecl *ImplicitParamDecl::Create(ASTContext &C, DeclContext *DC,
@@ -5384,16 +5405,23 @@ void CapturedDecl::setBody(Stmt *B) { BodyAndNothrow.setPointer(B); }
 bool CapturedDecl::isNothrow() const { return BodyAndNothrow.getInt(); }
 void CapturedDecl::setNothrow(bool Nothrow) { BodyAndNothrow.setInt(Nothrow); }
 
+EnumConstantDecl::EnumConstantDecl(const ASTContext &C, DeclContext *DC,
+                                   SourceLocation L, IdentifierInfo *Id,
+                                   QualType T, Expr *E, const llvm::APSInt &V)
+    : ValueDecl(EnumConstant, DC, L, Id, T), Init((Stmt *)E) {
+  setInitVal(C, V);
+}
+
 EnumConstantDecl *EnumConstantDecl::Create(ASTContext &C, EnumDecl *CD,
                                            SourceLocation L,
                                            IdentifierInfo *Id, QualType T,
                                            Expr *E, const llvm::APSInt &V) {
-  return new (C, CD) EnumConstantDecl(CD, L, Id, T, E, V);
+  return new (C, CD) EnumConstantDecl(C, CD, L, Id, T, E, V);
 }
 
 EnumConstantDecl *
 EnumConstantDecl::CreateDeserialized(ASTContext &C, unsigned ID) {
-  return new (C, ID) EnumConstantDecl(nullptr, SourceLocation(), nullptr,
+  return new (C, ID) EnumConstantDecl(C, nullptr, SourceLocation(), nullptr,
                                       QualType(), nullptr, llvm::APSInt());
 }
 
@@ -5487,13 +5515,16 @@ TypedefDecl *TypedefDecl::CreateDeserialized(ASTContext &C, unsigned ID) {
 TypeAliasDecl *TypeAliasDecl::Create(ASTContext &C, DeclContext *DC,
                                      SourceLocation StartLoc,
                                      SourceLocation IdLoc, IdentifierInfo *Id,
-                                     TypeSourceInfo *TInfo) {
-  return new (C, DC) TypeAliasDecl(C, DC, StartLoc, IdLoc, Id, TInfo);
+                                     TypeSourceInfo *TInfo,
+                                     SourceLocation EllipsisLoc) {
+  return new (C, DC)
+      TypeAliasDecl(C, DC, StartLoc, IdLoc, Id, TInfo, EllipsisLoc);
 }
 
 TypeAliasDecl *TypeAliasDecl::CreateDeserialized(ASTContext &C, unsigned ID) {
-  return new (C, ID) TypeAliasDecl(C, nullptr, SourceLocation(),
-                                   SourceLocation(), nullptr, nullptr);
+  return new (C, ID)
+      TypeAliasDecl(C, nullptr, SourceLocation(), SourceLocation(), nullptr,
+                    nullptr, SourceLocation());
 }
 
 SourceRange TypedefDecl::getSourceRange() const {

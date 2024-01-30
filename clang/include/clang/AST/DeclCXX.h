@@ -266,7 +266,7 @@ class CXXRecordDecl : public RecordDecl {
   friend class LambdaExpr;
   friend class ODRDiagsEmitter;
 
-  friend void FunctionDecl::setPure(bool);
+  friend void FunctionDecl::setIsPureVirtual(bool);
   friend void TagDecl::startDefinition();
 
   /// Values used in DefinitionData fields to represent special members.
@@ -1439,31 +1439,20 @@ public:
 
   /// Determine whether this class is a literal type.
   ///
-  /// C++11 [basic.types]p10:
+  /// C++20 [basic.types]p10:
   ///   A class type that has all the following properties:
-  ///     - it has a trivial destructor
-  ///     - every constructor call and full-expression in the
-  ///       brace-or-equal-intializers for non-static data members (if any) is
-  ///       a constant expression.
-  ///     - it is an aggregate type or has at least one constexpr constructor
-  ///       or constructor template that is not a copy or move constructor, and
-  ///     - all of its non-static data members and base classes are of literal
-  ///       types
-  ///
-  /// We resolve DR1361 by ignoring the second bullet. We resolve DR1452 by
-  /// treating types with trivial default constructors as literal types.
-  ///
-  /// Only in C++17 and beyond, are lambdas literal types.
-  bool isLiteral() const {
-    const LangOptions &LangOpts = getLangOpts();
-    return (LangOpts.CPlusPlus20 ? hasConstexprDestructor()
-                                          : hasTrivialDestructor()) &&
-           (!isLambda() || LangOpts.CPlusPlus17) &&
-           !hasNonLiteralTypeFieldsOrBases() &&
-           (isAggregate() || isLambda() ||
-            hasConstexprNonCopyMoveConstructor() ||
-            hasTrivialDefaultConstructor());
-  }
+  ///     - it has a constexpr destructor
+  ///     - all of its non-static non-variant data members and base classes
+  ///       are of non-volatile literal types, and it:
+  ///        - is a closure type
+  ///        - is an aggregate union type that has either no variant members
+  ///          or at least one variant member of non-volatile literal type
+  ///        - is a non-union aggregate type for which each of its anonymous
+  ///          union members satisfies the above requirements for an aggregate
+  ///          union type, or
+  ///        - has at least one constexpr constructor or constructor template
+  ///          that is not a copy or move constructor.
+  bool isLiteral() const;
 
   /// Determine whether this is a structural type.
   bool isStructural() const {
@@ -2121,7 +2110,7 @@ public:
 
     // Member function is virtual if it is marked explicitly so, or if it is
     // declared in __interface -- then it is automatically pure virtual.
-    if (CD->isVirtualAsWritten() || CD->isPure())
+    if (CD->isVirtualAsWritten() || CD->isPureVirtual())
       return true;
 
     return CD->size_overridden_methods() != 0;
@@ -2312,13 +2301,12 @@ class CXXCtorInitializer final {
   /// end up constructing an object (when multiple arguments are involved).
   Stmt *Init;
 
-  /// The source location for the field name or, for a base initializer
-  /// pack expansion, the location of the ellipsis.
-  ///
   /// In the case of a delegating
   /// constructor, it will still include the type's source location as the
   /// Initializee points to the CXXConstructorDecl (to allow loop detection).
-  SourceLocation MemberOrEllipsisLocation;
+  SourceLocation MemberLocation;
+
+  SourceLocation EllipsisLocation;
 
   /// Location of the left paren of the ctor-initializer.
   SourceLocation LParenLoc;
@@ -2356,13 +2344,13 @@ public:
   explicit
   CXXCtorInitializer(ASTContext &Context, FieldDecl *Member,
                      SourceLocation MemberLoc, SourceLocation L, Expr *Init,
-                     SourceLocation R);
+                     SourceLocation R, SourceLocation EllipsisLoc = {});
 
   /// Creates a new anonymous field initializer.
   explicit
   CXXCtorInitializer(ASTContext &Context, IndirectFieldDecl *Member,
                      SourceLocation MemberLoc, SourceLocation L, Expr *Init,
-                     SourceLocation R);
+                     SourceLocation R, SourceLocation EllipsisLoc = {});
 
   /// Creates a new delegating initializer.
   explicit
@@ -2407,14 +2395,14 @@ public:
 
   /// Determine whether this initializer is a pack expansion.
   bool isPackExpansion() const {
-    return isBaseInitializer() && MemberOrEllipsisLocation.isValid();
+    return EllipsisLocation.isValid();
   }
 
   // For a pack expansion, returns the location of the ellipsis.
   SourceLocation getEllipsisLoc() const {
     if (!isPackExpansion())
       return {};
-    return MemberOrEllipsisLocation;
+    return EllipsisLocation;
   }
 
   /// If this is a base class initializer, returns the type of the
@@ -2462,7 +2450,7 @@ public:
   }
 
   SourceLocation getMemberLocation() const {
-    return MemberOrEllipsisLocation;
+    return MemberLocation;
   }
 
   /// Determine the source location of the initializer.
@@ -3505,6 +3493,102 @@ public:
 
   static bool classof(const Decl *D) { return classofKind(D->getKind()); }
   static bool classofKind(Kind K) { return K == Using || K == UsingEnum; }
+};
+
+/// Represents the declaration of a typedef-name via a C++11
+/// alias-declaration.
+class TypeAliasDecl : public TypedefNameDecl {
+  /// The template for which this is the pattern, if any.
+  TypeAliasTemplateDecl *Template;
+  SourceLocation EllipsisLoc;
+
+  TypeAliasDecl(ASTContext &C, DeclContext *DC, SourceLocation StartLoc,
+                SourceLocation IdLoc, IdentifierInfo *Id, TypeSourceInfo *TInfo,
+                SourceLocation EllipsisLoc)
+      : TypedefNameDecl(TypeAlias, C, DC, StartLoc, IdLoc, Id, TInfo),
+        Template(nullptr), EllipsisLoc(EllipsisLoc) {}
+
+public:
+  static TypeAliasDecl *Create(ASTContext &C, DeclContext *DC,
+                               SourceLocation StartLoc, SourceLocation IdLoc,
+                               IdentifierInfo *Id, TypeSourceInfo *TInfo,
+                               SourceLocation EllipsisLoc);
+  static TypeAliasDecl *CreateDeserialized(ASTContext &C, unsigned ID);
+
+  SourceRange getSourceRange() const override LLVM_READONLY;
+
+  TypeAliasTemplateDecl *getDescribedAliasTemplate() const { return Template; }
+  void setDescribedAliasTemplate(TypeAliasTemplateDecl *TAT) { Template = TAT; }
+
+  SourceLocation getEllipsisLoc() const { return EllipsisLoc; }
+
+  bool isPack() const { return EllipsisLoc.isValid(); }
+
+  static bool classof(const Decl *D) { return classofKind(D->getKind()); }
+  static bool classofKind(Kind K) { return K == TypeAlias; }
+};
+
+class TypeAliasPackDecl final
+    : public TypedefNameDecl,
+      private llvm::TrailingObjects<TypeAliasPackDecl, TypedefNameDecl *> {
+
+  TypedefNameDecl *InstantiatedFrom;
+  unsigned NumExpansions;
+
+  TypeAliasPackDecl(ASTContext &C, DeclContext *DC,
+                    TypedefNameDecl *InstantiatedFrom,
+                    ArrayRef<TypedefNameDecl *> UsingDecls)
+      : TypedefNameDecl(TypeAliasPack, C, DC, InstantiatedFrom->getLocation(),
+                        SourceLocation(), InstantiatedFrom->getIdentifier(),
+                        InstantiatedFrom->getTypeSourceInfo()),
+        InstantiatedFrom(InstantiatedFrom), NumExpansions(UsingDecls.size()) {
+    std::uninitialized_copy(UsingDecls.begin(), UsingDecls.end(),
+                            getTrailingObjects<TypedefNameDecl *>());
+  }
+
+  void anchor() override;
+
+public:
+  friend class ASTDeclReader;
+  friend class ASTDeclWriter;
+  friend TrailingObjects;
+
+  TypedefNameDecl *getInstantiatedFromAliasDecl() const {
+    return InstantiatedFrom;
+  }
+
+  QualType getPattern() const {
+    if (auto *Inner =
+            dyn_cast<TypeAliasPackDecl>(getInstantiatedFromAliasDecl()))
+      return Inner->getPattern();
+    return cast<TypeAliasDecl>(getInstantiatedFromAliasDecl())
+        ->getUnderlyingType();
+  }
+
+  ArrayRef<TypedefNameDecl *> expansions() const {
+    return llvm::ArrayRef(getTrailingObjects<TypedefNameDecl *>(),
+                          NumExpansions);
+  }
+
+  bool isDependentExpansion(ASTContext &C) const;
+
+  static TypeAliasPackDecl *Create(ASTContext &C, DeclContext *DC,
+                                   TypedefNameDecl *InstantiatedFrom,
+                                   ArrayRef<TypedefNameDecl *> AliasDecls);
+
+  static TypeAliasPackDecl *CreateDeserialized(ASTContext &C, unsigned ID,
+                                               unsigned NumExpansions);
+
+  SourceRange getSourceRange() const override LLVM_READONLY {
+    return InstantiatedFrom->getSourceRange();
+  }
+
+  // TypeAliasPackDecl *getCanonicalDecl() override { return getFirstDecl(); }
+  // const TypeAliasPackDecl *getCanonicalDecl() const { return getFirstDecl();
+  // }
+
+  static bool classof(const Decl *D) { return classofKind(D->getKind()); }
+  static bool classofKind(Kind K) { return K == TypeAliasPack; }
 };
 
 /// Represents a C++ using-declaration.

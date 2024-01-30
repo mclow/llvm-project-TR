@@ -79,7 +79,7 @@ TypeResult Parser::ParseTypeName(SourceRange *Range, DeclaratorContext Context,
   if (DeclaratorInfo.isInvalidType())
     return true;
 
-  return Actions.ActOnTypeName(getCurScope(), DeclaratorInfo);
+  return Actions.ActOnTypeName(DeclaratorInfo);
 }
 
 /// Normalizes an attribute name by dropping prefixed and suffixed __.
@@ -2312,12 +2312,38 @@ Parser::DeclGroupPtrTy Parser::ParseDeclGroup(ParsingDeclSpec &DS,
     bool IsForRangeLoop = false;
     if (TryConsumeToken(tok::colon, FRI->ColonLoc)) {
       IsForRangeLoop = true;
+      EnterExpressionEvaluationContext ForRangeInitContext(
+          Actions, Sema::ExpressionEvaluationContext::PotentiallyEvaluated,
+          /*LambdaContextDecl=*/nullptr,
+          Sema::ExpressionEvaluationContextRecord::EK_Other,
+          getLangOpts().CPlusPlus23);
+
+      // P2718R0 - Lifetime extension in range-based for loops.
+      if (getLangOpts().CPlusPlus23) {
+        auto &LastRecord = Actions.ExprEvalContexts.back();
+        LastRecord.InLifetimeExtendingContext = true;
+
+        // Materialize non-`cv void` prvalue temporaries in discarded
+        // expressions. These materialized temporaries may be lifetime-extented.
+        LastRecord.InMaterializeTemporaryObjectContext = true;
+      }
+
       if (getLangOpts().OpenMP)
         Actions.startOpenMPCXXRangeFor();
       if (Tok.is(tok::l_brace))
         FRI->RangeExpr = ParseBraceInitializer();
       else
         FRI->RangeExpr = ParseExpression();
+
+      // Before c++23, ForRangeLifetimeExtendTemps should be empty.
+      assert(
+          getLangOpts().CPlusPlus23 ||
+          Actions.ExprEvalContexts.back().ForRangeLifetimeExtendTemps.empty());
+
+      // Move the collected materialized temporaries into ForRangeInit before
+      // ForRangeInitContext exit.
+      FRI->LifetimeExtendTemps = std::move(
+          Actions.ExprEvalContexts.back().ForRangeLifetimeExtendTemps);
     }
 
     Decl *ThisDecl = Actions.ActOnDeclarator(getCurScope(), D);
@@ -3579,6 +3605,19 @@ void Parser::ParseDeclarationSpecifiers(
         ConsumeAnnotationToken(); // The typename
       }
 
+      else if (Next.is(tok::annot_pack_indexing_type)) {
+        DS.getTypeSpecScope() = SS;
+        ConsumeAnnotationToken(); // The C++ scope.
+        TypeResult T = getTypeAnnotation(Tok);
+        isInvalid = DS.SetTypeSpecType(DeclSpec::TST_typename_pack_indexing,
+                                       Tok.getAnnotationEndLoc(), PrevSpec,
+                                       DiagID, T, Policy);
+        if (isInvalid)
+          break;
+        DS.SetRangeEnd(Tok.getAnnotationEndLoc());
+        ConsumeAnnotationToken(); // The pack alias
+      }
+
       if (AllowImplicitTypename == ImplicitTypenameContext::Yes &&
           Next.is(tok::annot_template_id) &&
           static_cast<TemplateIdAnnotation *>(Next.getAnnotationValue())
@@ -3588,9 +3627,45 @@ void Parser::ParseDeclarationSpecifiers(
         AnnotateTemplateIdTokenAsType(SS, AllowImplicitTypename);
         continue;
       }
+      SourceLocation DependentEllipsisLoc;
+      if (Next.is(tok::ellipsis) && GetLookAheadToken(2).is(tok::identifier)) {
+        DependentEllipsisLoc = Next.getLocation();
+        IdentifierInfo *II = GetLookAheadToken(2).getIdentifierInfo();
 
-      if (Next.isNot(tok::identifier))
+        SuppressAccessChecks SAC(*this, IsTemplateSpecOrInst);
+
+        ParsedType TypeRep = Actions.getPackName(
+            DependentEllipsisLoc, *II, GetLookAheadToken(2).getLocation(),
+            getCurScope(), &SS, false, false, nullptr, AllowImplicitTypename);
+
+        if (IsTemplateSpecOrInst)
+          SAC.done();
+
+        if (!TypeRep) {
+          // Todo corentin: recover ?
+          goto DoneWithDeclSpec;
+        }
+
+        DS.getTypeSpecScope() = SS;
+        ConsumeAnnotationToken(); // The C++ scope.
+
+        isInvalid = DS.SetTypeSpecType(DeclSpec::TST_typename, Loc, PrevSpec,
+                                       DiagID, TypeRep, Policy);
+        if (isInvalid)
+          break;
+
+        // Consume the ellipsis
+        ConsumeToken();
+
+        DS.SetRangeEnd(Tok.getLocation());
+        // consume the identifier
+        ConsumeToken();
+        continue;
+      }
+
+      if (Next.isNot(tok::identifier)) {
         goto DoneWithDeclSpec;
+      }
 
       // Check whether this is a constructor declaration. If we're in a
       // context where the identifier could be a class name, and it has the
@@ -4449,6 +4524,10 @@ void Parser::ParseDeclarationSpecifiers(
       ParseDecltypeSpecifier(DS);
       continue;
 
+    case tok::annot_pack_indexing_type:
+      ParsePackIndexingType(DS);
+      continue;
+
     case tok::annot_pragma_pack:
       HandlePragmaPack();
       continue;
@@ -5013,7 +5092,7 @@ void Parser::ParseEnumSpecifier(SourceLocation StartLoc, DeclSpec &DS,
                                   DeclSpecContext::DSC_type_specifier);
       Declarator DeclaratorInfo(DS, ParsedAttributesView::none(),
                                 DeclaratorContext::TypeName);
-      BaseType = Actions.ActOnTypeName(getCurScope(), DeclaratorInfo);
+      BaseType = Actions.ActOnTypeName(DeclaratorInfo);
 
       BaseRange = SourceRange(ColonLoc, DeclaratorInfo.getSourceRange().getEnd());
 
@@ -5758,6 +5837,7 @@ bool Parser::isDeclarationSpecifier(
 
     // C++11 decltype and constexpr.
   case tok::annot_decltype:
+  case tok::annot_pack_indexing_type:
   case tok::kw_constexpr:
 
     // C++20 consteval and constinit.
@@ -6255,7 +6335,9 @@ void Parser::ParseDeclaratorInternal(Declarator &D,
       (Tok.is(tok::coloncolon) || Tok.is(tok::kw_decltype) ||
        (Tok.is(tok::identifier) &&
         (NextToken().is(tok::coloncolon) || NextToken().is(tok::less))) ||
-       Tok.is(tok::annot_cxxscope))) {
+       Tok.is(tok::annot_cxxscope) ||
+       (Tok.is(tok::coloncolon) && NextToken().is(tok::ellipsis) &&
+        GetLookAheadToken(2).is(tok::identifier)))) {
     bool EnteringContext = D.getContext() == DeclaratorContext::File ||
                            D.getContext() == DeclaratorContext::Member;
     CXXScopeSpec SS;
@@ -6793,7 +6875,13 @@ void Parser::ParseDirectDeclarator(Declarator &D) {
     } else if (Tok.isRegularKeywordAttribute()) {
       // For consistency with attribute parsing.
       Diag(Tok, diag::err_keyword_not_allowed) << Tok.getIdentifierInfo();
+      bool TakesArgs = doesKeywordAttributeTakeArgs(Tok.getKind());
       ConsumeToken();
+      if (TakesArgs) {
+        BalancedDelimiterTracker T(*this, tok::l_paren);
+        if (!T.consumeOpen())
+          T.skipToEnd();
+      }
     } else if (Tok.is(tok::kw_requires) && D.hasGroupingParens()) {
       // This declarator is declaring a function, but the requires clause is
       // in the wrong place:
@@ -8045,6 +8133,71 @@ bool Parser::TryAltiVecTokenOutOfLine(DeclSpec &DS, SourceLocation Loc,
     return true;
   }
   return false;
+}
+
+TypeResult Parser::ParseTypeFromString(StringRef TypeStr, StringRef Context,
+                                       SourceLocation IncludeLoc) {
+  // Consume (unexpanded) tokens up to the end-of-directive.
+  SmallVector<Token, 4> Tokens;
+  {
+    // Create a new buffer from which we will parse the type.
+    auto &SourceMgr = PP.getSourceManager();
+    FileID FID = SourceMgr.createFileID(
+        llvm::MemoryBuffer::getMemBufferCopy(TypeStr, Context), SrcMgr::C_User,
+        0, 0, IncludeLoc);
+
+    // Form a new lexer that references the buffer.
+    Lexer L(FID, SourceMgr.getBufferOrFake(FID), PP);
+    L.setParsingPreprocessorDirective(true);
+
+    // Lex the tokens from that buffer.
+    Token Tok;
+    do {
+      L.Lex(Tok);
+      Tokens.push_back(Tok);
+    } while (Tok.isNot(tok::eod));
+  }
+
+  // Replace the "eod" token with an "eof" token identifying the end of
+  // the provided string.
+  Token &EndToken = Tokens.back();
+  EndToken.startToken();
+  EndToken.setKind(tok::eof);
+  EndToken.setLocation(Tok.getLocation());
+  EndToken.setEofData(TypeStr.data());
+
+  // Add the current token back.
+  Tokens.push_back(Tok);
+
+  // Enter the tokens into the token stream.
+  PP.EnterTokenStream(Tokens, /*DisableMacroExpansion=*/false,
+                      /*IsReinject=*/false);
+
+  // Consume the current token so that we'll start parsing the tokens we
+  // added to the stream.
+  ConsumeAnyToken();
+
+  // Enter a new scope.
+  ParseScope LocalScope(this, 0);
+
+  // Parse the type.
+  TypeResult Result = ParseTypeName(nullptr);
+
+  // Check if we parsed the whole thing.
+  if (Result.isUsable() &&
+      (Tok.isNot(tok::eof) || Tok.getEofData() != TypeStr.data())) {
+    Diag(Tok.getLocation(), diag::err_type_unparsed);
+  }
+
+  // There could be leftover tokens (e.g. because of an error).
+  // Skip through until we reach the 'end of directive' token.
+  while (Tok.isNot(tok::eof))
+    ConsumeAnyToken();
+
+  // Consume the end token.
+  if (Tok.is(tok::eof) && Tok.getEofData() == TypeStr.data())
+    ConsumeAnyToken();
+  return Result;
 }
 
 void Parser::DiagnoseBitIntUse(const Token &Tok) {

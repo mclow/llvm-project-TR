@@ -1462,6 +1462,7 @@ bool CursorVisitor::VisitNestedNameSpecifier(NestedNameSpecifier *NNS,
   case NestedNameSpecifier::TypeSpecWithTemplate:
   case NestedNameSpecifier::Global:
   case NestedNameSpecifier::Identifier:
+  case NestedNameSpecifier::PackName:
   case NestedNameSpecifier::Super:
     break;
   }
@@ -1502,6 +1503,7 @@ bool CursorVisitor::VisitNestedNameSpecifierLoc(
 
     case NestedNameSpecifier::Global:
     case NestedNameSpecifier::Identifier:
+    case NestedNameSpecifier::PackName:
     case NestedNameSpecifier::Super:
       break;
     }
@@ -1579,6 +1581,11 @@ bool CursorVisitor::VisitTemplateArgumentLoc(const TemplateArgumentLoc &TAL) {
 
   case TemplateArgument::Declaration:
     if (Expr *E = TAL.getSourceDeclExpression())
+      return Visit(MakeCXCursor(E, StmtParent, TU, RegionOfInterest));
+    return false;
+
+  case TemplateArgument::StructuralValue:
+    if (Expr *E = TAL.getSourceStructuralValueExpression())
       return Visit(MakeCXCursor(E, StmtParent, TU, RegionOfInterest));
     return false;
 
@@ -1854,6 +1861,15 @@ bool CursorVisitor::VisitDependentNameTypeLoc(DependentNameTypeLoc TL) {
   return VisitNestedNameSpecifierLoc(TL.getQualifierLoc());
 }
 
+bool CursorVisitor::VisitPackNameTypeLoc(PackNameTypeLoc TL) {
+  return Visit(TL.getUnderlyingTypeLoc());
+}
+
+bool CursorVisitor::VisitSubstTypedefPackTypeLoc(SubstTypedefPackTypeLoc TL) {
+  return false;
+}
+
+
 bool CursorVisitor::VisitDependentTemplateSpecializationTypeLoc(
     DependentTemplateSpecializationTypeLoc TL) {
   // Visit the nested-name-specifier, if there is one.
@@ -1884,6 +1900,12 @@ bool CursorVisitor::VisitDecltypeTypeLoc(DecltypeTypeLoc TL) {
     return Visit(MakeCXCursor(E, StmtParent, TU));
 
   return false;
+}
+
+bool CursorVisitor::VisitPackIndexingTypeLoc(PackIndexingTypeLoc TL) {
+  if (Visit(TL.getPatternLoc()))
+    return true;
+  return Visit(MakeCXCursor(TL.getIndexExpr(), StmtParent, TU));
 }
 
 bool CursorVisitor::VisitInjectedClassNameTypeLoc(InjectedClassNameTypeLoc TL) {
@@ -5713,6 +5735,8 @@ CXString clang_getCursorKindSpelling(enum CXCursorKind Kind) {
     return cxstring::createRef("PackExpansionExpr");
   case CXCursor_SizeOfPackExpr:
     return cxstring::createRef("SizeOfPackExpr");
+  case CXCursor_PackIndexingExpr:
+    return cxstring::createRef("PackIndexingExpr");
   case CXCursor_LambdaExpr:
     return cxstring::createRef("LambdaExpr");
   case CXCursor_UnexposedExpr:
@@ -9007,7 +9031,7 @@ unsigned clang_CXXMethod_isPureVirtual(CXCursor C) {
   const Decl *D = cxcursor::getCursorDecl(C);
   const CXXMethodDecl *Method =
       D ? dyn_cast_or_null<CXXMethodDecl>(D->getAsFunction()) : nullptr;
-  return (Method && Method->isVirtual() && Method->isPure()) ? 1 : 0;
+  return (Method && Method->isPureVirtual()) ? 1 : 0;
 }
 
 unsigned clang_CXXMethod_isConst(CXCursor C) {

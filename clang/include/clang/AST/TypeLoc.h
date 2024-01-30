@@ -691,6 +691,16 @@ public:
   }
 };
 
+/// Wrapper for source info for typedefs.
+class SubstTypedefPackTypeLoc
+    : public InheritingConcreteTypeLoc<TypeSpecTypeLoc, SubstTypedefPackTypeLoc,
+                                       SubstTypedefPackType> {
+public:
+  // TypedefNameDecl *getTypedefNameDecl() const {
+  //   return getTypePtr()->getDecl();
+  // }
+};
+
 /// Wrapper for source info for injected class names of class
 /// templates.
 class InjectedClassNameTypeLoc :
@@ -882,6 +892,10 @@ public:
   ///    ~~~     ~~~~~~~~~~~~~
   TypeLoc getModifiedLoc() const {
     return getInnerTypeLoc();
+  }
+
+  TypeLoc getEquivalentTypeLoc() const {
+    return TypeLoc(getTypePtr()->getEquivalentType(), getNonLocalData());
   }
 
   /// The type attribute.
@@ -2055,6 +2069,34 @@ public:
   }
 };
 
+struct PackIndexingTypeLocInfo {
+  SourceLocation EllipsisLoc;
+};
+
+class PackIndexingTypeLoc
+    : public ConcreteTypeLoc<UnqualTypeLoc, PackIndexingTypeLoc,
+                             PackIndexingType, PackIndexingTypeLocInfo> {
+
+public:
+  Expr *getIndexExpr() const { return getTypePtr()->getIndexExpr(); }
+  QualType getPattern() const { return getTypePtr()->getPattern(); }
+
+  SourceLocation getEllipsisLoc() const { return getLocalData()->EllipsisLoc; }
+  void setEllipsisLoc(SourceLocation Loc) { getLocalData()->EllipsisLoc = Loc; }
+
+  void initializeLocal(ASTContext &Context, SourceLocation Loc) {
+    setEllipsisLoc(Loc);
+  }
+
+  TypeLoc getPatternLoc() const { return getInnerTypeLoc(); }
+
+  QualType getInnerType() const { return this->getTypePtr()->getPattern(); }
+
+  SourceRange getLocalSourceRange() const {
+    return SourceRange(getEllipsisLoc(), getEllipsisLoc());
+  }
+};
+
 struct UnaryTransformTypeLocInfo {
   // FIXME: While there's only one unary transform right now, future ones may
   // need different representations
@@ -2369,6 +2411,33 @@ public:
   }
 
   void initializeLocal(ASTContext &Context, SourceLocation Loc);
+};
+
+struct PackNameLocInfo {
+  SourceLocation EllipsisLoc;
+};
+
+class PackNameTypeLoc : public ConcreteTypeLoc<UnqualTypeLoc, PackNameTypeLoc,
+                                               PackNameType, PackNameLocInfo> {
+public:
+  SourceLocation getEllipsisLoc() const {
+    return this->getLocalData()->EllipsisLoc;
+  }
+  SourceLocation setEllipsisLoc(SourceLocation Loc) const {
+    return this->getLocalData()->EllipsisLoc = Loc;
+  }
+
+  TypeLoc getUnderlyingTypeLoc() const { return getInnerTypeLoc(); }
+
+  QualType getInnerType() const { return getTypePtr()->getUnderlyingType(); }
+
+  SourceRange getLocalSourceRange() const LLVM_READONLY {
+    return getUnderlyingTypeLoc().getSourceRange();
+  }
+
+  void initializeLocal(ASTContext &Context, SourceLocation Loc) {
+    setEllipsisLoc(Loc);
+  }
 };
 
 struct DependentTemplateSpecializationLocInfo : DependentNameLocInfo {

@@ -436,6 +436,10 @@ void TypeLocWriter::VisitTypedefTypeLoc(TypedefTypeLoc TL) {
   addSourceLocation(TL.getNameLoc());
 }
 
+void TypeLocWriter::VisitSubstTypedefPackTypeLoc(SubstTypedefPackTypeLoc TL) {
+  addSourceLocation(TL.getNameLoc());
+}
+
 void TypeLocWriter::VisitObjCTypeParamTypeLoc(ObjCTypeParamTypeLoc TL) {
   if (TL.getNumProtocols()) {
     addSourceLocation(TL.getProtocolLAngleLoc());
@@ -480,6 +484,10 @@ void ASTRecordWriter::AddConceptReference(const ConceptReference *CR) {
   push_back(CR->getTemplateArgsAsWritten() != nullptr);
   if (CR->getTemplateArgsAsWritten())
     AddASTTemplateArgumentListInfo(CR->getTemplateArgsAsWritten());
+}
+
+void TypeLocWriter::VisitPackIndexingTypeLoc(PackIndexingTypeLoc TL) {
+  addSourceLocation(TL.getEllipsisLoc());
 }
 
 void TypeLocWriter::VisitAutoTypeLoc(AutoTypeLoc TL) {
@@ -561,6 +569,10 @@ void TypeLocWriter::VisitDependentNameTypeLoc(DependentNameTypeLoc TL) {
   addSourceLocation(TL.getElaboratedKeywordLoc());
   Record.AddNestedNameSpecifierLoc(TL.getQualifierLoc());
   addSourceLocation(TL.getNameLoc());
+}
+
+void TypeLocWriter::VisitPackNameTypeLoc(PackNameTypeLoc TL) {
+  addSourceLocation(TL.getEllipsisLoc());
 }
 
 void TypeLocWriter::VisitDependentTemplateSpecializationTypeLoc(
@@ -784,6 +796,7 @@ static void AddStmtsExprs(llvm::BitstreamWriter &Stream,
   RECORD(EXPR_ARRAY_TYPE_TRAIT);
   RECORD(EXPR_PACK_EXPANSION);
   RECORD(EXPR_SIZEOF_PACK);
+  RECORD(EXPR_PACK_INDEXING);
   RECORD(EXPR_SUBST_NON_TYPE_TEMPLATE_PARM);
   RECORD(EXPR_SUBST_NON_TYPE_TEMPLATE_PARM_PACK);
   RECORD(EXPR_FUNCTION_PARM_PACK);
@@ -1897,7 +1910,8 @@ namespace {
 
       unsigned char Flags = (Data.AlreadyIncluded << 6)
                           | (Data.HFI.isImport << 5)
-                          | (Data.HFI.isPragmaOnce << 4)
+                          | (Writer.isWritingStdCXXNamedModules() ? 0 :
+                             Data.HFI.isPragmaOnce << 4)
                           | (Data.HFI.DirInfo << 1)
                           | Data.HFI.IndexHeaderMapHeader;
       LE.write<uint8_t>(Flags);
@@ -5608,6 +5622,7 @@ void ASTRecordWriter::AddTemplateArgumentLocInfo(
   case TemplateArgument::Integral:
   case TemplateArgument::Declaration:
   case TemplateArgument::NullPtr:
+  case TemplateArgument::StructuralValue:
   case TemplateArgument::Pack:
     // FIXME: Is this right?
     break;
@@ -5854,6 +5869,12 @@ void ASTRecordWriter::AddNestedNameSpecifierLoc(NestedNameSpecifierLoc NNS) {
       AddSourceRange(NNS.getLocalSourceRange());
       break;
 
+    case NestedNameSpecifier::PackName:
+      AddIdentifierRef(NNS.getNestedNameSpecifier()->getAsIdentifier());
+      AddSourceRange(NNS.getLocalSourceRange());
+      AddSourceLocation(NNS.getIdentifierLoc());
+      break;
+
     case NestedNameSpecifier::Namespace:
       AddDeclRef(NNS.getNestedNameSpecifier()->getAsNamespace());
       AddSourceRange(NNS.getLocalSourceRange());
@@ -6020,8 +6041,12 @@ void ASTRecordWriter::AddCXXDefinitionData(const CXXRecordDecl *D) {
 
   Record->push_back(DefinitionBits);
 
-  // getODRHash will compute the ODRHash if it has not been previously computed.
-  Record->push_back(D->getODRHash());
+  // We only perform ODR checks for decls not in GMF.
+  if (!isFromExplicitGMF(D)) {
+    // getODRHash will compute the ODRHash if it has not been previously
+    // computed.
+    Record->push_back(D->getODRHash());
+  }
 
   bool ModulesDebugInfo =
       Writer->Context->getLangOpts().ModulesDebugInfo && !D->isDependentType();

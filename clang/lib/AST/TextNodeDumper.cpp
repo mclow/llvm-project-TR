@@ -797,6 +797,11 @@ void clang::TextNodeDumper::dumpNestedNameSpecifier(const NestedNameSpecifier *N
       OS << " Identifier";
       OS << " '" << NNS->getAsIdentifier()->getName() << "'";
       break;
+
+    case NestedNameSpecifier::PackName:
+      OS << " PackName";
+      OS << " '" << NNS->getAsIdentifier()->getName() << "'";
+      break;
     case NestedNameSpecifier::Namespace:
       OS << " "; // "Namespace" is printed as the decl kind.
       dumpBareDeclRef(NNS->getAsNamespace());
@@ -1640,6 +1645,9 @@ void TextNodeDumper::VisitVectorType(const VectorType *T) {
   case VectorKind::RVVFixedLengthData:
     OS << " fixed-length rvv data vector";
     break;
+  case VectorKind::RVVFixedLengthMask:
+    OS << " fixed-length rvv mask vector";
+    break;
   }
   OS << " " << T->getNumElements();
 }
@@ -1869,6 +1877,14 @@ void TextNodeDumper::VisitEnumConstantDecl(const EnumConstantDecl *D) {
   dumpType(D->getType());
 }
 
+void TextNodeDumper::VisitValuePackDecl(const ValuePackDecl *D) {
+  dumpName(D);
+  dumpType(D->getType());
+
+  for (const auto *Child : D->expansions())
+    dumpDeclRef(Child);
+}
+
 void TextNodeDumper::VisitIndirectFieldDecl(const IndirectFieldDecl *D) {
   dumpName(D);
   dumpType(D->getType());
@@ -1892,7 +1908,7 @@ void TextNodeDumper::VisitFunctionDecl(const FunctionDecl *D) {
   if (D->isModulePrivate())
     OS << " __module_private__";
 
-  if (D->isPure())
+  if (D->isPureVirtual())
     OS << " pure";
   if (D->isDefaulted()) {
     OS << " default";
@@ -2166,6 +2182,11 @@ void TextNodeDumper::VisitNamespaceAliasDecl(const NamespaceAliasDecl *D) {
 void TextNodeDumper::VisitTypeAliasDecl(const TypeAliasDecl *D) {
   dumpName(D);
   dumpType(D->getUnderlyingType());
+}
+
+void TextNodeDumper::VisitTypeAliasPackDecl(const TypeAliasPackDecl *D) {
+  // dumpName(D);
+  // dumpType(D->getUnderlyingType());
 }
 
 void TextNodeDumper::VisitTypeAliasTemplateDecl(

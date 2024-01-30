@@ -13,12 +13,14 @@
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/ASTMutationListener.h"
+#include "clang/AST/Decl.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/DeclVisitor.h"
 #include "clang/AST/DependentDiagnostic.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/PrettyDeclStackTrace.h"
+#include "clang/AST/Type.h"
 #include "clang/AST/TypeLoc.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TargetInfo.h"
@@ -29,6 +31,7 @@
 #include "clang/Sema/SemaInternal.h"
 #include "clang/Sema/Template.h"
 #include "clang/Sema/TemplateInstCallback.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/TimeProfiler.h"
 #include <optional>
 
@@ -1014,7 +1017,9 @@ Decl *TemplateDeclInstantiator::InstantiateTypedefNameDecl(TypedefNameDecl *D,
   TypedefNameDecl *Typedef;
   if (IsTypeAlias)
     Typedef = TypeAliasDecl::Create(SemaRef.Context, Owner, D->getBeginLoc(),
-                                    D->getLocation(), D->getIdentifier(), DI);
+                                    D->getLocation(), D->getIdentifier(), DI,
+                                    SemaRef.ArgumentPackSubstitutionIndex == -1 ?
+                                        cast<TypeAliasDecl>(D)->getEllipsisLoc() : SourceLocation());
   else
     Typedef = TypedefDecl::Create(SemaRef.Context, Owner, D->getBeginLoc(),
                                   D->getLocation(), D->getIdentifier(), DI);
@@ -1065,10 +1070,76 @@ Decl *TemplateDeclInstantiator::VisitTypedefDecl(TypedefDecl *D) {
 }
 
 Decl *TemplateDeclInstantiator::VisitTypeAliasDecl(TypeAliasDecl *D) {
-  Decl *Typedef = InstantiateTypedefNameDecl(D, /*IsTypeAlias=*/true);
+  Decl *Typedef = D->isPack()
+                      ? instantiateAliasPack(D)
+                      : InstantiateTypedefNameDecl(D, /*IsTypeAlias=*/true);
   if (Typedef)
     Owner->addDecl(Typedef);
   return Typedef;
+}
+
+Decl *TemplateDeclInstantiator::instantiateAliasPack(TypeAliasDecl *D) {
+  assert(D->isPack() && "Expected an alias pack");
+
+  SmallVector<UnexpandedParameterPack, 2> Unexpanded;
+
+  QualType Underlying = SemaRef.SubstType(D->getUnderlyingType(), TemplateArgs,
+                                          D->getBeginLoc(), D->getDeclName());
+  SemaRef.collectUnexpandedParameterPacks(Underlying, Unexpanded);
+
+  // Determine whether the set of unexpanded parameter packs can and should
+  // be expanded.
+  bool Expand = true;
+  bool RetainExpansion = false;
+  std::optional<unsigned> NumExpansions;
+  if (SemaRef.CheckParameterPacksForExpansion(
+          D->getEllipsisLoc(), D->getSourceRange(), Unexpanded, TemplateArgs,
+          Expand, RetainExpansion, NumExpansions))
+    return nullptr;
+
+  // This declaration cannot appear within a function template signature,
+  // so we can't have a partial argument list for a parameter pack.
+  assert(!RetainExpansion &&
+         "should never need to retain an expansion for TypeAliasPackDecl");
+
+  if (!Expand) {
+    Sema::ArgumentPackSubstitutionIndexRAII SubstIndex(SemaRef, -1);
+    TypeAliasDecl *Pattern = cast_or_null<TypeAliasDecl>(
+        InstantiateTypedefNameDecl(D, /*IsTypeAlias=*/true));
+    // We cannot fully expand the pack expansion now, so substitute into the
+    // pattern and create a new pack expansion.
+    return Pattern;
+  }
+  // Instantiate the slices of this pack and build a UsingPackDecl.
+  SmallVector<TypedefNameDecl *, 8> Expansions;
+  for (unsigned I = 0; I != *NumExpansions; ++I) {
+    Sema::ArgumentPackSubstitutionIndexRAII SubstIndex(SemaRef, I);
+    Decl *Elem = InstantiateTypedefNameDecl(D, true);
+    if (!Elem)
+      return nullptr;
+    Expansions.push_back(cast<TypeAliasDecl>(Elem));
+  }
+  auto *NewD = SemaRef.BuildAliasPackDeclaration(D, Expansions);
+  if (isDeclWithinFunction(D))
+    SemaRef.CurrentInstantiationScope->InstantiatedLocal(D, NewD);
+  return NewD;
+}
+
+Decl *TemplateDeclInstantiator::VisitTypeAliasPackDecl(TypeAliasPackDecl *D) {
+  SmallVector<TypedefNameDecl *, 8> Expansions;
+  for (TypeDecl *D : D->expansions()) {
+    if (TypedefNameDecl *NewD = cast<TypedefNameDecl>(
+            SemaRef.FindInstantiatedDecl(D->getLocation(), D, TemplateArgs)))
+      Expansions.push_back(NewD);
+    else
+      return nullptr;
+  }
+  auto *NewD = SemaRef.BuildAliasPackDeclaration(
+      D->getInstantiatedFromAliasDecl(), Expansions);
+  Owner->addDecl(NewD);
+  if (isDeclWithinFunction(D))
+    SemaRef.CurrentInstantiationScope->InstantiatedLocal(D, NewD);
+  return NewD;
 }
 
 Decl *
@@ -1137,6 +1208,22 @@ Decl *TemplateDeclInstantiator::VisitDecompositionDecl(DecompositionDecl *D) {
       NewBD->setInvalidDecl();
 
   return NewDD;
+}
+
+Decl *TemplateDeclInstantiator::VisitValuePackDecl(ValuePackDecl *VPD) {
+    SmallVector<ValueDecl *, 8> Expansions;
+    for (ValueDecl *D : VPD->expansions()) {
+      if (ValueDecl *NewD = cast_or_null<ValueDecl>(
+              SemaRef.FindInstantiatedDecl(D->getLocation(), D, TemplateArgs)))
+        Expansions.push_back(NewD);
+      else
+        return nullptr;
+    }
+    auto *NewD = SemaRef.BuildValuePackDeclaration(VPD->getInstantiatedFromValueDecl(), Expansions);
+    Owner->addDecl(NewD);
+    if (isDeclWithinFunction(VPD))
+      SemaRef.CurrentInstantiationScope->InstantiatedLocal(VPD, NewD);
+    return NewD;
 }
 
 Decl *TemplateDeclInstantiator::VisitVarDecl(VarDecl *D) {
@@ -1234,86 +1321,153 @@ Decl *TemplateDeclInstantiator::VisitAccessSpecDecl(AccessSpecDecl *D) {
   return AD;
 }
 
-Decl *TemplateDeclInstantiator::VisitFieldDecl(FieldDecl *D) {
-  bool Invalid = false;
-  TypeSourceInfo *DI = D->getTypeSourceInfo();
-  if (DI->getType()->isInstantiationDependentType() ||
-      DI->getType()->isVariablyModifiedType())  {
-    DI = SemaRef.SubstType(DI, TemplateArgs,
-                           D->getLocation(), D->getDeclName());
-    if (!DI) {
-      DI = D->getTypeSourceInfo();
-      Invalid = true;
-    } else if (DI->getType()->isFunctionType()) {
-      // C++ [temp.arg.type]p3:
-      //   If a declaration acquires a function type through a type
-      //   dependent on a template-parameter and this causes a
-      //   declaration that does not use the syntactic form of a
-      //   function declarator to have function type, the program is
-      //   ill-formed.
-      SemaRef.Diag(D->getLocation(), diag::err_field_instantiates_to_function)
-        << DI->getType();
-      Invalid = true;
-    }
-  } else {
-    SemaRef.MarkDeclarationsReferencedInType(D->getLocation(), DI->getType());
-  }
+template <typename VarType>
+Decl *TemplateDeclInstantiator::instantiateValuePack(DeclaratorDecl *D) {
+  assert(D->isParameterPack() && "Expected an alias pack");
 
-  Expr *BitWidth = D->getBitWidth();
-  if (Invalid)
-    BitWidth = nullptr;
-  else if (BitWidth) {
-    // The bit-width expression is a constant expression.
-    EnterExpressionEvaluationContext Unevaluated(
-        SemaRef, Sema::ExpressionEvaluationContext::ConstantEvaluated);
+  SmallVector<UnexpandedParameterPack, 2> Unexpanded;
 
-    ExprResult InstantiatedBitWidth
-      = SemaRef.SubstExpr(BitWidth, TemplateArgs);
-    if (InstantiatedBitWidth.isInvalid()) {
-      Invalid = true;
-      BitWidth = nullptr;
-    } else
-      BitWidth = InstantiatedBitWidth.getAs<Expr>();
-  }
+  TypeSourceInfo* Underlying = SemaRef.SubstType(D->getTypeSourceInfo(), TemplateArgs,
+                                          D->getBeginLoc(), D->getDeclName());
+  auto Expansion   = Underlying->getTypeLoc().castAs<PackExpansionTypeLoc>();
+  TypeLoc Pattern  = Expansion.getPatternLoc();
+  SemaRef.collectUnexpandedParameterPacks(Pattern, Unexpanded);
 
-  FieldDecl *Field = SemaRef.CheckFieldDecl(D->getDeclName(),
-                                            DI->getType(), DI,
-                                            cast<RecordDecl>(Owner),
-                                            D->getLocation(),
-                                            D->isMutable(),
-                                            BitWidth,
-                                            D->getInClassInitStyle(),
-                                            D->getInnerLocStart(),
-                                            D->getAccess(),
-                                            nullptr);
-  if (!Field) {
-    cast<Decl>(Owner)->setInvalidDecl();
+  // Determine whether the set of unexpanded parameter packs can and should
+  // be expanded.
+  bool Expand = true;
+  bool RetainExpansion = false;
+  std::optional<unsigned> NumExpansions;
+  if (SemaRef.CheckParameterPacksForExpansion(
+          Expansion.getEllipsisLoc(), D->getSourceRange(), Unexpanded, TemplateArgs,
+          Expand, RetainExpansion, NumExpansions))
     return nullptr;
+
+  // This declaration cannot appear within a function template signature,
+  // so we can't have a partial argument list for a parameter pack.
+  assert(!RetainExpansion &&
+         "should never need to retain an expansion for ValuePackDecl");
+
+  if (!Expand) {
+    Sema::ArgumentPackSubstitutionIndexRAII SubstIndex(SemaRef, -1);
+    ValueDecl *Pattern = cast_or_null<ValueDecl>(InstantiateFieldDecl(cast<VarType>(D), Underlying->getTypeLoc()));
+    // We cannot fully expand the pack expansion now, so substitute into the
+    // pattern and create a new pack expansion.
+    return Pattern;
   }
-
-  SemaRef.InstantiateAttrs(TemplateArgs, D, Field, LateAttrs, StartingScope);
-
-  if (Field->hasAttrs())
-    SemaRef.CheckAlignasUnderalignment(Field);
-
-  if (Invalid)
-    Field->setInvalidDecl();
-
-  if (!Field->getDeclName()) {
-    // Keep track of where this decl came from.
-    SemaRef.Context.setInstantiatedFromUnnamedFieldDecl(Field, D);
+  // Instantiate the slices of this pack and build a ValuePackDecl.
+  SmallVector<ValueDecl *, 8> Expansions;
+  for (unsigned I = 0; I != *NumExpansions; ++I) {
+    Sema::ArgumentPackSubstitutionIndexRAII SubstIndex(SemaRef, I);
+    Decl *Elem = nullptr;
+    if(FieldDecl* FD = dyn_cast<FieldDecl>(D))
+        Elem = InstantiateFieldDecl(FD, Pattern, /*Expansion*/true);
+    else
+        assert(false && "TODO");;
+    Expansions.push_back(cast<ValueDecl>(Elem));
   }
-  if (CXXRecordDecl *Parent= dyn_cast<CXXRecordDecl>(Field->getDeclContext())) {
-    if (Parent->isAnonymousStructOrUnion() &&
-        Parent->getRedeclContext()->isFunctionOrMethod())
-      SemaRef.CurrentInstantiationScope->InstantiatedLocal(D, Field);
-  }
+  auto *NewD = SemaRef.BuildValuePackDeclaration(D, Expansions);
+  Owner->addDecl(NewD);
+  return NewD;
+}
 
-  Field->setImplicit(D->isImplicit());
-  Field->setAccess(D->getAccess());
-  Owner->addDecl(Field);
+FieldDecl *TemplateDeclInstantiator::InstantiateFieldDecl(FieldDecl *D, TypeLoc Type, bool Expansion) {
+    bool Invalid = false;
+    TypeSourceInfo* DI = D->getTypeSourceInfo();
+    if (Type.getType() != D->getType() ||
+        Type.getType()->isInstantiationDependentType() ||
+        Type.getType()->isVariablyModifiedType())  {
+        DI = SemaRef.SubstType(Type, TemplateArgs,
+                             D->getLocation(), D->getDeclName());
+      if (!DI) {
+        DI = D->getTypeSourceInfo();
+        Invalid = true;
+      } else if (DI->getType()->isFunctionType()) {
+        // C++ [temp.arg.type]p3:
+        //   If a declaration acquires a function type through a type
+        //   dependent on a template-parameter and this causes a
+        //   declaration that does not use the syntactic form of a
+        //   function declarator to have function type, the program is
+        //   ill-formed.
+        SemaRef.Diag(D->getLocation(), diag::err_field_instantiates_to_function)
+          << DI->getType();
+        Invalid = true;
+      }
+    } else {
+      SemaRef.MarkDeclarationsReferencedInType(D->getLocation(), Type.getType());
+    }
 
-  return Field;
+    Expr *BitWidth = D->getBitWidth();
+    if (Invalid)
+      BitWidth = nullptr;
+    else if (BitWidth) {
+      // The bit-width expression is a constant expression.
+      EnterExpressionEvaluationContext Unevaluated(
+          SemaRef, Sema::ExpressionEvaluationContext::ConstantEvaluated);
+
+      ExprResult InstantiatedBitWidth
+        = SemaRef.SubstExpr(BitWidth, TemplateArgs);
+      if (InstantiatedBitWidth.isInvalid()) {
+        Invalid = true;
+        BitWidth = nullptr;
+      } else
+        BitWidth = InstantiatedBitWidth.getAs<Expr>();
+    }
+
+    FieldDecl *Field = SemaRef.CheckFieldDecl(D->getDeclName(),
+                                              DI->getType(), DI,
+                                              cast<RecordDecl>(Owner),
+                                              D->getLocation(),
+                                              D->isMutable(),
+                                              BitWidth,
+                                              D->getInClassInitStyle(),
+                                              D->getInnerLocStart(),
+                                              D->getAccess(),
+                                              nullptr);
+    if (!Field) {
+      cast<Decl>(Owner)->setInvalidDecl();
+      return nullptr;
+    }
+
+    SemaRef.InstantiateAttrs(TemplateArgs, D, Field, LateAttrs, StartingScope);
+
+    if (Field->hasAttrs())
+      SemaRef.CheckAlignasUnderalignment(Field);
+
+    if (Invalid)
+      Field->setInvalidDecl();
+
+    if (!D->getDeclName()) {
+      // Keep track of where this decl came from.
+      SemaRef.Context.setInstantiatedFromUnnamedFieldDecl(Field, D);
+    }
+    Field->setImplicit(D->isImplicit());
+    Field->setAccess(D->getAccess());
+
+    if(Expansion) {
+        Field->SetInstantiatedFromPack(Expansion);
+        Owner->addHiddenDecl(Field);
+    }
+    else {
+        Owner->addDecl(Field);
+    }
+
+    return Field;
+}
+
+Decl *TemplateDeclInstantiator::VisitFieldDecl(FieldDecl *D) {
+    Decl* Field = D->isParameterPack() ? instantiateValuePack<FieldDecl>(D) : InstantiateFieldDecl(D,
+                                                                              D->getTypeSourceInfo()->getTypeLoc());
+    if(!Field)
+        return nullptr;
+
+    if (CXXRecordDecl *Parent= dyn_cast<CXXRecordDecl>(Field->getDeclContext())) {
+      if (isa<ValuePackDecl>(Field) || (Parent->isAnonymousStructOrUnion() &&
+          Parent->getRedeclContext()->isFunctionOrMethod()))
+        SemaRef.CurrentInstantiationScope->InstantiatedLocal(D, Field);
+    }
+
+    return Field;
 }
 
 Decl *TemplateDeclInstantiator::VisitMSPropertyDecl(MSPropertyDecl *D) {
@@ -2755,7 +2909,7 @@ Decl *TemplateDeclInstantiator::VisitCXXMethodDecl(
                                    IsExplicitSpecialization,
                                    Method->isThisDeclarationADefinition());
 
-  if (D->isPure())
+  if (D->isPureVirtual())
     SemaRef.CheckPureMethod(Method, SourceRange());
 
   // Propagate access.  For a non-friend declaration, the access is
@@ -3056,16 +3210,21 @@ Decl *TemplateDeclInstantiator::VisitNonTypeTemplateParmDecl(
         D->getPosition(), D->getIdentifier(), T, D->isParameterPack(), DI);
 
   if (AutoTypeLoc AutoLoc = DI->getTypeLoc().getContainedAutoTypeLoc())
-    if (AutoLoc.isConstrained())
+    if (AutoLoc.isConstrained()) {
+      SourceLocation EllipsisLoc;
+      if (IsExpandedParameterPack)
+        EllipsisLoc =
+            DI->getTypeLoc().getAs<PackExpansionTypeLoc>().getEllipsisLoc();
+      else if (auto *Constraint = dyn_cast_if_present<CXXFoldExpr>(
+                   D->getPlaceholderTypeConstraint()))
+        EllipsisLoc = Constraint->getEllipsisLoc();
       // Note: We attach the uninstantiated constriant here, so that it can be
-      // instantiated relative to the top level, like all our other constraints.
-      if (SemaRef.AttachTypeConstraint(
-              AutoLoc, Param, D,
-              IsExpandedParameterPack
-                ? DI->getTypeLoc().getAs<PackExpansionTypeLoc>()
-                    .getEllipsisLoc()
-                : SourceLocation()))
+      // instantiated relative to the top level, like all our other
+      // constraints.
+      if (SemaRef.AttachTypeConstraint(AutoLoc, /*NewConstrainedParm=*/Param,
+                                       /*OrigConstrainedParm=*/D, EllipsisLoc))
         Invalid = true;
+    }
 
   Param->setAccess(AS_public);
   Param->setImplicit(D->isImplicit());
@@ -5453,6 +5612,8 @@ void Sema::InstantiateVariableInitializer(
     EnterExpressionEvaluationContext Evaluated(
         *this, Sema::ExpressionEvaluationContext::PotentiallyEvaluated, Var);
 
+    keepInLifetimeExtendingContext();
+    keepInMaterializeTemporaryObjectContext();
     // Instantiate the initializer.
     ExprResult Init;
 
@@ -5742,6 +5903,72 @@ Sema::InstantiateMemInitializers(CXXConstructorDecl *New,
   SmallVector<CXXCtorInitializer*, 4> NewInits;
   bool AnyErrors = Tmpl->isInvalidDecl();
 
+
+  auto InstantiateInitializer = [&] (const CXXCtorInitializer* Init, SourceLocation EllipsisLoc = {}) {
+      // Instantiate the initializer.
+      ExprResult TempInit = SubstInitializer(Init->getInit(), TemplateArgs,
+                                             /*CXXDirectInit=*/true);
+      if (TempInit.isInvalid()) {
+        AnyErrors = true;
+        return;
+      }
+
+      MemInitResult NewInit;
+      if (Init->isDelegatingInitializer() || Init->isBaseInitializer()) {
+        TypeSourceInfo *TInfo = SubstType(Init->getTypeSourceInfo(),
+                                          TemplateArgs,
+                                          Init->getSourceLocation(),
+                                          New->getDeclName());
+        if (!TInfo) {
+          AnyErrors = true;
+          New->setInvalidDecl();
+          return;
+        }
+
+        if (Init->isBaseInitializer())
+          NewInit = BuildBaseInitializer(TInfo->getType(), TInfo, TempInit.get(),
+                                         New->getParent(), EllipsisLoc);
+        else
+          NewInit = BuildDelegatingInitializer(TInfo, TempInit.get(),
+                                    cast<CXXRecordDecl>(CurContext->getParent()));
+      } else if (Init->isMemberInitializer()) {
+        FieldDecl *Member = cast_or_null<FieldDecl>(FindInstantiatedPackElementDecl(
+                                                       Init->getMemberLocation(),
+                                                       Init->getMember(),
+                                                       TemplateArgs));
+        if (!Member) {
+          AnyErrors = true;
+          New->setInvalidDecl();
+          return;
+        }
+
+        NewInit = BuildMemberInitializer(Member, TempInit.get(),
+                                         Init->getSourceLocation(), EllipsisLoc);
+      } else if (Init->isIndirectMemberInitializer()) {
+        IndirectFieldDecl *IndirectMember =
+           cast_or_null<IndirectFieldDecl>(FindInstantiatedPackElementDecl(
+                                               Init->getMemberLocation(),
+                                               Init->getIndirectMember(),
+                                               TemplateArgs));
+
+        if (!IndirectMember) {
+          AnyErrors = true;
+          New->setInvalidDecl();
+          return;
+        }
+
+        NewInit = BuildMemberInitializer(IndirectMember, TempInit.get(),
+                                         Init->getSourceLocation(), EllipsisLoc);
+      }
+      if (NewInit.isInvalid()) {
+        AnyErrors = true;
+        New->setInvalidDecl();
+      } else {
+        NewInits.push_back(NewInit.get());
+      }
+  };
+
+
   // Instantiate all the initializers.
   for (const auto *Init : Tmpl->inits()) {
     // Only instantiate written initializers, let Sema re-construct implicit
@@ -5749,19 +5976,25 @@ Sema::InstantiateMemInitializers(CXXConstructorDecl *New,
     if (!Init->isWritten())
       continue;
 
-    SourceLocation EllipsisLoc;
-
     if (Init->isPackExpansion()) {
       // This is a pack expansion. We should expand it now.
-      TypeLoc BaseTL = Init->getTypeSourceInfo()->getTypeLoc();
       SmallVector<UnexpandedParameterPack, 4> Unexpanded;
-      collectUnexpandedParameterPacks(BaseTL, Unexpanded);
+      SourceRange SR;
+      if(Init->isMemberInitializer()) {
+          collectUnexpandedParameterPacks(Init->getAnyMember(), Unexpanded);
+          SR = Init->getSourceRange();
+      }
+      else {
+          TypeLoc BaseTL = Init->getTypeSourceInfo()->getTypeLoc();
+          SR = BaseTL.getSourceRange();
+          collectUnexpandedParameterPacks(BaseTL, Unexpanded);
+      }
       collectUnexpandedParameterPacks(Init->getInit(), Unexpanded);
       bool ShouldExpand = false;
       bool RetainExpansion = false;
       std::optional<unsigned> NumExpansions;
       if (CheckParameterPacksForExpansion(Init->getEllipsisLoc(),
-                                          BaseTL.getSourceRange(),
+                                          SR,
                                           Unexpanded,
                                           TemplateArgs, ShouldExpand,
                                           RetainExpansion,
@@ -5775,101 +6008,12 @@ Sema::InstantiateMemInitializers(CXXConstructorDecl *New,
       // Loop over all of the arguments in the argument pack(s),
       for (unsigned I = 0; I != *NumExpansions; ++I) {
         Sema::ArgumentPackSubstitutionIndexRAII SubstIndex(*this, I);
-
-        // Instantiate the initializer.
-        ExprResult TempInit = SubstInitializer(Init->getInit(), TemplateArgs,
-                                               /*CXXDirectInit=*/true);
-        if (TempInit.isInvalid()) {
-          AnyErrors = true;
-          break;
-        }
-
-        // Instantiate the base type.
-        TypeSourceInfo *BaseTInfo = SubstType(Init->getTypeSourceInfo(),
-                                              TemplateArgs,
-                                              Init->getSourceLocation(),
-                                              New->getDeclName());
-        if (!BaseTInfo) {
-          AnyErrors = true;
-          break;
-        }
-
-        // Build the initializer.
-        MemInitResult NewInit = BuildBaseInitializer(BaseTInfo->getType(),
-                                                     BaseTInfo, TempInit.get(),
-                                                     New->getParent(),
-                                                     SourceLocation());
-        if (NewInit.isInvalid()) {
-          AnyErrors = true;
-          break;
-        }
-
-        NewInits.push_back(NewInit.get());
-      }
-
-      continue;
-    }
-
-    // Instantiate the initializer.
-    ExprResult TempInit = SubstInitializer(Init->getInit(), TemplateArgs,
-                                           /*CXXDirectInit=*/true);
-    if (TempInit.isInvalid()) {
-      AnyErrors = true;
-      continue;
-    }
-
-    MemInitResult NewInit;
-    if (Init->isDelegatingInitializer() || Init->isBaseInitializer()) {
-      TypeSourceInfo *TInfo = SubstType(Init->getTypeSourceInfo(),
-                                        TemplateArgs,
-                                        Init->getSourceLocation(),
-                                        New->getDeclName());
-      if (!TInfo) {
-        AnyErrors = true;
-        New->setInvalidDecl();
+        InstantiateInitializer(Init, SourceLocation());
         continue;
-      }
-
-      if (Init->isBaseInitializer())
-        NewInit = BuildBaseInitializer(TInfo->getType(), TInfo, TempInit.get(),
-                                       New->getParent(), EllipsisLoc);
-      else
-        NewInit = BuildDelegatingInitializer(TInfo, TempInit.get(),
-                                  cast<CXXRecordDecl>(CurContext->getParent()));
-    } else if (Init->isMemberInitializer()) {
-      FieldDecl *Member = cast_or_null<FieldDecl>(FindInstantiatedDecl(
-                                                     Init->getMemberLocation(),
-                                                     Init->getMember(),
-                                                     TemplateArgs));
-      if (!Member) {
-        AnyErrors = true;
-        New->setInvalidDecl();
-        continue;
-      }
-
-      NewInit = BuildMemberInitializer(Member, TempInit.get(),
-                                       Init->getSourceLocation());
-    } else if (Init->isIndirectMemberInitializer()) {
-      IndirectFieldDecl *IndirectMember =
-         cast_or_null<IndirectFieldDecl>(FindInstantiatedDecl(
-                                 Init->getMemberLocation(),
-                                 Init->getIndirectMember(), TemplateArgs));
-
-      if (!IndirectMember) {
-        AnyErrors = true;
-        New->setInvalidDecl();
-        continue;
-      }
-
-      NewInit = BuildMemberInitializer(IndirectMember, TempInit.get(),
-                                       Init->getSourceLocation());
     }
-
-    if (NewInit.isInvalid()) {
-      AnyErrors = true;
-      New->setInvalidDecl();
-    } else {
-      NewInits.push_back(NewInit.get());
+  }
+  else {
+        InstantiateInitializer(Init, Init->getEllipsisLoc());
     }
   }
 
@@ -6018,6 +6162,28 @@ static bool isInstantiationOfStaticDataMember(VarDecl *Pattern,
   return false;
 }
 
+static bool isInstantiationOfTypeAliasDecl(TypeAliasDecl *Pattern, Decl *Instance) {
+   auto* ND = dyn_cast<NamedDecl>(Instance);
+   if(!ND)
+       return false;
+
+   if(isa<TypeAliasDecl, TypeAliasPackDecl>(Instance))
+       return Pattern->getDeclName() == ND->getDeclName();
+
+  return false;
+}
+
+static bool isInstantiationOfValueDecl(ValueDecl *Pattern, Decl *Instance) {
+   auto* ND = dyn_cast<NamedDecl>(Instance);
+   if(!ND)
+       return false;
+
+   if(isa<FieldDecl, ValuePackDecl>(Instance))
+       return Pattern->getDeclName() == ND->getDeclName();
+
+  return false;
+}
+
 // Other is the prospective instantiation
 // D is the prospective pattern
 static bool isInstantiationOf(ASTContext &Ctx, NamedDecl *D, Decl *Other) {
@@ -6026,6 +6192,13 @@ static bool isInstantiationOf(ASTContext &Ctx, NamedDecl *D, Decl *Other) {
 
   if (auto *UUD = dyn_cast<UnresolvedUsingValueDecl>(D))
     return isInstantiationOfUnresolvedUsingDecl(UUD, Other, Ctx);
+
+  if (auto *Alias = dyn_cast<TypeAliasDecl>(D))
+    return isInstantiationOfTypeAliasDecl(Alias, Other);
+
+  if (auto *Field = dyn_cast<FieldDecl>(D); Field &&
+          isInstantiationOfValueDecl(Field, Other))
+      return true;
 
   if (D->getKind() != Other->getKind())
     return false;
@@ -6424,6 +6597,18 @@ NamedDecl *Sema::FindInstantiatedDecl(SourceLocation Loc, NamedDecl *D,
 
   return D;
 }
+
+NamedDecl *Sema::FindInstantiatedPackElementDecl(SourceLocation Loc, NamedDecl *D,
+                        const MultiLevelTemplateArgumentList &TemplateArgs,
+                        bool FindingInstantiatedContext) {
+    NamedDecl* ND = FindInstantiatedDecl(Loc, D, TemplateArgs);
+    if(!ND || ArgumentPackSubstitutionIndex == -1)
+        return ND;
+    if(const auto* Pack = dyn_cast<ValuePackDecl>(ND))
+        return Pack->expansions()[ArgumentPackSubstitutionIndex];
+    return ND;
+}
+
 
 /// Performs template instantiation for all implicit template
 /// instantiations we have seen until this point.

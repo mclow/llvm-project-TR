@@ -839,7 +839,7 @@ Sema::ActOnDecompositionDeclarator(Scope *S, Declarator &D,
     Diag(DS.getVolatileSpecLoc(),
          diag::warn_deprecated_volatile_structured_binding);
 
-  TypeSourceInfo *TInfo = GetTypeForDeclarator(D, S);
+  TypeSourceInfo *TInfo = GetTypeForDeclarator(D);
   QualType R = TInfo->getType();
 
   if (DiagnoseUnexpandedParameterPack(D.getIdentifierLoc(), TInfo,
@@ -4474,12 +4474,12 @@ Sema::BuildMemInitializer(Decl *ConstructorD,
   // Look for a member, first.
   if (ValueDecl *Member = tryLookupCtorInitMemberDecl(
           ClassDecl, SS, TemplateTypeTy, MemberOrBase)) {
-    if (EllipsisLoc.isValid())
+    if (EllipsisLoc.isValid() && !Member->isParameterPack())
       Diag(EllipsisLoc, diag::err_pack_expansion_member_init)
           << MemberOrBase
           << SourceRange(IdLoc, Init->getSourceRange().getEnd());
 
-    return BuildMemberInitializer(Member, Init, IdLoc);
+    return BuildMemberInitializer(Member, Init, IdLoc, EllipsisLoc);
   }
   // It didn't name a member, so see if it names a class.
   QualType BaseType;
@@ -4494,6 +4494,10 @@ Sema::BuildMemInitializer(Decl *ConstructorD,
   } else if (DS.getTypeSpecType() == TST_decltype_auto) {
     Diag(DS.getTypeSpecTypeLoc(), diag::err_decltype_auto_invalid);
     return true;
+  } else if (DS.getTypeSpecType() == TST_typename_pack_indexing) {
+    BaseType =
+        BuildPackIndexingType(DS.getRepAsType().get(), DS.getPackIndexingExpr(),
+                              DS.getBeginLoc(), DS.getEllipsisLoc());
   } else {
     LookupResult R(*this, MemberOrBase, IdLoc, LookupOrdinaryName);
     LookupParsedName(R, S, &SS);
@@ -4566,7 +4570,7 @@ Sema::BuildMemInitializer(Decl *ConstructorD,
           diagnoseTypo(Corr,
                        PDiag(diag::err_mem_init_not_member_or_class_suggest)
                          << MemberOrBase << true);
-          return BuildMemberInitializer(Member, Init, IdLoc);
+          return BuildMemberInitializer(Member, Init, IdLoc, EllipsisLoc);
         } else if (TypeDecl *Type = Corr.getCorrectionDeclAs<TypeDecl>()) {
           const CXXBaseSpecifier *DirectBaseSpec;
           const CXXBaseSpecifier *VirtualBaseSpec;
@@ -4618,13 +4622,14 @@ Sema::BuildMemInitializer(Decl *ConstructorD,
 
 MemInitResult
 Sema::BuildMemberInitializer(ValueDecl *Member, Expr *Init,
-                             SourceLocation IdLoc) {
+                             SourceLocation IdLoc, SourceLocation EllipsisLoc) {
   FieldDecl *DirectMember = dyn_cast<FieldDecl>(Member);
   IndirectFieldDecl *IndirectMember = dyn_cast<IndirectFieldDecl>(Member);
   assert((DirectMember || IndirectMember) &&
          "Member must be a FieldDecl or IndirectFieldDecl");
 
-  if (DiagnoseUnexpandedParameterPack(Init, UPPC_Initializer))
+  if (!Member->isParameterPack() &&
+          DiagnoseUnexpandedParameterPack(Init, UPPC_Initializer))
     return true;
 
   if (Member->isInvalidDecl())
@@ -4642,7 +4647,7 @@ Sema::BuildMemberInitializer(ValueDecl *Member, Expr *Init,
 
   SourceRange InitRange = Init->getSourceRange();
 
-  if (Member->getType()->isDependentType() || Init->isTypeDependent()) {
+  if (Member->getType()->isDependentType() || Init->isTypeDependent() || Member->isParameterPack()) {
     // Can't check initialization for a member of dependent type or when
     // any of the arguments are type-dependent expressions.
     DiscardCleanupsInEvaluationContext();
@@ -4691,11 +4696,11 @@ Sema::BuildMemberInitializer(ValueDecl *Member, Expr *Init,
   if (DirectMember) {
     return new (Context) CXXCtorInitializer(Context, DirectMember, IdLoc,
                                             InitRange.getBegin(), Init,
-                                            InitRange.getEnd());
+                                            InitRange.getEnd(), EllipsisLoc);
   } else {
     return new (Context) CXXCtorInitializer(Context, IndirectMember, IdLoc,
                                             InitRange.getBegin(), Init,
-                                            InitRange.getEnd());
+                                            InitRange.getEnd(), EllipsisLoc);
   }
 }
 
@@ -6062,7 +6067,7 @@ void Sema::DiagnoseAbstractType(const CXXRecordDecl *RD) {
       if (SO->second.size() != 1)
         continue;
 
-      if (!SO->second.front().Method->isPure())
+      if (!SO->second.front().Method->isPureVirtual())
         continue;
 
       if (!SeenPureMethods.insert(SO->second.front().Method).second)
@@ -6545,8 +6550,7 @@ void Sema::checkClassLevelDLLAttribute(CXXRecordDecl *Class) {
   if ((Context.getTargetInfo().getCXXABI().isMicrosoft() ||
        Context.getTargetInfo().getTriple().isPS()) &&
       (!Class->isExternallyVisible() && Class->hasExternalFormalLinkage())) {
-    Class->dropAttr<DLLExportAttr>();
-    Class->dropAttr<DLLImportAttr>();
+    Class->dropAttrs<DLLExportAttr, DLLImportAttr>();
     return;
   }
 
@@ -11322,9 +11326,20 @@ Decl *Sema::ActOnConversionDeclarator(CXXConversionDecl *Conversion) {
       << ClassType << ConvType;
   }
 
-  if (FunctionTemplateDecl *ConversionTemplate
-                                = Conversion->getDescribedFunctionTemplate())
+  if (FunctionTemplateDecl *ConversionTemplate =
+          Conversion->getDescribedFunctionTemplate()) {
+    if (const auto *ConvTypePtr = ConvType->getAs<PointerType>()) {
+      ConvType = ConvTypePtr->getPointeeType();
+    }
+    if (ConvType->isUndeducedAutoType()) {
+      Diag(Conversion->getTypeSpecStartLoc(), diag::err_auto_not_allowed)
+          << getReturnTypeLoc(Conversion).getSourceRange()
+          << llvm::to_underlying(ConvType->getAs<AutoType>()->getKeyword())
+          << /* in declaration of conversion function template= */ 24;
+    }
+
     return ConversionTemplate;
+  }
 
   return Conversion;
 }
@@ -13486,7 +13501,9 @@ bool Sema::CheckUsingDeclQualifier(SourceLocation UsingLoc, bool HasTypename,
 
 Decl *Sema::ActOnAliasDeclaration(Scope *S, AccessSpecifier AS,
                                   MultiTemplateParamsArg TemplateParamLists,
-                                  SourceLocation UsingLoc, UnqualifiedId &Name,
+                                  SourceLocation UsingLoc,
+                                  SourceLocation EllipsisLoc,
+                                  UnqualifiedId &Name,
                                   const ParsedAttributesView &AttrList,
                                   TypeResult Type, Decl *DeclFromDeclSpec) {
   // Skip up to the relevant declaration scope.
@@ -13506,8 +13523,15 @@ Decl *Sema::ActOnAliasDeclaration(Scope *S, AccessSpecifier AS,
   if (DiagnoseClassNameShadow(CurContext, NameInfo))
     return nullptr;
 
-  if (DiagnoseUnexpandedParameterPack(Name.StartLocation, TInfo,
-                                      UPPC_DeclarationType)) {
+  // If we are declaring a pack alias, the right hand side must be a pack
+  if (EllipsisLoc.isValid()) {
+    if (!TInfo->getType()->containsUnexpandedParameterPack()) {
+      Diag(Name.StartLocation, diag::err_expected_unexpanded_pack)
+          << TInfo->getType() << TInfo->getTypeLoc().getSourceRange();
+      Invalid = true;
+    }
+  } else if (DiagnoseUnexpandedParameterPack(Name.StartLocation, TInfo,
+                                             UPPC_DeclarationType)) {
     Invalid = true;
     TInfo = Context.getTrivialTypeSourceInfo(Context.IntTy,
                                              TInfo->getTypeLoc().getBeginLoc());
@@ -13528,9 +13552,9 @@ Decl *Sema::ActOnAliasDeclaration(Scope *S, AccessSpecifier AS,
 
   assert(Name.getKind() == UnqualifiedIdKind::IK_Identifier &&
          "name in alias declaration must be an identifier");
-  TypeAliasDecl *NewTD = TypeAliasDecl::Create(Context, CurContext, UsingLoc,
-                                               Name.StartLocation,
-                                               Name.Identifier, TInfo);
+  TypeAliasDecl *NewTD =
+      TypeAliasDecl::Create(Context, CurContext, UsingLoc, Name.StartLocation,
+                            Name.Identifier, TInfo, EllipsisLoc);
 
   NewTD->setAccess(AS);
 
@@ -13638,6 +13662,28 @@ Decl *Sema::ActOnAliasDeclaration(Scope *S, AccessSpecifier AS,
   PushOnScopeChains(NewND, S);
   ActOnDocumentableDecl(NewND);
   return NewND;
+}
+
+Decl *Sema::BuildAliasPackDeclaration(TypedefNameDecl *InstantiatedFrom,
+                                      ArrayRef<TypedefNameDecl *> Expansions) {
+  assert((isa<TypeAliasDecl, TypeAliasPackDecl>(InstantiatedFrom)) &&
+         "an alias pack declaration must be built fron a type alias");
+
+  auto *T = TypeAliasPackDecl::Create(Context, CurContext, InstantiatedFrom,
+                                      Expansions);
+  T->setAccess(InstantiatedFrom->getAccess());
+  return T;
+}
+
+ValueDecl *Sema::BuildValuePackDeclaration(ValueDecl *InstantiatedFrom,
+                                           ArrayRef<ValueDecl *> Expansions) {
+    assert((isa<FieldDecl, VarDecl, ValuePackDecl>(InstantiatedFrom)) &&
+           "an value pack can only be built from a  variable or field declaration");
+
+    auto *D = ValuePackDecl::Create(Context, CurContext, InstantiatedFrom,
+                                        Expansions);
+    D->setAccess(InstantiatedFrom->getAccess());
+    return D;
 }
 
 Decl *Sema::ActOnNamespaceAliasDef(Scope *S, SourceLocation NamespaceLoc,
@@ -17011,7 +17057,7 @@ VarDecl *Sema::BuildExceptionDeclaration(Scope *S,
 /// ActOnExceptionDeclarator - Parsed the exception-declarator in a C++ catch
 /// handler.
 Decl *Sema::ActOnExceptionDeclarator(Scope *S, Declarator &D) {
-  TypeSourceInfo *TInfo = GetTypeForDeclarator(D, S);
+  TypeSourceInfo *TInfo = GetTypeForDeclarator(D);
   bool Invalid = D.isInvalidType();
 
   // Check for unexpanded parameter packs.
@@ -17762,7 +17808,7 @@ Decl *Sema::ActOnFriendTypeDecl(Scope *S, const DeclSpec &DS,
   // for a TUK_Friend.
   Declarator TheDeclarator(DS, ParsedAttributesView::none(),
                            DeclaratorContext::Member);
-  TypeSourceInfo *TSI = GetTypeForDeclarator(TheDeclarator, S);
+  TypeSourceInfo *TSI = GetTypeForDeclarator(TheDeclarator);
   QualType T = TSI->getType();
   if (TheDeclarator.isInvalidType())
     return nullptr;
@@ -17827,7 +17873,7 @@ NamedDecl *Sema::ActOnFriendFunctionDecl(Scope *S, Declarator &D,
   assert(DS.getStorageClassSpec() == DeclSpec::SCS_unspecified);
 
   SourceLocation Loc = D.getIdentifierLoc();
-  TypeSourceInfo *TInfo = GetTypeForDeclarator(D, S);
+  TypeSourceInfo *TInfo = GetTypeForDeclarator(D);
 
   // C++ [class.friend]p1
   //   A friend of a class is a function or class....
@@ -18328,9 +18374,7 @@ bool Sema::CheckOverridingFunctionAttributes(const CXXMethodDecl *New,
   }
 
   // SME attributes must match when overriding a function declaration.
-  if (IsInvalidSMECallConversion(
-          Old->getType(), New->getType(),
-          AArch64SMECallConversionKind::MayAddPreservesZA)) {
+  if (IsInvalidSMECallConversion(Old->getType(), New->getType())) {
     Diag(New->getLocation(), diag::err_conflicting_overriding_attributes)
         << New << New->getType() << Old->getType();
     Diag(Old->getLocation(), diag::note_overridden_virtual_function);
@@ -18498,7 +18542,7 @@ bool Sema::CheckPureMethod(CXXMethodDecl *Method, SourceRange InitRange) {
     Method->setRangeEnd(EndLoc);
 
   if (Method->isVirtual() || Method->getParent()->isDependentContext()) {
-    Method->setPure();
+    Method->setIsPureVirtual();
     return false;
   }
 
@@ -18769,7 +18813,7 @@ bool Sema::DefineUsedVTables() {
 void Sema::MarkVirtualMemberExceptionSpecsNeeded(SourceLocation Loc,
                                                  const CXXRecordDecl *RD) {
   for (const auto *I : RD->methods())
-    if (I->isVirtual() && !I->isPure())
+    if (I->isVirtual() && !I->isPureVirtual())
       ResolveExceptionSpec(Loc, I->getType()->castAs<FunctionProtoType>());
 }
 
@@ -18790,7 +18834,8 @@ void Sema::MarkVirtualMembersReferenced(SourceLocation Loc,
 
       // C++ [basic.def.odr]p2:
       //   [...] A virtual member function is used if it is not pure. [...]
-      if (!Overrider->isPure() && (!ConstexprOnly || Overrider->isConstexpr()))
+      if (!Overrider->isPureVirtual() &&
+          (!ConstexprOnly || Overrider->isConstexpr()))
         MarkFunctionReferenced(Loc, Overrider);
     }
   }
@@ -19184,7 +19229,7 @@ MSPropertyDecl *Sema::HandleMSProperty(Scope *S, RecordDecl *Record,
   }
   SourceLocation Loc = D.getIdentifierLoc();
 
-  TypeSourceInfo *TInfo = GetTypeForDeclarator(D, S);
+  TypeSourceInfo *TInfo = GetTypeForDeclarator(D);
   QualType T = TInfo->getType();
   if (getLangOpts().CPlusPlus) {
     CheckExtraCXXDefaultArguments(D);

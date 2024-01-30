@@ -194,14 +194,14 @@ CXXNewExpr::CXXNewExpr(bool IsGlobalNew, FunctionDecl *OperatorNew,
       DirectInitRange(DirectInitRange) {
 
   assert((Initializer != nullptr ||
-          InitializationStyle == CXXNewInitializationStyle::None ||
-          InitializationStyle == CXXNewInitializationStyle::Implicit) &&
-         "Only NoInit can have no initializer!");
+          InitializationStyle == CXXNewInitializationStyle::None) &&
+         "Only CXXNewInitializationStyle::None can have no initializer!");
 
   CXXNewExprBits.IsGlobalNew = IsGlobalNew;
   CXXNewExprBits.IsArray = ArraySize.has_value();
   CXXNewExprBits.ShouldPassAlignment = ShouldPassAlignment;
   CXXNewExprBits.UsualArrayDeleteWantsSize = UsualArrayDeleteWantsSize;
+  CXXNewExprBits.HasInitializer = Initializer != nullptr;
   CXXNewExprBits.StoredInitializationStyle =
       llvm::to_underlying(InitializationStyle);
   bool IsParenTypeId = TypeIdParens.isValid();
@@ -219,10 +219,10 @@ CXXNewExpr::CXXNewExpr(bool IsGlobalNew, FunctionDecl *OperatorNew,
     getTrailingObjects<SourceRange>()[0] = TypeIdParens;
 
   switch (getInitializationStyle()) {
-  case CXXNewInitializationStyle::Call:
+  case CXXNewInitializationStyle::Parens:
     this->Range.setEnd(DirectInitRange.getEnd());
     break;
-  case CXXNewInitializationStyle::List:
+  case CXXNewInitializationStyle::Braces:
     this->Range.setEnd(getInitializer()->getSourceRange().getEnd());
     break;
   default:
@@ -522,14 +522,14 @@ DependentScopeDeclRefExpr::CreateEmpty(const ASTContext &Context,
 }
 
 SourceLocation CXXConstructExpr::getBeginLoc() const {
-  if (isa<CXXTemporaryObjectExpr>(this))
-    return cast<CXXTemporaryObjectExpr>(this)->getBeginLoc();
+  if (const auto *TOE = dyn_cast<CXXTemporaryObjectExpr>(this))
+    return TOE->getBeginLoc();
   return getLocation();
 }
 
 SourceLocation CXXConstructExpr::getEndLoc() const {
-  if (isa<CXXTemporaryObjectExpr>(this))
-    return cast<CXXTemporaryObjectExpr>(this)->getEndLoc();
+  if (const auto *TOE = dyn_cast<CXXTemporaryObjectExpr>(this))
+    return TOE->getEndLoc();
 
   if (ParenOrBraceRange.isValid())
     return ParenOrBraceRange.getEnd();
@@ -1450,16 +1450,15 @@ SourceLocation CXXUnresolvedConstructExpr::getBeginLoc() const {
   return TypeAndInitForm.getPointer()->getTypeLoc().getBeginLoc();
 }
 
-CXXDependentScopeMemberExpr::CXXDependentScopeMemberExpr(
-    const ASTContext &Ctx, Expr *Base, QualType BaseType, bool IsArrow,
+CXXDependentScopeMemberExpr::CXXDependentScopeMemberExpr(const ASTContext &Ctx, Expr *Base, QualType BaseType, bool IsArrow,
     SourceLocation OperatorLoc, NestedNameSpecifierLoc QualifierLoc,
-    SourceLocation TemplateKWLoc, NamedDecl *FirstQualifierFoundInScope,
+    SourceLocation TemplateKWLoc, NamedDecl *FirstQualifierFoundInScope, SourceLocation EllipsisLoc,
     DeclarationNameInfo MemberNameInfo,
     const TemplateArgumentListInfo *TemplateArgs)
     : Expr(CXXDependentScopeMemberExprClass, Ctx.DependentTy, VK_LValue,
            OK_Ordinary),
       Base(Base), BaseType(BaseType), QualifierLoc(QualifierLoc),
-      MemberNameInfo(MemberNameInfo) {
+      MemberNameInfo(MemberNameInfo), EllipsisLoc(EllipsisLoc) {
   CXXDependentScopeMemberExprBits.IsArrow = IsArrow;
   CXXDependentScopeMemberExprBits.HasTemplateKWAndArgsInfo =
       (TemplateArgs != nullptr) || TemplateKWLoc.isValid();
@@ -1496,6 +1495,7 @@ CXXDependentScopeMemberExpr *CXXDependentScopeMemberExpr::Create(
     const ASTContext &Ctx, Expr *Base, QualType BaseType, bool IsArrow,
     SourceLocation OperatorLoc, NestedNameSpecifierLoc QualifierLoc,
     SourceLocation TemplateKWLoc, NamedDecl *FirstQualifierFoundInScope,
+    SourceLocation EllipsisLoc,
     DeclarationNameInfo MemberNameInfo,
     const TemplateArgumentListInfo *TemplateArgs) {
   bool HasTemplateKWAndArgsInfo =
@@ -1510,7 +1510,7 @@ CXXDependentScopeMemberExpr *CXXDependentScopeMemberExpr::Create(
   void *Mem = Ctx.Allocate(Size, alignof(CXXDependentScopeMemberExpr));
   return new (Mem) CXXDependentScopeMemberExpr(
       Ctx, Base, BaseType, IsArrow, OperatorLoc, QualifierLoc, TemplateKWLoc,
-      FirstQualifierFoundInScope, MemberNameInfo, TemplateArgs);
+      FirstQualifierFoundInScope, EllipsisLoc, MemberNameInfo, TemplateArgs);
 }
 
 CXXDependentScopeMemberExpr *CXXDependentScopeMemberExpr::CreateEmpty(
@@ -1674,6 +1674,42 @@ SizeOfPackExpr *SizeOfPackExpr::CreateDeserialized(ASTContext &Context,
 NamedDecl *SubstNonTypeTemplateParmExpr::getParameter() const {
   return cast<NamedDecl>(
       getReplacedTemplateParameterList(getAssociatedDecl())->asArray()[Index]);
+}
+
+PackIndexingExpr *PackIndexingExpr::Create(ASTContext &Context,
+                                           SourceLocation EllipsisLoc,
+                                           SourceLocation RSquareLoc,
+                                           Expr *PackIdExpr, Expr *IndexExpr,
+                                           std::optional<int64_t> Index,
+                                           ArrayRef<Expr *> SubstitutedExprs) {
+  QualType Type;
+  if (Index && !SubstitutedExprs.empty())
+    Type = SubstitutedExprs[*Index]->getType();
+  else
+    Type = Context.DependentTy;
+
+  void *Storage =
+      Context.Allocate(totalSizeToAlloc<Expr *>(SubstitutedExprs.size()));
+  return new (Storage) PackIndexingExpr(
+      Type, EllipsisLoc, RSquareLoc, PackIdExpr, IndexExpr, SubstitutedExprs);
+}
+
+NamedDecl *PackIndexingExpr::getPackDecl() const {
+  if (auto *D = dyn_cast<DeclRefExpr>(getPackIdExpression()); D) {
+    NamedDecl *ND = dyn_cast<NamedDecl>(D->getDecl());
+    assert(ND && "exected a named decl");
+    return ND;
+  }
+  assert(false && "invalid declaration kind in pack indexing expression");
+  return nullptr;
+}
+
+PackIndexingExpr *
+PackIndexingExpr::CreateDeserialized(ASTContext &Context,
+                                     unsigned NumTransformedExprs) {
+  void *Storage =
+      Context.Allocate(totalSizeToAlloc<Expr *>(NumTransformedExprs));
+  return new (Storage) PackIndexingExpr(EmptyShell{});
 }
 
 QualType SubstNonTypeTemplateParmExpr::getParameterType(

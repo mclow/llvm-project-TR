@@ -223,6 +223,15 @@ bool Decl::isParameterPack() const {
   if (const auto *Var = dyn_cast<VarDecl>(this))
     return Var->isParameterPack();
 
+  if (const auto *Field = dyn_cast<FieldDecl>(this))
+    return Field->isParameterPack();
+
+  if (const auto *UD = dyn_cast<TypeAliasDecl>(this))
+    return UD->getEllipsisLoc().isValid();
+
+  if (const auto *UD = dyn_cast<ValuePackDecl>(this))
+    return true;
+
   return isTemplateParameterPack();
 }
 
@@ -859,6 +868,7 @@ unsigned Decl::getIdentifierNamespaceForKind(Kind DeclKind) {
 
     case Typedef:
     case TypeAlias:
+    case TypeAliasPack:
     case TemplateTypeParm:
     case ObjCTypeParam:
       return IDNS_Ordinary | IDNS_Type;
@@ -880,6 +890,7 @@ unsigned Decl::getIdentifierNamespaceForKind(Kind DeclKind) {
     case ObjCProtocol:
       return IDNS_ObjCProtocol;
 
+    case ValuePack:
     case Field:
     case ObjCAtDefsField:
     case ObjCIvar:
@@ -1577,7 +1588,7 @@ bool DeclContext::containsDeclAndLoad(Decl *D) const {
 /// within its semantic context should be invisible to qualified name lookup.
 static bool shouldBeHidden(NamedDecl *D) {
   // Skip unnamed declarations.
-  if (!D->getDeclName())
+  if (!D->getDeclName() || D->isInstantiatedFromPack())
     return true;
 
   // Skip entities that can't be found by name lookup into a particular

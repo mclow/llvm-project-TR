@@ -17,6 +17,7 @@
 #include "clang/AST/ASTUnresolvedSet.h"
 #include "clang/AST/Attr.h"
 #include "clang/AST/CXXInheritance.h"
+#include "clang/AST/Decl.h"
 #include "clang/AST/DeclBase.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/DeclarationName.h"
@@ -1383,6 +1384,31 @@ void CXXRecordDecl::addedMember(Decl *D) {
   }
 }
 
+bool CXXRecordDecl::isLiteral() const {
+  const LangOptions &LangOpts = getLangOpts();
+  if (!(LangOpts.CPlusPlus20 ? hasConstexprDestructor()
+                             : hasTrivialDestructor()))
+    return false;
+
+  if (hasNonLiteralTypeFieldsOrBases()) {
+    // CWG2598
+    // is an aggregate union type that has either no variant
+    // members or at least one variant member of non-volatile literal type,
+    if (!isUnion())
+      return false;
+    bool HasAtLeastOneLiteralMember =
+        fields().empty() || any_of(fields(), [this](const FieldDecl *D) {
+          return !D->getType().isVolatileQualified() &&
+                 D->getType()->isLiteralType(getASTContext());
+        });
+    if (!HasAtLeastOneLiteralMember)
+      return false;
+  }
+
+  return isAggregate() || (isLambda() && LangOpts.CPlusPlus17) ||
+         hasConstexprNonCopyMoveConstructor() || hasTrivialDefaultConstructor();
+}
+
 void CXXRecordDecl::addedSelectedDestructor(CXXDestructorDecl *DD) {
   DD->setIneligibleOrNotSelected(false);
   addedEligibleSpecialMemberFunction(DD, SMF_Destructor);
@@ -2054,7 +2080,7 @@ void CXXRecordDecl::completeDefinition(CXXFinalOverriderMap *FinalOverriders) {
         //   A class is abstract if it contains or inherits at least one
         //   pure virtual function for which the final overrider is pure
         //   virtual.
-        if (SO->second.front().Method->isPure()) {
+        if (SO->second.front().Method->isPureVirtual()) {
           data().Abstract = true;
           Done = true;
           break;
@@ -2273,7 +2299,7 @@ CXXMethodDecl *CXXMethodDecl::getDevirtualizedMethod(const Expr *Base,
   // If the member function is marked 'final', we know that it can't be
   // overridden and can therefore devirtualize it unless it's pure virtual.
   if (hasAttr<FinalAttr>())
-    return isPure() ? nullptr : this;
+    return isPureVirtual() ? nullptr : this;
 
   // If Base is unknown, we cannot devirtualize.
   if (!Base)
@@ -2302,7 +2328,7 @@ CXXMethodDecl *CXXMethodDecl::getDevirtualizedMethod(const Expr *Base,
   // If that method is pure virtual, we can't devirtualize. If this code is
   // reached, the result would be UB, not a direct call to the derived class
   // function, and we can't assume the derived class function is defined.
-  if (DevirtualizedMethod->isPure())
+  if (DevirtualizedMethod->isPureVirtual())
     return nullptr;
 
   // If that method is marked final, we can devirtualize it.
@@ -2569,15 +2595,17 @@ CXXCtorInitializer::CXXCtorInitializer(ASTContext &Context,
                                        SourceLocation L, Expr *Init,
                                        SourceLocation R,
                                        SourceLocation EllipsisLoc)
-    : Initializee(TInfo), Init(Init), MemberOrEllipsisLocation(EllipsisLoc),
+    : Initializee(TInfo), Init(Init), EllipsisLocation(EllipsisLoc),
       LParenLoc(L), RParenLoc(R), IsDelegating(false), IsVirtual(IsVirtual),
       IsWritten(false), SourceOrder(0) {}
 
 CXXCtorInitializer::CXXCtorInitializer(ASTContext &Context, FieldDecl *Member,
                                        SourceLocation MemberLoc,
                                        SourceLocation L, Expr *Init,
-                                       SourceLocation R)
-    : Initializee(Member), Init(Init), MemberOrEllipsisLocation(MemberLoc),
+                                       SourceLocation R,
+                                       SourceLocation EllipsisLoc)
+    : Initializee(Member), Init(Init), MemberLocation(MemberLoc),
+      EllipsisLocation(EllipsisLoc),
       LParenLoc(L), RParenLoc(R), IsDelegating(false), IsVirtual(false),
       IsWritten(false), SourceOrder(0) {}
 
@@ -2585,9 +2613,9 @@ CXXCtorInitializer::CXXCtorInitializer(ASTContext &Context,
                                        IndirectFieldDecl *Member,
                                        SourceLocation MemberLoc,
                                        SourceLocation L, Expr *Init,
-                                       SourceLocation R)
-    : Initializee(Member), Init(Init), MemberOrEllipsisLocation(MemberLoc),
-      LParenLoc(L), RParenLoc(R), IsDelegating(false), IsVirtual(false),
+                                       SourceLocation R, SourceLocation EllipsisLoc)
+    : Initializee(Member), Init(Init), MemberLocation(MemberLoc),
+      EllipsisLocation(EllipsisLoc), LParenLoc(L), RParenLoc(R), IsDelegating(false), IsVirtual(false),
       IsWritten(false), SourceOrder(0) {}
 
 CXXCtorInitializer::CXXCtorInitializer(ASTContext &Context,
@@ -2637,7 +2665,7 @@ SourceRange CXXCtorInitializer::getSourceRange() const {
     return {};
   }
 
-  return SourceRange(getSourceLocation(), getRParenLoc());
+  return SourceRange(getSourceLocation(), getEllipsisLoc().isValid() ? getEllipsisLoc() : getRParenLoc());
 }
 
 CXXConstructorDecl::CXXConstructorDecl(
@@ -3190,6 +3218,23 @@ UsingPackDecl *UsingPackDecl::CreateDeserialized(ASTContext &C, unsigned ID,
     new (Trail + I) NamedDecl*(nullptr);
   return Result;
 }
+
+TypeAliasPackDecl *
+TypeAliasPackDecl::Create(ASTContext &C, DeclContext *DC,
+                          TypedefNameDecl *InstantiatedFrom,
+                          ArrayRef<TypedefNameDecl *> AliasDecls) {
+  size_t Extra = additionalSizeToAlloc<TypedefNameDecl *>(AliasDecls.size());
+  return new (C, DC, Extra)
+      TypeAliasPackDecl(C, DC, InstantiatedFrom, AliasDecls);
+}
+
+bool TypeAliasPackDecl::isDependentExpansion(ASTContext &C) const {
+  return llvm::any_of(expansions(), [&C](const TypedefNameDecl *D) {
+    return C.getTypeDeclType(D)->isDependentType();
+  });
+}
+
+void TypeAliasPackDecl::anchor() {}
 
 void UnresolvedUsingValueDecl::anchor() {}
 

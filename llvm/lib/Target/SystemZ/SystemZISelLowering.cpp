@@ -1067,7 +1067,8 @@ bool SystemZTargetLowering::isLegalAddressingMode(const DataLayout &DL,
   if (!isInt<20>(AM.BaseOffs))
     return false;
 
-  bool RequireD12 = Subtarget.hasVector() && Ty->isVectorTy();
+  bool RequireD12 =
+      Subtarget.hasVector() && (Ty->isVectorTy() || Ty->isIntegerTy(128));
   AddressingMode SupportedAM(!RequireD12, true);
   if (I != nullptr)
     SupportedAM = supportedAddressingMode(I, Subtarget.hasVector());
@@ -9437,11 +9438,11 @@ MachineBasicBlock *SystemZTargetLowering::EmitInstrWithCustomInserter(
     return emitTransactionBegin(MI, MBB, SystemZ::TBEGIN, true);
   case SystemZ::TBEGINC:
     return emitTransactionBegin(MI, MBB, SystemZ::TBEGINC, true);
-  case SystemZ::LTEBRCompare_VecPseudo:
+  case SystemZ::LTEBRCompare_Pseudo:
     return emitLoadAndTestCmp0(MI, MBB, SystemZ::LTEBR);
-  case SystemZ::LTDBRCompare_VecPseudo:
+  case SystemZ::LTDBRCompare_Pseudo:
     return emitLoadAndTestCmp0(MI, MBB, SystemZ::LTDBR);
-  case SystemZ::LTXBRCompare_VecPseudo:
+  case SystemZ::LTXBRCompare_Pseudo:
     return emitLoadAndTestCmp0(MI, MBB, SystemZ::LTXBR);
 
   case SystemZ::PROBED_ALLOCA:

@@ -319,6 +319,9 @@ private:
   LLVM_PREFERRED_TYPE(bool)
   unsigned TopLevelDeclInObjCContainer : 1;
 
+  LLVM_PREFERRED_TYPE(bool)
+  unsigned InstantiatedFromPack : 1;
+
   /// Whether statistic collection is enabled.
   static bool StatisticsEnabled;
 
@@ -395,7 +398,7 @@ protected:
       : NextInContextAndBits(nullptr, getModuleOwnershipKindForChildOf(DC)),
         DeclCtx(DC), Loc(L), DeclKind(DK), InvalidDecl(false), HasAttrs(false),
         Implicit(false), Used(false), Referenced(false),
-        TopLevelDeclInObjCContainer(false), Access(AS_none), FromASTFile(0),
+        TopLevelDeclInObjCContainer(false), InstantiatedFromPack(false), Access(AS_none), FromASTFile(0),
         IdentifierNamespace(getIdentifierNamespaceForKind(DK)),
         CacheValidAndLinkage(llvm::to_underlying(Linkage::Invalid)) {
     if (StatisticsEnabled) add(DK);
@@ -404,6 +407,7 @@ protected:
   Decl(Kind DK, EmptyShell Empty)
       : DeclKind(DK), InvalidDecl(false), HasAttrs(false), Implicit(false),
         Used(false), Referenced(false), TopLevelDeclInObjCContainer(false),
+        InstantiatedFromPack(false),
         Access(AS_none), FromASTFile(0),
         IdentifierNamespace(getIdentifierNamespaceForKind(DK)),
         CacheValidAndLinkage(llvm::to_underlying(Linkage::Invalid)) {
@@ -548,16 +552,17 @@ public:
     return hasAttrs() ? getAttrs().end() : nullptr;
   }
 
-  template <typename T>
-  void dropAttr() {
+  template <typename... Ts> void dropAttrs() {
     if (!HasAttrs) return;
 
     AttrVec &Vec = getAttrs();
-    llvm::erase_if(Vec, [](Attr *A) { return isa<T>(A); });
+    llvm::erase_if(Vec, [](Attr *A) { return isa<Ts...>(A); });
 
     if (Vec.empty())
       HasAttrs = false;
   }
+
+  template <typename T> void dropAttr() { dropAttrs<T>(); }
 
   template <typename T>
   llvm::iterator_range<specific_attr_iterator<T>> specific_attrs() const {
@@ -635,6 +640,14 @@ public:
 
   void setTopLevelDeclInObjCContainer(bool V = true) {
     TopLevelDeclInObjCContainer = V;
+  }
+
+  bool isInstantiatedFromPack() const {
+    return InstantiatedFromPack;
+  }
+
+  void SetInstantiatedFromPack(bool V = true) {
+    InstantiatedFromPack = V;
   }
 
   /// Looks on this and related declarations for an applicable
@@ -1707,7 +1720,7 @@ class DeclContext {
     LLVM_PREFERRED_TYPE(bool)
     uint64_t IsVirtualAsWritten : 1;
     LLVM_PREFERRED_TYPE(bool)
-    uint64_t IsPure : 1;
+    uint64_t IsPureVirtual : 1;
     LLVM_PREFERRED_TYPE(bool)
     uint64_t HasInheritedPrototype : 1;
     LLVM_PREFERRED_TYPE(bool)

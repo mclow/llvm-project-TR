@@ -703,6 +703,9 @@ void JSONNodeDumper::VisitVectorType(const VectorType *VT) {
   case VectorKind::RVVFixedLengthData:
     JOS.attribute("vectorKind", "fixed-length rvv data vector");
     break;
+  case VectorKind::RVVFixedLengthMask:
+    JOS.attribute("vectorKind", "fixed-length rvv mask vector");
+    break;
   }
 }
 
@@ -843,6 +846,12 @@ void JSONNodeDumper::VisitTypeAliasDecl(const TypeAliasDecl *TAD) {
   JOS.attribute("type", createQualType(TAD->getUnderlyingType()));
 }
 
+void JSONNodeDumper::VisitTypeAliasPackDecl(const TypeAliasPackDecl *TAD) {
+  VisitNamedDecl(TAD);
+  JOS.attribute("type", createQualType(TAD->getUnderlyingType()));
+  assert(false && "todo");
+}
+
 void JSONNodeDumper::VisitNamespaceDecl(const NamespaceDecl *ND) {
   VisitNamedDecl(ND);
   attributeOnlyIfTrue("isInline", ND->isInline());
@@ -879,6 +888,10 @@ void JSONNodeDumper::VisitUsingEnumDecl(const UsingEnumDecl *UED) {
 
 void JSONNodeDumper::VisitUsingShadowDecl(const UsingShadowDecl *USD) {
   JOS.attribute("target", createBareDeclRef(USD->getTargetDecl()));
+}
+
+void JSONNodeDumper::VisitValuePackDecl(const ValuePackDecl *VPD) {
+  assert(false && "todo");
 }
 
 void JSONNodeDumper::VisitVarDecl(const VarDecl *VD) {
@@ -930,7 +943,7 @@ void JSONNodeDumper::VisitFunctionDecl(const FunctionDecl *FD) {
     JOS.attribute("storageClass", VarDecl::getStorageClassSpecifierString(SC));
   attributeOnlyIfTrue("inline", FD->isInlineSpecified());
   attributeOnlyIfTrue("virtual", FD->isVirtualAsWritten());
-  attributeOnlyIfTrue("pure", FD->isPure());
+  attributeOnlyIfTrue("pure", FD->isPureVirtual());
   attributeOnlyIfTrue("explicitlyDeleted", FD->isDeletedAsWritten());
   attributeOnlyIfTrue("constexpr", FD->isConstexpr());
   attributeOnlyIfTrue("variadic", FD->isVariadic());
@@ -1356,12 +1369,11 @@ void JSONNodeDumper::VisitCXXNewExpr(const CXXNewExpr *NE) {
   attributeOnlyIfTrue("isPlacement", NE->getNumPlacementArgs() != 0);
   switch (NE->getInitializationStyle()) {
   case CXXNewInitializationStyle::None:
-  case CXXNewInitializationStyle::Implicit:
     break;
-  case CXXNewInitializationStyle::Call:
+  case CXXNewInitializationStyle::Parens:
     JOS.attribute("initStyle", "call");
     break;
-  case CXXNewInitializationStyle::List:
+  case CXXNewInitializationStyle::Braces:
     JOS.attribute("initStyle", "list");
     break;
   }

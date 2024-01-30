@@ -233,6 +233,34 @@ bool Parser::ParseOptionalCXXScopeSpecifier(
     HasScopeSpecifier = true;
   }
 
+  else if (!HasScopeSpecifier && Tok.is(tok::identifier) &&
+           GetLookAheadToken(1).is(tok::ellipsis) &&
+           GetLookAheadToken(2).is(tok::l_square)) {
+    SourceLocation Start = Tok.getLocation();
+    DeclSpec DS(AttrFactory);
+    SourceLocation CCLoc;
+    SourceLocation EndLoc = ParsePackIndexingType(DS);
+    if (DS.getTypeSpecType() == DeclSpec::TST_error)
+      return false;
+
+    QualType Type = Actions.ActOnPackIndexingType(
+        DS.getRepAsType().get(), DS.getPackIndexingExpr(), DS.getBeginLoc(),
+        DS.getEllipsisLoc());
+
+    if (Type.isNull())
+      return false;
+
+    if (!TryConsumeToken(tok::coloncolon, CCLoc)) {
+      AnnotateExistingIndexedTypeNamePack(ParsedType::make(Type), Start,
+                                          EndLoc);
+      return false;
+    }
+    if (Actions.ActOnCXXNestedNameSpecifierIndexedPack(SS, DS, CCLoc,
+                                                       std::move(Type)))
+      SS.SetInvalid(SourceRange(Start, CCLoc));
+    HasScopeSpecifier = true;
+  }
+
   // Preferred type might change when parsing qualifiers, we need the original.
   auto SavedType = PreferredType;
   while (true) {
@@ -378,6 +406,13 @@ bool Parser::ParseOptionalCXXScopeSpecifier(
       continue;
     }
 
+    Token DependentPackEllipsisTok;
+    DependentPackEllipsisTok.startToken();
+    if(getLangOpts().CPlusPlus26 && Tok.is(tok::ellipsis) && NextToken().is(tok::identifier)) {
+      DependentPackEllipsisTok = Tok;
+      ConsumeToken();
+    }
+
     // The rest of the nested-name-specifier possibilities start with
     // tok::identifier.
     if (Tok.isNot(tok::identifier))
@@ -385,13 +420,43 @@ bool Parser::ParseOptionalCXXScopeSpecifier(
 
     IdentifierInfo &II = *Tok.getIdentifierInfo();
 
+
+    Token Next = NextToken();
+
     // nested-name-specifier:
     //   type-name '::'
     //   namespace-name '::'
     //   nested-name-specifier identifier '::'
-    Token Next = NextToken();
-    Sema::NestedNameSpecInfo IdInfo(&II, Tok.getLocation(), Next.getLocation(),
+    Sema::NestedNameSpecInfo IdInfo(&II, DependentPackEllipsisTok.getLocation(),
+                                    Tok.getLocation(), Next.getLocation(),
                                     ObjectType);
+
+    if (Next.is(tok::ellipsis) && GetLookAheadToken(2).is(tok::l_square)) {
+      SourceLocation Start = Tok.getLocation();
+      DeclSpec DS(AttrFactory);
+      SourceLocation CCLoc;
+      DS.getTypeSpecScope() = SS;
+      SourceLocation EndLoc = ParsePackIndexingType(DS);
+      if (DS.getTypeSpecType() == DeclSpec::TST_error) {
+        if(DependentPackEllipsisTok.is(tok::ellipsis))
+          UnconsumeToken(DependentPackEllipsisTok);
+        return false;
+      }
+      QualType Type = Actions.ActOnPackIndexingType(
+          DS.getRepAsType().get(), DS.getPackIndexingExpr(), DS.getBeginLoc(),
+          DS.getEllipsisLoc());
+      if (Type.isNull())
+        return true;
+      if (TryConsumeToken(tok::coloncolon, CCLoc)) {
+        if (Actions.ActOnCXXNestedNameSpecifierIndexedPack(SS, DS, CCLoc,
+                                                           std::move(Type)))
+          return false;
+        HasScopeSpecifier = true;
+      } else {
+        AnnotateExistingIndexedTypeNamePack(ParsedType::make(Type), Start,
+                                            EndLoc);
+      }
+    }
 
     // If we get foo:bar, this is almost certainly a typo for foo::bar.  Recover
     // and emit a fixit hint for it.
@@ -545,6 +610,10 @@ bool Parser::ParseOptionalCXXScopeSpecifier(
 
     // We don't have any tokens that form the beginning of a
     // nested-name-specifier, so we're done.
+
+    // If we parsed a dependent pack ellipsis, revert that.
+    if(DependentPackEllipsisTok.is(tok::ellipsis))
+      UnconsumeToken(DependentPackEllipsisTok);
     break;
   }
 
@@ -617,8 +686,35 @@ ExprResult Parser::tryParseCXXIdExpression(CXXScopeSpec &SS,
     break;
   }
 
+  // Might be a pack index expression!
+  E = tryParseCXXPackIndexingExpression(E);
+
   if (!E.isInvalid() && !E.isUnset() && Tok.is(tok::less))
     checkPotentialAngleBracket(E);
+  return E;
+}
+
+ExprResult Parser::ParseCXXPackIndexingExpression(ExprResult PackIdExpression) {
+  assert(Tok.is(tok::ellipsis) && NextToken().is(tok::l_square) &&
+         "expected ...[");
+  SourceLocation EllipsisLoc = ConsumeToken();
+  BalancedDelimiterTracker T(*this, tok::l_square);
+  T.consumeOpen();
+  ExprResult IndexExpr = ParseConstantExpression();
+  if (T.consumeClose() || IndexExpr.isInvalid())
+    return ExprError();
+  return Actions.ActOnPackIndexingExpr(getCurScope(), PackIdExpression.get(),
+                                       EllipsisLoc, T.getOpenLocation(),
+                                       IndexExpr.get(), T.getCloseLocation());
+}
+
+ExprResult
+Parser::tryParseCXXPackIndexingExpression(ExprResult PackIdExpression) {
+  ExprResult E = PackIdExpression;
+  if (!PackIdExpression.isInvalid() && !PackIdExpression.isUnset() &&
+      Tok.is(tok::ellipsis) && NextToken().is(tok::l_square)) {
+    E = ParseCXXPackIndexingExpression(E);
+  }
   return E;
 }
 
@@ -1810,6 +1906,15 @@ Parser::ParseCXXPseudoDestructor(Expr *Base, SourceLocation OpLoc,
     return ExprError();
   }
 
+  // pack-index-specifier
+  if (GetLookAheadToken(1).is(tok::ellipsis) &&
+      GetLookAheadToken(2).is(tok::l_square)) {
+    DeclSpec DS(AttrFactory);
+    ParsePackIndexingType(DS);
+    return Actions.ActOnPseudoDestructorExpr(getCurScope(), Base, OpLoc, OpKind,
+                                             TildeLoc, DS);
+  }
+
   // Parse the second type.
   UnqualifiedId SecondTypeName;
   IdentifierInfo *Name = Tok.getIdentifierInfo();
@@ -1916,7 +2021,7 @@ ExprResult
 Parser::ParseCXXTypeConstructExpression(const DeclSpec &DS) {
   Declarator DeclaratorInfo(DS, ParsedAttributesView::none(),
                             DeclaratorContext::FunctionalCast);
-  ParsedType TypeRep = Actions.ActOnTypeName(getCurScope(), DeclaratorInfo).get();
+  ParsedType TypeRep = Actions.ActOnTypeName(DeclaratorInfo).get();
 
   assert((Tok.is(tok::l_paren) ||
           (getLangOpts().CPlusPlus11 && Tok.is(tok::l_brace)))
@@ -2253,7 +2358,6 @@ void Parser::ParseCXXSimpleTypeSpecifier(DeclSpec &DS) {
                        getTypeAnnotation(Tok), Policy);
     DS.SetRangeEnd(Tok.getAnnotationEndLoc());
     ConsumeAnnotationToken();
-
     DS.Finish(Actions, Policy);
     return;
   }
@@ -2362,6 +2466,10 @@ void Parser::ParseCXXSimpleTypeSpecifier(DeclSpec &DS) {
   case tok::annot_decltype:
   case tok::kw_decltype:
     DS.SetRangeEnd(ParseDecltypeSpecifier(DS));
+    return DS.Finish(Actions, Policy);
+
+  case tok::annot_pack_indexing_type:
+    DS.SetRangeEnd(ParsePackIndexingType(DS));
     return DS.Finish(Actions, Policy);
 
   // GNU typeof support.
@@ -2815,7 +2923,7 @@ bool Parser::ParseUnqualifiedIdOperator(CXXScopeSpec &SS, bool EnteringContext,
   ParseDeclaratorInternal(D, /*DirectDeclParser=*/nullptr);
 
   // Finish up the type.
-  TypeResult Ty = Actions.ActOnTypeName(getCurScope(), D);
+  TypeResult Ty = Actions.ActOnTypeName(D);
   if (Ty.isInvalid())
     return true;
 
@@ -3252,8 +3360,7 @@ Parser::ParseCXXNewExpression(bool UseGlobal, SourceLocation Start) {
     ConstructorLParen = T.getOpenLocation();
     if (Tok.isNot(tok::r_paren)) {
       auto RunSignatureHelp = [&]() {
-        ParsedType TypeRep =
-            Actions.ActOnTypeName(getCurScope(), DeclaratorInfo).get();
+        ParsedType TypeRep = Actions.ActOnTypeName(DeclaratorInfo).get();
         QualType PreferredType;
         // ActOnTypeName might adjust DeclaratorInfo and return a null type even
         // the passing DeclaratorInfo is valid, e.g. running SignatureHelp on
@@ -4037,7 +4144,7 @@ Parser::ParseCXXAmbiguousParenExpression(ParenParseOption &ExprType,
       if (DeclaratorInfo.isInvalidType())
         return ExprError();
 
-      TypeResult Ty = Actions.ActOnTypeName(getCurScope(), DeclaratorInfo);
+      TypeResult Ty = Actions.ActOnTypeName(DeclaratorInfo);
       return ParseCompoundLiteralExpression(Ty.get(),
                                             Tracker.getOpenLocation(),
                                             Tracker.getCloseLocation());

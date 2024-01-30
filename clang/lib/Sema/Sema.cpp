@@ -216,7 +216,8 @@ Sema::Sema(Preprocessor &pp, ASTContext &ctxt, ASTConsumer &consumer,
           static_cast<unsigned>(ComparisonCategoryType::Last) + 1),
       SatisfactionCache(Context), AccessCheckingSFINAE(false),
       InNonInstantiationSFINAEContext(false), NonInstantiationEntries(0),
-      ArgumentPackSubstitutionIndex(-1), CurrentInstantiationScope(nullptr),
+      ArgumentPackSubstitutionIndex(-1),
+      CurrentInstantiationScope(nullptr),
       DisableTypoCorrection(false), TyposCorrected(0), AnalysisWarnings(*this),
       ThreadSafetyDeclCache(nullptr), VarDataSharingAttributesStack(nullptr),
       CurScope(nullptr), Ident_super(nullptr) {
@@ -957,7 +958,7 @@ static bool MethodsAndNestedClassesComplete(const CXXRecordDecl *RD,
        I != E && Complete; ++I) {
     if (const CXXMethodDecl *M = dyn_cast<CXXMethodDecl>(*I))
       Complete = M->isDefined() || M->isDefaulted() ||
-                 (M->isPure() && !isa<CXXDestructorDecl>(M));
+                 (M->isPureVirtual() && !isa<CXXDestructorDecl>(M));
     else if (const FunctionTemplateDecl *F = dyn_cast<FunctionTemplateDecl>(*I))
       // If the template function is marked as late template parsed at this
       // point, it has not been instantiated and therefore we have not
@@ -2758,7 +2759,7 @@ bool Sema::isDeclaratorFunctionLike(Declarator &D) {
     return false;
 
   LookupQualifiedName(LR, DC);
-  bool Result = std::all_of(LR.begin(), LR.end(), [](Decl *Dcl) {
+  bool Result = llvm::all_of(LR, [](Decl *Dcl) {
     if (NamedDecl *ND = dyn_cast<NamedDecl>(Dcl)) {
       ND = ND->getUnderlyingDecl();
       return isa<FunctionDecl>(ND) || isa<FunctionTemplateDecl>(ND) ||

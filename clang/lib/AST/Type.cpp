@@ -2479,6 +2479,9 @@ bool Type::isRVVVLSBuiltinType() const {
                         IsFP, IsBF)                                            \
   case BuiltinType::Id:                                                        \
     return NF == 1;
+#define RVV_PREDICATE_TYPE(Name, Id, SingletonId, NumEls)                      \
+  case BuiltinType::Id:                                                        \
+    return true;
 #include "clang/Basic/RISCVVTypes.def"
     default:
       return false;
@@ -2491,7 +2494,17 @@ QualType Type::getRVVEltType(const ASTContext &Ctx) const {
   assert(isRVVVLSBuiltinType() && "unsupported type!");
 
   const BuiltinType *BTy = castAs<BuiltinType>();
-  return Ctx.getBuiltinVectorTypeInfo(BTy).ElementType;
+
+  switch (BTy->getKind()) {
+#define RVV_PREDICATE_TYPE(Name, Id, SingletonId, NumEls)                      \
+  case BuiltinType::Id:                                                        \
+    return Ctx.UnsignedCharTy;
+  default:
+    return Ctx.getBuiltinVectorTypeInfo(BTy).ElementType;
+#include "clang/Basic/RISCVVTypes.def"
+  }
+
+  llvm_unreachable("Unhandled type");
 }
 
 bool QualType::isPODType(const ASTContext &Context) const {
@@ -3143,6 +3156,17 @@ StringRef TypeWithKeyword::getKeywordName(ElaboratedTypeKeyword Keyword) {
   llvm_unreachable("Unknown elaborated type keyword.");
 }
 
+const IdentifierInfo *PackNameType::getIdentifier() const {
+  if (const auto *ET = dyn_cast<ElaboratedType>(Underlying)) {
+    QualType Named = ET->getNamedType();
+    if (auto *T = dyn_cast<TypedefType>(Named)) {
+      return T->getDecl()->getIdentifier();
+    }
+    llvm_unreachable("This type does not denote a pack");
+  }
+  return cast<DependentNameType>(Underlying)->getIdentifier();
+}
+
 DependentTemplateSpecializationType::DependentTemplateSpecializationType(
     ElaboratedTypeKeyword Keyword, NestedNameSpecifier *NNS,
     const IdentifierInfo *Name, ArrayRef<TemplateArgument> Args, QualType Canon)
@@ -3459,6 +3483,14 @@ FunctionProtoType::FunctionProtoType(QualType result, ArrayRef<QualType> params,
     FunctionTypeBits.HasExtraBitfields = false;
   }
 
+  if (epi.requiresFunctionProtoTypeArmAttributes()) {
+    auto &ArmTypeAttrs = *getTrailingObjects<FunctionTypeArmAttributes>();
+    ArmTypeAttrs = FunctionTypeArmAttributes();
+
+    // Also set the bit in FunctionTypeExtraBitfields
+    auto &ExtraBits = *getTrailingObjects<FunctionTypeExtraBitfields>();
+    ExtraBits.HasArmTypeAttributes = true;
+  }
 
   // Fill in the trailing argument array.
   auto *argSlot = getTrailingObjects<QualType>();
@@ -3470,10 +3502,10 @@ FunctionProtoType::FunctionProtoType(QualType result, ArrayRef<QualType> params,
 
   // Propagate the SME ACLE attributes.
   if (epi.AArch64SMEAttributes != SME_NormalFunction) {
-    auto &ExtraBits = *getTrailingObjects<FunctionTypeExtraBitfields>();
+    auto &ArmTypeAttrs = *getTrailingObjects<FunctionTypeArmAttributes>();
     assert(epi.AArch64SMEAttributes <= SME_AttributeMask &&
            "Not enough bits to encode SME attributes");
-    ExtraBits.AArch64SMEAttributes = epi.AArch64SMEAttributes;
+    ArmTypeAttrs.AArch64SMEAttributes = epi.AArch64SMEAttributes;
   }
 
   // Fill in the exception type array if present.
@@ -3685,10 +3717,20 @@ void FunctionProtoType::Profile(llvm::FoldingSetNodeID &ID,
           getExtProtoInfo(), Ctx, isCanonicalUnqualified());
 }
 
+static TypeDependence computeTypedefTypeDependence(QualType T, const TypedefNameDecl *D) {
+  TypeDependence Dep = toSemanticDependence(T->getDependence());
+  if(const auto* Alias = dyn_cast<TypeAliasDecl>(D); Alias && Alias->getEllipsisLoc().isValid())
+    Dep |= TypeDependence::UnexpandedPack;
+  if(const auto* Alias = dyn_cast<TypeAliasPackDecl>(D))
+    Dep |= TypeDependence::UnexpandedPack;
+  return Dep;
+}
+
 TypedefType::TypedefType(TypeClass tc, const TypedefNameDecl *D,
                          QualType Underlying, QualType can)
-    : Type(tc, can, toSemanticDependence(can->getDependence())),
+    : Type(tc, can, computeTypedefTypeDependence(can, D)),
       Decl(const_cast<TypedefNameDecl *>(D)) {
+
   assert(!isa<TypedefType>(can) && "Invalid canonical type");
   TypedefBits.hasTypeDifferentFromDecl = !Underlying.isNull();
   if (!typeMatchesDecl())
@@ -3789,6 +3831,57 @@ DependentDecltypeType::DependentDecltypeType(Expr *E, QualType UnderlyingType)
 
 void DependentDecltypeType::Profile(llvm::FoldingSetNodeID &ID,
                                     const ASTContext &Context, Expr *E) {
+  E->Profile(ID, Context, true);
+}
+
+PackIndexingType::PackIndexingType(const ASTContext &Context,
+                                   QualType Canonical, QualType Pattern,
+                                   Expr *IndexExpr,
+                                   ArrayRef<QualType> Expansions)
+    : Type(PackIndexing, Canonical,
+           computeDependence(Pattern, IndexExpr, Expansions)),
+      Context(Context), Pattern(Pattern), IndexExpr(IndexExpr),
+      Size(Expansions.size()) {
+
+  std::uninitialized_copy(Expansions.begin(), Expansions.end(),
+                          getTrailingObjects<QualType>());
+}
+
+std::optional<unsigned> PackIndexingType::getSelectedIndex() const {
+  if (isInstantiationDependentType())
+    return std::nullopt;
+  // Should only be not a constant for error recovery.
+  ConstantExpr *CE = dyn_cast<ConstantExpr>(getIndexExpr());
+  if (!CE)
+    return std::nullopt;
+  auto Index = CE->getResultAsAPSInt();
+  assert(Index.isNonNegative() && "Invalid index");
+  return static_cast<unsigned>(Index.getExtValue());
+}
+
+TypeDependence
+PackIndexingType::computeDependence(QualType Pattern, Expr *IndexExpr,
+                                    ArrayRef<QualType> Expansions) {
+  TypeDependence IndexD = toTypeDependence(IndexExpr->getDependence());
+
+  TypeDependence TD = IndexD | (IndexExpr->isInstantiationDependent()
+                                    ? TypeDependence::DependentInstantiation
+                                    : TypeDependence::None);
+  if (Expansions.empty())
+    TD |= Pattern->getDependence() & TypeDependence::DependentInstantiation;
+  else
+    for (const QualType &T : Expansions)
+      TD |= T->getDependence();
+
+  if (!(IndexD & TypeDependence::UnexpandedPack))
+    TD &= ~TypeDependence::UnexpandedPack;
+  return TD;
+}
+
+void PackIndexingType::Profile(llvm::FoldingSetNodeID &ID,
+                               const ASTContext &Context, QualType Pattern,
+                               Expr *E) {
+  Pattern.Profile(ID);
   E->Profile(ID, Context, true);
 }
 
@@ -4467,10 +4560,12 @@ bool Type::canHaveNullability(bool ResultIfUnknown) const {
   case Type::TypeOfExpr:
   case Type::TypeOf:
   case Type::Decltype:
+  case Type::PackIndexing:
   case Type::UnaryTransform:
   case Type::TemplateTypeParm:
   case Type::SubstTemplateTypeParmPack:
   case Type::DependentName:
+  case Type::PackName:
   case Type::DependentTemplateSpecialization:
   case Type::Auto:
     return ResultIfUnknown;

@@ -31,6 +31,7 @@
 #include "clang/Sema/SemaInternal.h"
 #include "clang/Sema/Template.h"
 #include "clang/Sema/TemplateInstCallback.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/TimeProfiler.h"
 #include <optional>
 
@@ -5877,6 +5878,72 @@ Sema::InstantiateMemInitializers(CXXConstructorDecl *New,
   SmallVector<CXXCtorInitializer*, 4> NewInits;
   bool AnyErrors = Tmpl->isInvalidDecl();
 
+
+  auto InstantiateInitializer = [&] (const CXXCtorInitializer* Init, SourceLocation EllipsisLoc = {}) {
+      // Instantiate the initializer.
+      ExprResult TempInit = SubstInitializer(Init->getInit(), TemplateArgs,
+                                             /*CXXDirectInit=*/true);
+      if (TempInit.isInvalid()) {
+        AnyErrors = true;
+        return;
+      }
+
+      MemInitResult NewInit;
+      if (Init->isDelegatingInitializer() || Init->isBaseInitializer()) {
+        TypeSourceInfo *TInfo = SubstType(Init->getTypeSourceInfo(),
+                                          TemplateArgs,
+                                          Init->getSourceLocation(),
+                                          New->getDeclName());
+        if (!TInfo) {
+          AnyErrors = true;
+          New->setInvalidDecl();
+          return;
+        }
+
+        if (Init->isBaseInitializer())
+          NewInit = BuildBaseInitializer(TInfo->getType(), TInfo, TempInit.get(),
+                                         New->getParent(), EllipsisLoc);
+        else
+          NewInit = BuildDelegatingInitializer(TInfo, TempInit.get(),
+                                    cast<CXXRecordDecl>(CurContext->getParent()));
+      } else if (Init->isMemberInitializer()) {
+        FieldDecl *Member = cast_or_null<FieldDecl>(FindInstantiatedPackElementDecl(
+                                                       Init->getMemberLocation(),
+                                                       Init->getMember(),
+                                                       TemplateArgs));
+        if (!Member) {
+          AnyErrors = true;
+          New->setInvalidDecl();
+          return;
+        }
+
+        NewInit = BuildMemberInitializer(Member, TempInit.get(),
+                                         Init->getSourceLocation(), SourceLocation());
+      } else if (Init->isIndirectMemberInitializer()) {
+        IndirectFieldDecl *IndirectMember =
+           cast_or_null<IndirectFieldDecl>(FindInstantiatedPackElementDecl(
+                                               Init->getMemberLocation(),
+                                               Init->getMember(),
+                                               TemplateArgs));
+
+        if (!IndirectMember) {
+          AnyErrors = true;
+          New->setInvalidDecl();
+          return;
+        }
+
+        NewInit = BuildMemberInitializer(IndirectMember, TempInit.get(),
+                                         Init->getSourceLocation(), SourceLocation());
+      }
+      if (NewInit.isInvalid()) {
+        AnyErrors = true;
+        New->setInvalidDecl();
+      } else {
+        NewInits.push_back(NewInit.get());
+      }
+  };
+
+
   // Instantiate all the initializers.
   for (const auto *Init : Tmpl->inits()) {
     // Only instantiate written initializers, let Sema re-construct implicit
@@ -5884,19 +5951,25 @@ Sema::InstantiateMemInitializers(CXXConstructorDecl *New,
     if (!Init->isWritten())
       continue;
 
-    SourceLocation EllipsisLoc;
-
     if (Init->isPackExpansion()) {
       // This is a pack expansion. We should expand it now.
-      TypeLoc BaseTL = Init->getTypeSourceInfo()->getTypeLoc();
       SmallVector<UnexpandedParameterPack, 4> Unexpanded;
-      collectUnexpandedParameterPacks(BaseTL, Unexpanded);
+      SourceRange SR;
+      if(Init->isMemberInitializer()) {
+          collectUnexpandedParameterPacks(Init->getAnyMember(), Unexpanded);
+          SR = Init->getSourceRange();
+      }
+      else {
+          TypeLoc BaseTL = Init->getTypeSourceInfo()->getTypeLoc();
+          SR = BaseTL.getSourceRange();
+          collectUnexpandedParameterPacks(BaseTL, Unexpanded);
+      }
       collectUnexpandedParameterPacks(Init->getInit(), Unexpanded);
       bool ShouldExpand = false;
       bool RetainExpansion = false;
       std::optional<unsigned> NumExpansions;
       if (CheckParameterPacksForExpansion(Init->getEllipsisLoc(),
-                                          BaseTL.getSourceRange(),
+                                          SR,
                                           Unexpanded,
                                           TemplateArgs, ShouldExpand,
                                           RetainExpansion,
@@ -5910,101 +5983,12 @@ Sema::InstantiateMemInitializers(CXXConstructorDecl *New,
       // Loop over all of the arguments in the argument pack(s),
       for (unsigned I = 0; I != *NumExpansions; ++I) {
         Sema::ArgumentPackSubstitutionIndexRAII SubstIndex(*this, I);
-
-        // Instantiate the initializer.
-        ExprResult TempInit = SubstInitializer(Init->getInit(), TemplateArgs,
-                                               /*CXXDirectInit=*/true);
-        if (TempInit.isInvalid()) {
-          AnyErrors = true;
-          break;
-        }
-
-        // Instantiate the base type.
-        TypeSourceInfo *BaseTInfo = SubstType(Init->getTypeSourceInfo(),
-                                              TemplateArgs,
-                                              Init->getSourceLocation(),
-                                              New->getDeclName());
-        if (!BaseTInfo) {
-          AnyErrors = true;
-          break;
-        }
-
-        // Build the initializer.
-        MemInitResult NewInit = BuildBaseInitializer(BaseTInfo->getType(),
-                                                     BaseTInfo, TempInit.get(),
-                                                     New->getParent(),
-                                                     SourceLocation());
-        if (NewInit.isInvalid()) {
-          AnyErrors = true;
-          break;
-        }
-
-        NewInits.push_back(NewInit.get());
-      }
-
-      continue;
-    }
-
-    // Instantiate the initializer.
-    ExprResult TempInit = SubstInitializer(Init->getInit(), TemplateArgs,
-                                           /*CXXDirectInit=*/true);
-    if (TempInit.isInvalid()) {
-      AnyErrors = true;
-      continue;
-    }
-
-    MemInitResult NewInit;
-    if (Init->isDelegatingInitializer() || Init->isBaseInitializer()) {
-      TypeSourceInfo *TInfo = SubstType(Init->getTypeSourceInfo(),
-                                        TemplateArgs,
-                                        Init->getSourceLocation(),
-                                        New->getDeclName());
-      if (!TInfo) {
-        AnyErrors = true;
-        New->setInvalidDecl();
+        InstantiateInitializer(Init, Init->getEllipsisLoc());
         continue;
-      }
-
-      if (Init->isBaseInitializer())
-        NewInit = BuildBaseInitializer(TInfo->getType(), TInfo, TempInit.get(),
-                                       New->getParent(), EllipsisLoc);
-      else
-        NewInit = BuildDelegatingInitializer(TInfo, TempInit.get(),
-                                  cast<CXXRecordDecl>(CurContext->getParent()));
-    } else if (Init->isMemberInitializer()) {
-      FieldDecl *Member = cast_or_null<FieldDecl>(FindInstantiatedDecl(
-                                                     Init->getMemberLocation(),
-                                                     Init->getMember(),
-                                                     TemplateArgs));
-      if (!Member) {
-        AnyErrors = true;
-        New->setInvalidDecl();
-        continue;
-      }
-
-      NewInit = BuildMemberInitializer(Member, TempInit.get(),
-                                       Init->getSourceLocation());
-    } else if (Init->isIndirectMemberInitializer()) {
-      IndirectFieldDecl *IndirectMember =
-         cast_or_null<IndirectFieldDecl>(FindInstantiatedDecl(
-                                 Init->getMemberLocation(),
-                                 Init->getIndirectMember(), TemplateArgs));
-
-      if (!IndirectMember) {
-        AnyErrors = true;
-        New->setInvalidDecl();
-        continue;
-      }
-
-      NewInit = BuildMemberInitializer(IndirectMember, TempInit.get(),
-                                       Init->getSourceLocation());
     }
-
-    if (NewInit.isInvalid()) {
-      AnyErrors = true;
-      New->setInvalidDecl();
-    } else {
-      NewInits.push_back(NewInit.get());
+  }
+  else {
+        InstantiateInitializer(Init, Init->getEllipsisLoc());
     }
   }
 
@@ -6588,6 +6572,18 @@ NamedDecl *Sema::FindInstantiatedDecl(SourceLocation Loc, NamedDecl *D,
 
   return D;
 }
+
+NamedDecl *Sema::FindInstantiatedPackElementDecl(SourceLocation Loc, NamedDecl *D,
+                        const MultiLevelTemplateArgumentList &TemplateArgs,
+                        bool FindingInstantiatedContext) {
+    NamedDecl* ND = FindInstantiatedDecl(Loc, D, TemplateArgs);
+    if(!ND || ArgumentPackSubstitutionIndex == -1)
+        return ND;
+    if(const auto* Pack = dyn_cast<ValuePackDecl>(ND))
+        return Pack->expansions()[ArgumentPackSubstitutionIndex];
+    return ND;
+}
+
 
 /// Performs template instantiation for all implicit template
 /// instantiations we have seen until this point.

@@ -848,6 +848,8 @@ ExprDependence clang::computeDependence(CXXDependentScopeMemberExpr *E) {
   D |= getDependenceInExpr(E->getMemberNameInfo());
   for (const auto &A : E->template_arguments())
     D |= toExprDependence(A.getArgument().getDependence());
+  if(E->getEllipsisLoc().isValid())
+    D |= ExprDependence::UnexpandedPack;
   return D;
 }
 

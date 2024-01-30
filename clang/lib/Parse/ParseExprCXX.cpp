@@ -435,14 +435,16 @@ bool Parser::ParseOptionalCXXScopeSpecifier(
       SourceLocation CCLoc;
       DS.getTypeSpecScope() = SS;
       SourceLocation EndLoc = ParseIndexedTypeNamePack(DS);
-      if (DS.getTypeSpecType() == DeclSpec::TST_error)
+      if (DS.getTypeSpecType() == DeclSpec::TST_error) {
+        if(DependentPackEllipsisTok.is(tok::ellipsis))
+          UnconsumeToken(DependentPackEllipsisTok);
         return false;
+      }
       QualType Type = Actions.ActOnPackIndexingType(
           DS.getRepAsType().get(), DS.getPackIndexingExpr(), DS.getBeginLoc(),
           DS.getEllipsisLoc());
       if (Type.isNull())
         return true;
-
       if (TryConsumeToken(tok::coloncolon, CCLoc)) {
         if (Actions.ActOnCXXNestedNameSpecifierIndexedPack(SS, DS, CCLoc,
                                                            std::move(Type)))

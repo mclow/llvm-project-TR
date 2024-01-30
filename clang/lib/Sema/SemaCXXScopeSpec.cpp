@@ -703,7 +703,7 @@ bool Sema::BuildCXXNestedNameSpecifier(Scope *S, NestedNameSpecInfo &IdInfo,
     // The use of a nested name specifier may trigger deprecation warnings.
     DiagnoseUseOfDecl(SD, IdInfo.CCLoc);
 
-    if (auto *TD = dyn_cast_or_null<TypeAliasPackDecl>(SD); SD && ArgumentPackSubstitutionIndex != -1) {
+    if (auto *TD = dyn_cast_or_null<TypeAliasPackDecl>(SD); TD && ArgumentPackSubstitutionIndex != -1) {
       SD = TD->expansions()[ArgumentPackSubstitutionIndex];
     }
 

@@ -2312,13 +2312,12 @@ class CXXCtorInitializer final {
   /// end up constructing an object (when multiple arguments are involved).
   Stmt *Init;
 
-  /// The source location for the field name or, for a base initializer
-  /// pack expansion, the location of the ellipsis.
-  ///
   /// In the case of a delegating
   /// constructor, it will still include the type's source location as the
   /// Initializee points to the CXXConstructorDecl (to allow loop detection).
-  SourceLocation MemberOrEllipsisLocation;
+  SourceLocation MemberLocation;
+
+  SourceLocation EllipsisLocation;
 
   /// Location of the left paren of the ctor-initializer.
   SourceLocation LParenLoc;
@@ -2356,13 +2355,13 @@ public:
   explicit
   CXXCtorInitializer(ASTContext &Context, FieldDecl *Member,
                      SourceLocation MemberLoc, SourceLocation L, Expr *Init,
-                     SourceLocation R);
+                     SourceLocation R, SourceLocation EllipsisLoc = {});
 
   /// Creates a new anonymous field initializer.
   explicit
   CXXCtorInitializer(ASTContext &Context, IndirectFieldDecl *Member,
                      SourceLocation MemberLoc, SourceLocation L, Expr *Init,
-                     SourceLocation R);
+                     SourceLocation R, SourceLocation EllipsisLoc = {});
 
   /// Creates a new delegating initializer.
   explicit
@@ -2407,14 +2406,14 @@ public:
 
   /// Determine whether this initializer is a pack expansion.
   bool isPackExpansion() const {
-    return isBaseInitializer() && MemberOrEllipsisLocation.isValid();
+    return EllipsisLocation.isValid();
   }
 
   // For a pack expansion, returns the location of the ellipsis.
   SourceLocation getEllipsisLoc() const {
     if (!isPackExpansion())
       return {};
-    return MemberOrEllipsisLocation;
+    return EllipsisLocation;
   }
 
   /// If this is a base class initializer, returns the type of the
@@ -2462,7 +2461,7 @@ public:
   }
 
   SourceLocation getMemberLocation() const {
-    return MemberOrEllipsisLocation;
+    return MemberLocation;
   }
 
   /// Determine the source location of the initializer.

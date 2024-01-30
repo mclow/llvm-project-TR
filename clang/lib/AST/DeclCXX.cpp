@@ -2570,15 +2570,17 @@ CXXCtorInitializer::CXXCtorInitializer(ASTContext &Context,
                                        SourceLocation L, Expr *Init,
                                        SourceLocation R,
                                        SourceLocation EllipsisLoc)
-    : Initializee(TInfo), Init(Init), MemberOrEllipsisLocation(EllipsisLoc),
+    : Initializee(TInfo), Init(Init), EllipsisLocation(EllipsisLoc),
       LParenLoc(L), RParenLoc(R), IsDelegating(false), IsVirtual(IsVirtual),
       IsWritten(false), SourceOrder(0) {}
 
 CXXCtorInitializer::CXXCtorInitializer(ASTContext &Context, FieldDecl *Member,
                                        SourceLocation MemberLoc,
                                        SourceLocation L, Expr *Init,
-                                       SourceLocation R)
-    : Initializee(Member), Init(Init), MemberOrEllipsisLocation(MemberLoc),
+                                       SourceLocation R,
+                                       SourceLocation EllipsisLoc)
+    : Initializee(Member), Init(Init), MemberLocation(MemberLoc),
+      EllipsisLocation(EllipsisLoc),
       LParenLoc(L), RParenLoc(R), IsDelegating(false), IsVirtual(false),
       IsWritten(false), SourceOrder(0) {}
 
@@ -2586,9 +2588,9 @@ CXXCtorInitializer::CXXCtorInitializer(ASTContext &Context,
                                        IndirectFieldDecl *Member,
                                        SourceLocation MemberLoc,
                                        SourceLocation L, Expr *Init,
-                                       SourceLocation R)
-    : Initializee(Member), Init(Init), MemberOrEllipsisLocation(MemberLoc),
-      LParenLoc(L), RParenLoc(R), IsDelegating(false), IsVirtual(false),
+                                       SourceLocation R, SourceLocation EllipsisLoc)
+    : Initializee(Member), Init(Init), MemberLocation(MemberLoc),
+      EllipsisLocation(EllipsisLoc), LParenLoc(L), RParenLoc(R), IsDelegating(false), IsVirtual(false),
       IsWritten(false), SourceOrder(0) {}
 
 CXXCtorInitializer::CXXCtorInitializer(ASTContext &Context,
@@ -2638,7 +2640,7 @@ SourceRange CXXCtorInitializer::getSourceRange() const {
     return {};
   }
 
-  return SourceRange(getSourceLocation(), getRParenLoc());
+  return SourceRange(getSourceLocation(), getEllipsisLoc().isValid() ? getEllipsisLoc() : getRParenLoc());
 }
 
 CXXConstructorDecl::CXXConstructorDecl(

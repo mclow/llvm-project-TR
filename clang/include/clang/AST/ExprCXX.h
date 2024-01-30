@@ -3679,6 +3679,9 @@ class CXXDependentScopeMemberExpr final
   /// FIXME: could also be a template-id
   DeclarationNameInfo MemberNameInfo;
 
+
+  SourceLocation EllipsisLoc;
+
   // CXXDependentScopeMemberExpr is followed by several trailing objects,
   // some of which optional. They are in order:
   //
@@ -3720,6 +3723,7 @@ class CXXDependentScopeMemberExpr final
                               NestedNameSpecifierLoc QualifierLoc,
                               SourceLocation TemplateKWLoc,
                               NamedDecl *FirstQualifierFoundInScope,
+                              SourceLocation EllipsisLoc,
                               DeclarationNameInfo MemberNameInfo,
                               const TemplateArgumentListInfo *TemplateArgs);
 
@@ -3730,7 +3734,7 @@ public:
   static CXXDependentScopeMemberExpr *
   Create(const ASTContext &Ctx, Expr *Base, QualType BaseType, bool IsArrow,
          SourceLocation OperatorLoc, NestedNameSpecifierLoc QualifierLoc,
-         SourceLocation TemplateKWLoc, NamedDecl *FirstQualifierFoundInScope,
+         SourceLocation TemplateKWLoc, NamedDecl *FirstQualifierFoundInScope, SourceLocation EllipsisLoc,
          DeclarationNameInfo MemberNameInfo,
          const TemplateArgumentListInfo *TemplateArgs);
 
@@ -3794,6 +3798,10 @@ public:
   /// Retrieve the name of the member that this expression refers to.
   const DeclarationNameInfo &getMemberNameInfo() const {
     return MemberNameInfo;
+  }
+
+  SourceLocation getEllipsisLoc() const {
+    return EllipsisLoc;
   }
 
   /// Retrieve the name of the member that this expression refers to.

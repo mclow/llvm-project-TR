@@ -8369,6 +8369,7 @@ ExpectedStmt ASTNodeImporter::VisitCXXDependentScopeMemberExpr(
   auto ToType = importChecked(Err, E->getType());
   auto ToOperatorLoc = importChecked(Err, E->getOperatorLoc());
   auto ToQualifierLoc = importChecked(Err, E->getQualifierLoc());
+  auto EllipsisLoc = importChecked(Err, E->getEllipsisLoc());
   auto ToTemplateKeywordLoc = importChecked(Err, E->getTemplateKeywordLoc());
   auto ToFirstQualifierFoundInScope =
       importChecked(Err, E->getFirstQualifierFoundInScope());
@@ -8406,6 +8407,7 @@ ExpectedStmt ASTNodeImporter::VisitCXXDependentScopeMemberExpr(
   return CXXDependentScopeMemberExpr::Create(
       Importer.getToContext(), ToBase, ToType, E->isArrow(), ToOperatorLoc,
       ToQualifierLoc, ToTemplateKeywordLoc, ToFirstQualifierFoundInScope,
+      EllipsisLoc,
       ToMemberNameInfo, ResInfo);
 }
 
@@ -9977,15 +9979,16 @@ Expected<CXXCtorInitializer *> ASTImporter::Import(CXXCtorInitializer *From) {
   if (!RParenLocOrErr)
     return RParenLocOrErr.takeError();
 
+  SourceLocation EllipsisLoc;
+  if (From->isPackExpansion())
+    if (Error Err = importInto(EllipsisLoc, From->getEllipsisLoc()))
+      return std::move(Err);
+
+
   if (From->isBaseInitializer()) {
     auto ToTInfoOrErr = Import(From->getTypeSourceInfo());
     if (!ToTInfoOrErr)
       return ToTInfoOrErr.takeError();
-
-    SourceLocation EllipsisLoc;
-    if (From->isPackExpansion())
-      if (Error Err = importInto(EllipsisLoc, From->getEllipsisLoc()))
-        return std::move(Err);
 
     return new (ToContext) CXXCtorInitializer(
         ToContext, *ToTInfoOrErr, From->isBaseVirtual(), *LParenLocOrErr,
@@ -10001,7 +10004,7 @@ Expected<CXXCtorInitializer *> ASTImporter::Import(CXXCtorInitializer *From) {
 
     return new (ToContext) CXXCtorInitializer(
         ToContext, cast_or_null<FieldDecl>(*ToFieldOrErr), *MemberLocOrErr,
-        *LParenLocOrErr, *ToExprOrErr, *RParenLocOrErr);
+        *LParenLocOrErr, *ToExprOrErr, *RParenLocOrErr, EllipsisLoc);
   } else if (From->isIndirectMemberInitializer()) {
     ExpectedDecl ToIFieldOrErr = Import(From->getIndirectMember());
     if (!ToIFieldOrErr)
@@ -10013,7 +10016,7 @@ Expected<CXXCtorInitializer *> ASTImporter::Import(CXXCtorInitializer *From) {
 
     return new (ToContext) CXXCtorInitializer(
         ToContext, cast_or_null<IndirectFieldDecl>(*ToIFieldOrErr),
-        *MemberLocOrErr, *LParenLocOrErr, *ToExprOrErr, *RParenLocOrErr);
+        *MemberLocOrErr, *LParenLocOrErr, *ToExprOrErr, *RParenLocOrErr, EllipsisLoc);
   } else if (From->isDelegatingInitializer()) {
     auto ToTInfoOrErr = Import(From->getTypeSourceInfo());
     if (!ToTInfoOrErr)

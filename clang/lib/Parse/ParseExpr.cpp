@@ -2281,6 +2281,12 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
       // FIXME: Add support for explicit call of template constructor.
       SourceLocation TemplateKWLoc;
       UnqualifiedId Name;
+      SourceLocation EllipsisLoc;
+
+      // Parse the ellipsis for a dependent pack name
+      if(getLangOpts().CPlusPlus26 && Tok.is(tok::ellipsis))
+        EllipsisLoc = ConsumeToken();
+
       if (getLangOpts().ObjC && OpKind == tok::period &&
           Tok.is(tok::kw_class)) {
         // Objective-C++:
@@ -2306,7 +2312,8 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
 
       if (!LHS.isInvalid())
         LHS = Actions.ActOnMemberAccessExpr(getCurScope(), LHS.get(), OpLoc,
-                                            OpKind, SS, TemplateKWLoc, Name,
+                                            OpKind, SS, TemplateKWLoc, EllipsisLoc,
+                                            Name,
                                  CurParsedObjCImpl ? CurParsedObjCImpl->Dcl
                                                    : nullptr);
       if (!LHS.isInvalid()) {

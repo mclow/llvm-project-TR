@@ -1439,16 +1439,15 @@ SourceLocation CXXUnresolvedConstructExpr::getBeginLoc() const {
   return TypeAndInitForm.getPointer()->getTypeLoc().getBeginLoc();
 }
 
-CXXDependentScopeMemberExpr::CXXDependentScopeMemberExpr(
-    const ASTContext &Ctx, Expr *Base, QualType BaseType, bool IsArrow,
+CXXDependentScopeMemberExpr::CXXDependentScopeMemberExpr(const ASTContext &Ctx, Expr *Base, QualType BaseType, bool IsArrow,
     SourceLocation OperatorLoc, NestedNameSpecifierLoc QualifierLoc,
-    SourceLocation TemplateKWLoc, NamedDecl *FirstQualifierFoundInScope,
+    SourceLocation TemplateKWLoc, NamedDecl *FirstQualifierFoundInScope, SourceLocation EllipsisLoc,
     DeclarationNameInfo MemberNameInfo,
     const TemplateArgumentListInfo *TemplateArgs)
     : Expr(CXXDependentScopeMemberExprClass, Ctx.DependentTy, VK_LValue,
            OK_Ordinary),
       Base(Base), BaseType(BaseType), QualifierLoc(QualifierLoc),
-      MemberNameInfo(MemberNameInfo) {
+      MemberNameInfo(MemberNameInfo), EllipsisLoc(EllipsisLoc) {
   CXXDependentScopeMemberExprBits.IsArrow = IsArrow;
   CXXDependentScopeMemberExprBits.HasTemplateKWAndArgsInfo =
       (TemplateArgs != nullptr) || TemplateKWLoc.isValid();
@@ -1485,6 +1484,7 @@ CXXDependentScopeMemberExpr *CXXDependentScopeMemberExpr::Create(
     const ASTContext &Ctx, Expr *Base, QualType BaseType, bool IsArrow,
     SourceLocation OperatorLoc, NestedNameSpecifierLoc QualifierLoc,
     SourceLocation TemplateKWLoc, NamedDecl *FirstQualifierFoundInScope,
+    SourceLocation EllipsisLoc,
     DeclarationNameInfo MemberNameInfo,
     const TemplateArgumentListInfo *TemplateArgs) {
   bool HasTemplateKWAndArgsInfo =
@@ -1499,7 +1499,7 @@ CXXDependentScopeMemberExpr *CXXDependentScopeMemberExpr::Create(
   void *Mem = Ctx.Allocate(Size, alignof(CXXDependentScopeMemberExpr));
   return new (Mem) CXXDependentScopeMemberExpr(
       Ctx, Base, BaseType, IsArrow, OperatorLoc, QualifierLoc, TemplateKWLoc,
-      FirstQualifierFoundInScope, MemberNameInfo, TemplateArgs);
+      FirstQualifierFoundInScope, EllipsisLoc, MemberNameInfo, TemplateArgs);
 }
 
 CXXDependentScopeMemberExpr *CXXDependentScopeMemberExpr::CreateEmpty(

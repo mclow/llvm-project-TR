@@ -239,7 +239,7 @@ namespace threadSafety {
 }
 
 class UnexpandedParameterPack {
-  llvm::PointerUnion<const Type *, const NestedNameSpecifier *, NamedDecl *>
+  llvm::PointerUnion<const Type *, const NestedNameSpecifier *, NamedDecl *, const CXXDependentScopeMemberExpr*>
       Data;
   SourceLocation Loc;
   bool IsTemplateParameter : 1;
@@ -249,6 +249,7 @@ public:
   UnexpandedParameterPack(const Type *, SourceLocation);
   UnexpandedParameterPack(NamedDecl *ND, SourceLocation);
   UnexpandedParameterPack(const NestedNameSpecifier *NNS, SourceLocation);
+  UnexpandedParameterPack(const CXXDependentScopeMemberExpr *E, SourceLocation);
 
   std::pair<unsigned, unsigned> getDepthAndIndex() const;
   bool isTemplateParameter() const;
@@ -263,13 +264,16 @@ public:
       typename Decayed = std::remove_const_t<std::remove_pointer_t<T>>,
       typename = std::enable_if_t<std::is_base_of_v<Type, Decayed> ||
                                   std::is_base_of_v<NamedDecl, Decayed> ||
-                                  std::is_same_v<NestedNameSpecifier, Decayed>>>
+                                  std::is_same_v<NestedNameSpecifier, Decayed> ||
+                                  std::is_same_v<CXXDependentScopeMemberExpr, Decayed>>>
   const T getAs() const {
     if constexpr (std::is_base_of_v<Type, Decayed>) {
       const auto *type = Data.dyn_cast<const Type *>();
       return llvm::dyn_cast_if_present<std::remove_pointer_t<const T>>(type);
     } else if constexpr (std::is_same_v<NestedNameSpecifier, Decayed>) {
       return Data.dyn_cast<const NestedNameSpecifier *>();
+    } else if constexpr (std::is_same_v<CXXDependentScopeMemberExpr, Decayed>) {
+      return Data.dyn_cast<const CXXDependentScopeMemberExpr *>();
     } else {
       auto *type = Data.dyn_cast<NamedDecl *>();
       return llvm::dyn_cast_if_present<std::remove_pointer_t<T>>(type);
@@ -6036,7 +6040,9 @@ public:
   ExprResult BuildMemberReferenceExpr(
       Expr *Base, QualType BaseType, SourceLocation OpLoc, bool IsArrow,
       CXXScopeSpec &SS, SourceLocation TemplateKWLoc,
-      NamedDecl *FirstQualifierInScope, const DeclarationNameInfo &NameInfo,
+      NamedDecl *FirstQualifierInScope,
+      SourceLocation EllipsisLoc,
+      const DeclarationNameInfo &NameInfo,
       const TemplateArgumentListInfo *TemplateArgs,
       const Scope *S,
       ActOnMemberAccessExtraArgs *ExtraArgs = nullptr);
@@ -6068,6 +6074,7 @@ public:
                                       const CXXScopeSpec &SS,
                                       SourceLocation TemplateKWLoc,
                                       NamedDecl *FirstQualifierInScope,
+                                      SourceLocation EllipsisLoc,
                                const DeclarationNameInfo &NameInfo,
                                const TemplateArgumentListInfo *TemplateArgs);
 
@@ -6076,6 +6083,7 @@ public:
                                    tok::TokenKind OpKind,
                                    CXXScopeSpec &SS,
                                    SourceLocation TemplateKWLoc,
+                                   SourceLocation EllipsisLoc,
                                    UnqualifiedId &Member,
                                    Decl *ObjCImpDecl);
 
@@ -7890,7 +7898,7 @@ public:
 
   MemInitResult BuildMemberInitializer(ValueDecl *Member,
                                        Expr *Init,
-                                       SourceLocation IdLoc);
+                                       SourceLocation IdLoc, SourceLocation EllipsisLoc);
 
   MemInitResult BuildBaseInitializer(QualType BaseType,
                                      TypeSourceInfo *BaseTInfo,
@@ -9189,6 +9197,10 @@ public:
   /// unexpanded parameter packs.
   void collectUnexpandedParameterPacks(const DeclarationNameInfo &NameInfo,
                          SmallVectorImpl<UnexpandedParameterPack> &Unexpanded);
+
+  void collectUnexpandedParameterPacks(NamedDecl *NNS,
+      SmallVectorImpl<UnexpandedParameterPack> &Unexpanded);
+
 
   /// Invoked when parsing a template argument followed by an
   /// ellipsis, which creates a pack expansion.
@@ -10655,6 +10667,11 @@ public:
   NamedDecl *FindInstantiatedDecl(SourceLocation Loc, NamedDecl *D,
                           const MultiLevelTemplateArgumentList &TemplateArgs,
                           bool FindingInstantiatedContext = false);
+
+  NamedDecl *FindInstantiatedPackElementDecl(SourceLocation Loc, NamedDecl *D,
+                          const MultiLevelTemplateArgumentList &TemplateArgs,
+                          bool FindingInstantiatedContext = false);
+
   DeclContext *FindInstantiatedContext(SourceLocation Loc, DeclContext *DC,
                           const MultiLevelTemplateArgumentList &TemplateArgs);
 

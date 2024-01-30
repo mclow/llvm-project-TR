@@ -3000,7 +3000,8 @@ public:
     DeclarationNameInfo NameInfo(&Accessor, AccessorLoc);
     return getSema().BuildMemberReferenceExpr(
         Base, Base->getType(), OpLoc, IsArrow, SS, SourceLocation(),
-        /*FirstQualifierInScope*/ nullptr, NameInfo,
+        /*FirstQualifierInScope*/ nullptr,
+        /*EllipsisLoc=*/SourceLocation(), NameInfo,
         /* TemplateArgs */ nullptr,
         /*S*/ nullptr);
   }
@@ -3585,6 +3586,7 @@ public:
                                             OperatorLoc, IsArrow,
                                             SS, TemplateKWLoc,
                                             FirstQualifierInScope,
+                                            /*EllipsisLoc=*/SourceLocation(),
                                             MemberNameInfo,
                                             TemplateArgs, /*S*/nullptr);
   }
@@ -3834,7 +3836,9 @@ public:
     ExprResult Result = getSema().BuildMemberReferenceExpr(
         BaseArg, BaseArg->getType(),
         /*FIXME:*/ IvarLoc, IsArrow, SS, SourceLocation(),
-        /*FirstQualifierInScope=*/nullptr, NameInfo,
+        /*FirstQualifierInScope=*/nullptr,
+        /*EllipsisLoc=*/SourceLocation(),
+        NameInfo,
         /*TemplateArgs=*/nullptr,
         /*S=*/nullptr);
     if (IsFreeIvar && Result.isUsable())
@@ -3856,6 +3860,7 @@ public:
                                               /*IsArrow=*/false,
                                               SS, SourceLocation(),
                                               /*FirstQualifierInScope=*/nullptr,
+                                              /*EllipsisLoc=*/SourceLocation(),
                                               NameInfo,
                                               /*TemplateArgs=*/nullptr,
                                               /*S=*/nullptr);
@@ -3889,6 +3894,7 @@ public:
                                               OpLoc, IsArrow,
                                               SS, SourceLocation(),
                                               /*FirstQualifierInScope=*/nullptr,
+                                              /*EllipsisLoc=*/SourceLocation(),
                                               NameInfo,
                                               /*TemplateArgs=*/nullptr,
                                               /*S=*/nullptr);
@@ -15765,6 +15771,7 @@ TreeTransform<Derived>::RebuildCXXPseudoDestructorExpr(Expr *Base,
                                             OperatorLoc, isArrow,
                                             SS, TemplateKWLoc,
                                             /*FIXME: FirstQualifier*/ nullptr,
+                                            /*EllipsisLoc=*/SourceLocation(),
                                             NameInfo,
                                             /*TemplateArgs*/ nullptr,
                                             /*S*/nullptr);

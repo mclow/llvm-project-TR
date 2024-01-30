@@ -4474,12 +4474,12 @@ Sema::BuildMemInitializer(Decl *ConstructorD,
   // Look for a member, first.
   if (ValueDecl *Member = tryLookupCtorInitMemberDecl(
           ClassDecl, SS, TemplateTypeTy, MemberOrBase)) {
-    if (EllipsisLoc.isValid())
+    if (EllipsisLoc.isValid() && !Member->isParameterPack())
       Diag(EllipsisLoc, diag::err_pack_expansion_member_init)
           << MemberOrBase
           << SourceRange(IdLoc, Init->getSourceRange().getEnd());
 
-    return BuildMemberInitializer(Member, Init, IdLoc);
+    return BuildMemberInitializer(Member, Init, IdLoc, EllipsisLoc);
   }
   // It didn't name a member, so see if it names a class.
   QualType BaseType;
@@ -4570,7 +4570,7 @@ Sema::BuildMemInitializer(Decl *ConstructorD,
           diagnoseTypo(Corr,
                        PDiag(diag::err_mem_init_not_member_or_class_suggest)
                          << MemberOrBase << true);
-          return BuildMemberInitializer(Member, Init, IdLoc);
+          return BuildMemberInitializer(Member, Init, IdLoc, EllipsisLoc);
         } else if (TypeDecl *Type = Corr.getCorrectionDeclAs<TypeDecl>()) {
           const CXXBaseSpecifier *DirectBaseSpec;
           const CXXBaseSpecifier *VirtualBaseSpec;
@@ -4622,13 +4622,14 @@ Sema::BuildMemInitializer(Decl *ConstructorD,
 
 MemInitResult
 Sema::BuildMemberInitializer(ValueDecl *Member, Expr *Init,
-                             SourceLocation IdLoc) {
+                             SourceLocation IdLoc, SourceLocation EllipsisLoc) {
   FieldDecl *DirectMember = dyn_cast<FieldDecl>(Member);
   IndirectFieldDecl *IndirectMember = dyn_cast<IndirectFieldDecl>(Member);
   assert((DirectMember || IndirectMember) &&
          "Member must be a FieldDecl or IndirectFieldDecl");
 
-  if (DiagnoseUnexpandedParameterPack(Init, UPPC_Initializer))
+  if (!Member->isParameterPack() &&
+          DiagnoseUnexpandedParameterPack(Init, UPPC_Initializer))
     return true;
 
   if (Member->isInvalidDecl())
@@ -4646,7 +4647,7 @@ Sema::BuildMemberInitializer(ValueDecl *Member, Expr *Init,
 
   SourceRange InitRange = Init->getSourceRange();
 
-  if (Member->getType()->isDependentType() || Init->isTypeDependent()) {
+  if (Member->getType()->isDependentType() || Init->isTypeDependent() || Member->isParameterPack()) {
     // Can't check initialization for a member of dependent type or when
     // any of the arguments are type-dependent expressions.
     DiscardCleanupsInEvaluationContext();
@@ -4695,11 +4696,11 @@ Sema::BuildMemberInitializer(ValueDecl *Member, Expr *Init,
   if (DirectMember) {
     return new (Context) CXXCtorInitializer(Context, DirectMember, IdLoc,
                                             InitRange.getBegin(), Init,
-                                            InitRange.getEnd());
+                                            InitRange.getEnd(), EllipsisLoc);
   } else {
     return new (Context) CXXCtorInitializer(Context, IndirectMember, IdLoc,
                                             InitRange.getBegin(), Init,
-                                            InitRange.getEnd());
+                                            InitRange.getEnd(), EllipsisLoc);
   }
 }
 

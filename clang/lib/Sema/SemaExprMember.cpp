@@ -514,6 +514,7 @@ Sema::ActOnDependentMemberExpr(Expr *BaseExpr, QualType BaseType,
                                const CXXScopeSpec &SS,
                                SourceLocation TemplateKWLoc,
                                NamedDecl *FirstQualifierInScope,
+                               SourceLocation EllipsisLoc,
                                const DeclarationNameInfo &NameInfo,
                                const TemplateArgumentListInfo *TemplateArgs) {
   // Even in dependent contexts, try to diagnose base expressions with
@@ -548,6 +549,7 @@ Sema::ActOnDependentMemberExpr(Expr *BaseExpr, QualType BaseType,
   return CXXDependentScopeMemberExpr::Create(
       Context, BaseExpr, BaseType, IsArrow, OpLoc,
       SS.getWithLocInContext(Context), TemplateKWLoc, FirstQualifierInScope,
+      EllipsisLoc,
       NameInfo, TemplateArgs);
 }
 
@@ -777,6 +779,7 @@ Sema::BuildMemberReferenceExpr(Expr *Base, QualType BaseType,
                                CXXScopeSpec &SS,
                                SourceLocation TemplateKWLoc,
                                NamedDecl *FirstQualifierInScope,
+                               SourceLocation EllipsisLoc,
                                const DeclarationNameInfo &NameInfo,
                                const TemplateArgumentListInfo *TemplateArgs,
                                const Scope *S,
@@ -787,6 +790,7 @@ Sema::BuildMemberReferenceExpr(Expr *Base, QualType BaseType,
     return ActOnDependentMemberExpr(Base, BaseType,
                                     IsArrow, OpLoc,
                                     SS, TemplateKWLoc, FirstQualifierInScope,
+                                    EllipsisLoc,
                                     NameInfo, TemplateArgs);
 
   LookupResult R(*this, NameInfo, LookupMemberName);
@@ -823,6 +827,13 @@ Sema::BuildMemberReferenceExpr(Expr *Base, QualType BaseType,
 
     // LookupMemberExpr can modify Base, and thus change BaseType
     BaseType = Base->getType();
+  }
+
+  if(R.isSingleResult() && ArgumentPackSubstitutionIndex !=-1) {
+    if(ValuePackDecl* D = R.getAsSingle<ValuePackDecl>()) {
+      R.clear(R.getLookupKind());
+      R.addDecl(D->expansions()[ArgumentPackSubstitutionIndex]);
+    }
   }
 
   return BuildMemberReferenceExpr(Base, BaseType,
@@ -1043,7 +1054,7 @@ Sema::BuildMemberReferenceExpr(Expr *BaseExpr, QualType BaseExprType,
           CXXScopeSpec TempSS(SS);
           RetryExpr = ActOnMemberAccessExpr(
               ExtraArgs->S, RetryExpr.get(), OpLoc, tok::arrow, TempSS,
-              TemplateKWLoc, ExtraArgs->Id, ExtraArgs->ObjCImpDecl);
+              TemplateKWLoc, /*TODO CORENTIN EllipsisLoc=*/SourceLocation(), ExtraArgs->Id, ExtraArgs->ObjCImpDecl);
         }
         if (Trap.hasErrorOccurred())
           RetryExpr = ExprError();
@@ -1195,7 +1206,8 @@ Sema::BuildMemberReferenceExpr(Expr *BaseExpr, QualType BaseExprType,
     if (!VDecl.get())
       return ActOnDependentMemberExpr(
           BaseExpr, BaseExpr->getType(), IsArrow, OpLoc, SS, TemplateKWLoc,
-          FirstQualifierInScope, MemberNameInfo, TemplateArgs);
+          FirstQualifierInScope,
+          /*EllipsisLoc=*/SourceLocation(), MemberNameInfo, TemplateArgs);
 
     VarDecl *Var = cast<VarDecl>(VDecl.get());
     if (!Var->getTemplateSpecializationKind())
@@ -1755,6 +1767,7 @@ ExprResult Sema::ActOnMemberAccessExpr(Scope *S, Expr *Base,
                                        tok::TokenKind OpKind,
                                        CXXScopeSpec &SS,
                                        SourceLocation TemplateKWLoc,
+                                       SourceLocation EllipsisLoc,
                                        UnqualifiedId &Id,
                                        Decl *ObjCImpDecl) {
   if (SS.isSet() && SS.isInvalid())
@@ -1792,13 +1805,21 @@ ExprResult Sema::ActOnMemberAccessExpr(Scope *S, Expr *Base,
       isDependentScopeSpecifier(SS)) {
     return ActOnDependentMemberExpr(Base, Base->getType(), IsArrow, OpLoc, SS,
                                     TemplateKWLoc, FirstQualifierInScope,
+                                    EllipsisLoc,
                                     NameInfo, TemplateArgs);
   }
+
+  if(EllipsisLoc.isValid())
+    Diag(EllipsisLoc, diag::err_pack_is_not_dependent)
+        << SourceRange(EllipsisLoc, NameInfo.getEndLoc());
+
 
   ActOnMemberAccessExtraArgs ExtraArgs = {S, Id, ObjCImpDecl};
   ExprResult Res = BuildMemberReferenceExpr(
       Base, Base->getType(), OpLoc, IsArrow, SS, TemplateKWLoc,
-      FirstQualifierInScope, NameInfo, TemplateArgs, S, &ExtraArgs);
+      FirstQualifierInScope,
+      EllipsisLoc,
+      NameInfo, TemplateArgs, S, &ExtraArgs);
 
   if (!Res.isInvalid() && isa<MemberExpr>(Res.get()))
     CheckMemberAccessOfNoDeref(cast<MemberExpr>(Res.get()));

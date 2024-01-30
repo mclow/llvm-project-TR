@@ -41,6 +41,15 @@ UnexpandedParameterPack::UnexpandedParameterPack(const NestedNameSpecifier *NNS,
     : Data(NNS), Loc(Loc), IsTemplateParameter(false),
                            NeedsInstantiation(false){}
 
+
+UnexpandedParameterPack::UnexpandedParameterPack(const CXXDependentScopeMemberExpr *E,
+                                                 SourceLocation Loc)
+    : Data(E), Loc(Loc), IsTemplateParameter(false),
+                         NeedsInstantiation(true){
+
+}
+
+
 std::pair<unsigned, unsigned>
 UnexpandedParameterPack::getDepthAndIndex() const {
   assert(IsTemplateParameter && "this pack is not a template parameter");
@@ -63,6 +72,8 @@ bool UnexpandedParameterPack::needsInstantiation() const {
 const IdentifierInfo *UnexpandedParameterPack::getIdentifier() const {
   if (const auto *ND = getAs<NamedDecl *>())
     return ND->getIdentifier();
+  if (const auto *E = getAs<const CXXDependentScopeMemberExpr *>())
+    return E->getMember().getAsIdentifierInfo();
   if (const auto *NNS = getAs<const NestedNameSpecifier *>())
     return NNS->getAsIdentifier();
   if (const auto *Param = getAs<const TemplateTypeParmType *>())
@@ -116,6 +127,11 @@ namespace {
     void addUnexpanded(const NestedNameSpecifier *T,
                        SourceLocation Loc = SourceLocation()) {
       Unexpanded.emplace_back(T, Loc);
+    }
+
+    void addUnexpanded(const CXXDependentScopeMemberExpr* E,
+                       SourceLocation Loc = SourceLocation()) {
+      Unexpanded.emplace_back(E, Loc);
     }
 
   public:
@@ -205,6 +221,13 @@ namespace {
         if (VD->isParameterPack() || isa<ValuePackDecl>(VD))
           addUnexpanded(VD, E->getMemberLoc());
       }
+      return true;
+    }
+
+    bool VisitCXXDependentScopeMemberExpr(CXXDependentScopeMemberExpr *E) {
+      if(E->getEllipsisLoc().isValid())
+        addUnexpanded(E, E->getEllipsisLoc());
+
       return true;
     }
 
@@ -675,6 +698,13 @@ void Sema::collectUnexpandedParameterPacks(
 }
 
 void Sema::collectUnexpandedParameterPacks(
+    NamedDecl* ND,
+    SmallVectorImpl<UnexpandedParameterPack> &Unexpanded) {
+  CollectUnexpandedParameterPacksVisitor(Unexpanded)
+      .TraverseDecl(ND);
+}
+
+void Sema::collectUnexpandedParameterPacks(
     const DeclarationNameInfo &NameInfo,
     SmallVectorImpl<UnexpandedParameterPack> &Unexpanded) {
   CollectUnexpandedParameterPacksVisitor(Unexpanded)
@@ -806,7 +836,19 @@ UnexpandedParameterPack static findInstantiation(Sema & SemaRef,
                                                  const MultiLevelTemplateArgumentList &TemplateArgs) {
   if(!Pack.needsInstantiation() || !SemaRef.CurrentInstantiationScope)
     return Pack;
-  NamedDecl* D = Pack.getAs<NamedDecl*>();
+
+  NamedDecl* D = nullptr;
+  Sema::ArgumentPackSubstitutionIndexRAII SubstIndex(SemaRef, -1);
+  if(const CXXDependentScopeMemberExpr* E = Pack.getAs<const CXXDependentScopeMemberExpr*>()) {
+    ExprResult Res = SemaRef.SubstExpr(const_cast<CXXDependentScopeMemberExpr*>(E), TemplateArgs);
+    if(!Res.get())
+      return Pack;
+    if(const MemberExpr* E = dyn_cast<MemberExpr>(Res.get()))
+      D = E->getMemberDecl();
+  }
+  else {
+    D = Pack.getAs<NamedDecl*>();
+  }
   assert(D && "Only decls can be instantiated");
   auto* Instantiated = SemaRef.FindInstantiatedDecl(D->getLocation(), D, TemplateArgs);
   return UnexpandedParameterPack(Instantiated, Pack.getLocation());
@@ -872,6 +914,9 @@ bool Sema::CheckParameterPacksForExpansion(
         continue;
       }
     } else if (const auto * TT = ParmPack.getAs<const FieldDecl *>()) {
+      ShouldExpand = false;
+      continue;
+    } else if (const auto * TT = ParmPack.getAs<const CXXDependentScopeMemberExpr *>()) {
       ShouldExpand = false;
       continue;
     } else if (const auto *NNS =
@@ -1248,9 +1293,12 @@ static bool isParameterPack(Expr *PackExpression) {
     ValueDecl *VD = D->getDecl();
     return VD->isParameterPack();
   }
-  if (auto D = dyn_cast<MemberExpr>(PackExpression); D) {
+  if (auto* D = dyn_cast<MemberExpr>(PackExpression); D) {
     ValueDecl *VD = D->getMemberDecl();
     return VD->isParameterPack();
+  }
+  if (auto* D = dyn_cast<CXXDependentScopeMemberExpr>(PackExpression); D) {
+    return D->getEllipsisLoc().isValid();
   }
   return false;
 }

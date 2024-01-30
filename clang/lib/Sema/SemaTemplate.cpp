@@ -765,7 +765,8 @@ Sema::ActOnDependentIdExpression(const CXXScopeSpec &SS,
         Context, /*This=*/nullptr, ThisType,
         /*IsArrow=*/!Context.getLangOpts().HLSL,
         /*Op=*/SourceLocation(), SS.getWithLocInContext(Context), TemplateKWLoc,
-        FirstQualifierInScope, NameInfo, TemplateArgs);
+        FirstQualifierInScope,
+        /*EllipsisLoc=*/SourceLocation(), NameInfo, TemplateArgs);
   }
 
   return BuildDependentDeclRefExpr(SS, TemplateKWLoc, NameInfo, TemplateArgs);

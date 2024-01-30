@@ -5925,12 +5925,12 @@ Sema::InstantiateMemInitializers(CXXConstructorDecl *New,
         }
 
         NewInit = BuildMemberInitializer(Member, TempInit.get(),
-                                         Init->getSourceLocation(), SourceLocation());
+                                         Init->getSourceLocation(), EllipsisLoc);
       } else if (Init->isIndirectMemberInitializer()) {
         IndirectFieldDecl *IndirectMember =
            cast_or_null<IndirectFieldDecl>(FindInstantiatedPackElementDecl(
                                                Init->getMemberLocation(),
-                                               Init->getMember(),
+                                               Init->getIndirectMember(),
                                                TemplateArgs));
 
         if (!IndirectMember) {
@@ -5940,7 +5940,7 @@ Sema::InstantiateMemInitializers(CXXConstructorDecl *New,
         }
 
         NewInit = BuildMemberInitializer(IndirectMember, TempInit.get(),
-                                         Init->getSourceLocation(), SourceLocation());
+                                         Init->getSourceLocation(), EllipsisLoc);
       }
       if (NewInit.isInvalid()) {
         AnyErrors = true;
@@ -5990,7 +5990,7 @@ Sema::InstantiateMemInitializers(CXXConstructorDecl *New,
       // Loop over all of the arguments in the argument pack(s),
       for (unsigned I = 0; I != *NumExpansions; ++I) {
         Sema::ArgumentPackSubstitutionIndexRAII SubstIndex(*this, I);
-        InstantiateInitializer(Init, Init->getEllipsisLoc());
+        InstantiateInitializer(Init, SourceLocation());
         continue;
     }
   }

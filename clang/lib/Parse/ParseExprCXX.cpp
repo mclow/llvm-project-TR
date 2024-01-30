@@ -436,7 +436,7 @@ bool Parser::ParseOptionalCXXScopeSpecifier(
       DeclSpec DS(AttrFactory);
       SourceLocation CCLoc;
       DS.getTypeSpecScope() = SS;
-      SourceLocation EndLoc = ParseIndexedTypeNamePack(DS);
+      SourceLocation EndLoc = ParsePackIndexingType(DS);
       if (DS.getTypeSpecType() == DeclSpec::TST_error) {
         if(DependentPackEllipsisTok.is(tok::ellipsis))
           UnconsumeToken(DependentPackEllipsisTok);

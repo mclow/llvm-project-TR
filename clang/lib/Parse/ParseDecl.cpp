@@ -3603,11 +3603,11 @@ void Parser::ParseDeclarationSpecifiers(
         ConsumeAnnotationToken(); // The typename
       }
 
-      else if (Next.is(tok::annot_indexed_pack_type)) {
+      else if (Next.is(tok::annot_pack_indexing_type)) {
         DS.getTypeSpecScope() = SS;
         ConsumeAnnotationToken(); // The C++ scope.
         TypeResult T = getTypeAnnotation(Tok);
-        isInvalid = DS.SetTypeSpecType(DeclSpec::TST_indexed_typename_pack,
+        isInvalid = DS.SetTypeSpecType(DeclSpec::TST_typename_pack_indexing,
                                        Tok.getAnnotationEndLoc(), PrevSpec,
                                        DiagID, T, Policy);
         if (isInvalid)

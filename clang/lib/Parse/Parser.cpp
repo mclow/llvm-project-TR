@@ -16,6 +16,7 @@
 #include "clang/AST/ASTLambda.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/Basic/FileManager.h"
+#include "clang/Basic/TokenKinds.h"
 #include "clang/Parse/ParseDiagnostic.h"
 #include "clang/Parse/RAIIObjectsForParser.h"
 #include "clang/Sema/DeclSpec.h"
@@ -2083,7 +2084,7 @@ bool Parser::TryAnnotateTypeOrScopeToken(
                      TemplateId->Template, TemplateId->Name,
                      TemplateId->TemplateNameLoc, TemplateId->LAngleLoc,
                      TemplateArgsPtr, TemplateId->RAngleLoc);
-    } else if (Tok.is(tok::annot_indexed_pack_type)) {
+    } else if (Tok.is(tok::annot_pack_indexing_type)) {
       // TODO wrap that in some other type ?
       return false;
     } else {

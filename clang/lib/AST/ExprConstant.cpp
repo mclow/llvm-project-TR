@@ -9514,6 +9514,8 @@ bool PointerExprEvaluator::VisitBuiltinCallExpr(const CallExpr *E,
     return HandleOperatorNewCall(Info, E, Result);
   case Builtin::BI__builtin_launder:
     return evaluatePointer(E->getArg(0), Result);
+  case Builtin::BI__builtin_char_cast:
+    return evaluatePointer(E->getArg(0), Result);
   case Builtin::BIstrchr:
   case Builtin::BIwcschr:
   case Builtin::BImemchr:
@@ -11257,8 +11259,10 @@ public:
   bool Success(const llvm::APSInt &SI, const Expr *E, APValue &Result) {
     assert(E->getType()->isIntegralOrEnumerationType() &&
            "Invalid evaluation result.");
-    assert(SI.isSigned() == E->getType()->isSignedIntegerOrEnumerationType() &&
-           "Invalid evaluation result.");
+    if(!E->getType()->isAnyCharacterType()) {
+      assert(SI.isSigned() == E->getType()->isSignedIntegerOrEnumerationType() &&
+             "Invalid evaluation result.");
+    }
     assert(SI.getBitWidth() == Info.Ctx.getIntWidth(E->getType()) &&
            "Invalid evaluation result.");
     Result = APValue(SI);

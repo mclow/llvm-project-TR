@@ -2031,6 +2031,45 @@ static ExprResult SemaBuiltinLaunder(Sema &S, CallExpr *TheCall) {
   return TheCall;
 }
 
+static ExprResult SemaBuiltinCharCast(Sema &S, CallExpr *TheCall) {
+  if (checkArgCount(S, TheCall, 2))
+    return ExprError();
+
+  QualType ArgType = TheCall->getArg(0)->getType();
+  QualType RetType = TheCall->getArg(1)->getType();
+  if(!ArgType->isPointerType() && !RetType->isPointerType())
+    return ExprError();
+
+  QualType InCharTy  = ArgType->getPointeeType();
+  QualType OutCharTy = RetType->getPointeeType();
+  if(!InCharTy->isAnyCharacterType() && !InCharTy->isStdByteType() && !InCharTy->isIntegerType()) {
+    return ExprError();
+  }
+  if(!OutCharTy->isAnyCharacterType() && !OutCharTy->isStdByteType() && !OutCharTy->isIntegerType()) {
+    return ExprError();
+    // error
+  }
+  if(S.Context.getTypeSize(OutCharTy) != S.Context.getTypeSize(OutCharTy)) {
+    return ExprError();
+  }
+  RetType = OutCharTy.withCVRQualifiers(ArgType.getCVRQualifiers() & (Qualifiers::Const | Qualifiers::Volatile));
+  TheCall->setType(S.getASTContext().getPointerType(RetType));
+
+
+  InitializedEntity Entity =
+      InitializedEntity::InitializeParameter(S.Context, ArgType, false);
+  ExprResult Arg =
+      S.PerformCopyInitialization(Entity, SourceLocation(), TheCall->getArg(0));
+  if (Arg.isInvalid())
+    return ExprError();
+  TheCall->setArg(0, Arg.get());
+
+  return TheCall;
+}
+
+
+
+
 // Emit an error and return true if the current object format type is in the
 // list of unsupported types.
 static bool CheckBuiltinTargetNotInUnsupported(
@@ -2332,6 +2371,8 @@ Sema::CheckBuiltinFunctionCall(FunctionDecl *FDecl, unsigned BuiltinID,
   }
   case Builtin::BI__builtin_launder:
     return SemaBuiltinLaunder(*this, TheCall);
+  case Builtin::BI__builtin_char_cast:
+    return SemaBuiltinCharCast(*this, TheCall);
   case Builtin::BI__sync_fetch_and_add:
   case Builtin::BI__sync_fetch_and_add_1:
   case Builtin::BI__sync_fetch_and_add_2:

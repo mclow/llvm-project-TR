@@ -11928,6 +11928,9 @@ def err_builtin_launder_invalid_arg : Error<
   "%select{non-pointer|function pointer|void pointer}0 argument to "
   "'__builtin_launder' is not allowed">;
 
+def err_builtin_start_lifetime_as_invalid_arg : Error<
+  "'__builtin__start_lifetime_as': %0 is not an implicit lifetime type">;
+
 def err_builtin_invalid_arg_type: Error <
   "%ordinal0 argument must be a "
   "%select{vector, integer or floating point type|matrix|"

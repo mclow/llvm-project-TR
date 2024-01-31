@@ -1175,6 +1175,7 @@ public:
   QualType RebuildDependentNameType(ElaboratedTypeKeyword Keyword,
                                     SourceLocation KeywordLoc,
                                     NestedNameSpecifierLoc QualifierLoc,
+                                    bool IsPack,
                                     SourceLocation EllipsisLoc,
                                     const IdentifierInfo *Id,
                                     SourceLocation IdLoc,
@@ -1187,14 +1188,14 @@ public:
       if (!SemaRef.computeDeclContext(SS))
         return SemaRef.Context.getDependentNameType(Keyword,
                                           QualifierLoc.getNestedNameSpecifier(),
-                                                    EllipsisLoc.isValid(),
+                                                    IsPack,
                                                     Id);
     }
 
     if (Keyword == ElaboratedTypeKeyword::None ||
         Keyword == ElaboratedTypeKeyword::Typename) {
       return SemaRef.CheckTypenameType(Keyword, KeywordLoc, QualifierLoc,
-                                       EllipsisLoc,
+                                       IsPack ? IdLoc : SourceLocation(),
                                        *Id, IdLoc, DeducedTSTContext);
     }
 
@@ -7382,12 +7383,23 @@ QualType TreeTransform<Derived>::TransformDependentNameType(
                                             TL.getElaboratedKeywordLoc(),
                                             QualifierLoc,
                                             SemaRef.ArgumentPackSubstitutionIndex == -1 ?
-                                            TL.getEllipsisLoc() : SourceLocation(),
+                                            T->isPack() : false,
+                                            TL.getEllipsisLoc(),
                                             T->getIdentifier(),
                                             TL.getNameLoc(),
                                             DeducedTSTContext);
   if (Result.isNull())
     return QualType();
+
+  if (const ElaboratedType* ElabT = Result->getAs<ElaboratedType>(); ElabT && T->isPack()
+          && SemaRef.ArgumentPackSubstitutionIndex != -1) {
+      QualType Inner = ElabT->getNamedType();
+      const TypedefType* TT = Inner.getTypePtr()->castAs<TypedefType>();
+      TypeAliasPackDecl* Pack = cast<TypeAliasPackDecl>(TT->getDecl());
+      Result = SemaRef.getASTContext().getElaboratedType(T->getKeyword(),
+                                                         QualifierLoc.getNestedNameSpecifier(),
+                                                         SemaRef.getASTContext().getTypeDeclType(Pack->expansions()[SemaRef.ArgumentPackSubstitutionIndex]));
+  }
 
   if (const ElaboratedType* ElabT = Result->getAs<ElaboratedType>()) {
     QualType NamedT = ElabT->getNamedType();

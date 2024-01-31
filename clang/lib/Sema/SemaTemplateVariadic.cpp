@@ -31,7 +31,7 @@ using namespace clang;
 UnexpandedParameterPack::UnexpandedParameterPack(const Type *T,
                                                  SourceLocation Loc)
     : Data(T), Loc(Loc), IsTemplateParameter(isa<TemplateTypeParmType>(T)),
-                         NeedsInstantiation(false) {
+                         NeedsInstantiation(isa<DependentNameType>(T)) {
 }
 UnexpandedParameterPack::UnexpandedParameterPack(NamedDecl *ND,
                                                  SourceLocation Loc)
@@ -835,6 +835,23 @@ ExprResult Sema::CheckPackExpansion(Expr *Pattern, SourceLocation EllipsisLoc,
     PackExpansionExpr(Context.DependentTy, Pattern, EllipsisLoc, NumExpansions);
 }
 
+struct GetContainedPackTypeVisitor : public TypeVisitor<GetContainedPackTypeVisitor> {
+  NamedDecl* Decl = nullptr;
+  void VisitTypedefType(const TypedefType *T) {
+    if (auto *Alias = llvm::dyn_cast<TypeAliasPackDecl>(T->getDecl())) {
+      Decl = Alias;
+    }
+    else if (auto *Alias = dyn_cast<TypeAliasDecl>(T->getDecl());
+             Alias && Alias->getEllipsisLoc().isValid()) {
+      Decl = Alias;
+    }
+  }
+  void VisitElaboratedType(const ElaboratedType *T) {
+    Visit(T->getNamedType().getTypePtr());
+  }
+};
+
+
 UnexpandedParameterPack static findInstantiation(Sema & SemaRef,
                                                  UnexpandedParameterPack Pack,
                                                  const MultiLevelTemplateArgumentList &TemplateArgs) {
@@ -860,31 +877,25 @@ UnexpandedParameterPack static findInstantiation(Sema & SemaRef,
       return  UnexpandedParameterPack(Substituted, Pack.getLocation());
     }
     return Pack;
+  } else if(const DependentNameType* T = Pack.getAs<const DependentNameType*>()) {
+    TypeSourceInfo *TInfo = SemaRef.getASTContext().getTrivialTypeSourceInfo(QualType(T, 0));
+    TInfo = SemaRef.SubstType(TInfo, TemplateArgs, Pack.getLocation(), DeclarationName());
+    if(!TInfo)
+      return Pack;
+    GetContainedPackTypeVisitor Visitor;
+    Visitor.Visit(TInfo->getTypeLoc().getTypePtr());
+    D = Visitor.Decl;
+    if(!D)
+      return UnexpandedParameterPack(T, Pack.getLocation());
   }
   else {
     D = Pack.getAs<NamedDecl*>();
   }
+
   assert(D && "Only decls can be instantiated");
   auto* Instantiated = SemaRef.FindInstantiatedDecl(D->getLocation(), D, TemplateArgs);
   return UnexpandedParameterPack(Instantiated, Pack.getLocation());
 }
-
-struct GetContainedPackTypeVisitor : public TypeVisitor<GetContainedPackTypeVisitor> {
-  NamedDecl* Decl = nullptr;
-  void VisitTypedefType(const TypedefType *T) {
-    if (auto *Alias = llvm::dyn_cast<TypeAliasPackDecl>(T->getDecl())) {
-      Decl = Alias;
-    }
-    else if (auto *Alias = dyn_cast<TypeAliasDecl>(T->getDecl());
-               Alias && Alias->getEllipsisLoc().isValid()) {
-      Decl = Alias;
-    }
-  }
-  void VisitElaboratedType(const ElaboratedType *T) {
-    Visit(T->getNamedType().getTypePtr());
-  }
-};
-
 
 
 bool Sema::CheckParameterPacksForExpansion(

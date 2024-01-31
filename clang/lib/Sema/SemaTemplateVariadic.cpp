@@ -39,7 +39,7 @@ UnexpandedParameterPack::UnexpandedParameterPack(NamedDecl *ND,
 UnexpandedParameterPack::UnexpandedParameterPack(const NestedNameSpecifier *NNS,
                                                  SourceLocation Loc)
     : Data(NNS), Loc(Loc), IsTemplateParameter(false),
-                           NeedsInstantiation(false){}
+                           NeedsInstantiation(true){}
 
 
 UnexpandedParameterPack::UnexpandedParameterPack(const CXXDependentScopeMemberExpr *E,
@@ -194,9 +194,9 @@ namespace {
       return inherited::TraverseTypeLoc(T.getUnderlyingTypeLoc());
     }
 
-    bool TraverseNestedNameSpecifier(NestedNameSpecifier *NNS) {
+    bool TraverseNestedNameSpecifier(NestedNameSpecifier *NNS, SourceLocation Loc = {}) {
       if (NNS->getKind() == NestedNameSpecifier::PackName)
-        addUnexpanded(NNS);
+        addUnexpanded(NNS, Loc);
       return inherited::TraverseNestedNameSpecifier(NNS);
     }
 
@@ -846,6 +846,17 @@ UnexpandedParameterPack static findInstantiation(Sema & SemaRef,
     if(const MemberExpr* E = dyn_cast<MemberExpr>(Res.get()))
       D = E->getMemberDecl();
   }
+  else if(const NestedNameSpecifier* NNS = Pack.getAs<const NestedNameSpecifier*>()) {
+    NestedNameSpecifierLocBuilder Builder;
+    Builder.MakeTrivial(SemaRef.getASTContext(), const_cast<NestedNameSpecifier*>(NNS),
+                        SourceRange(Pack.getLocation(), Pack.getLocation()));
+    NestedNameSpecifierLoc NNSLOc = Builder.getWithLocInContext(SemaRef.getASTContext());
+    NNSLOc = SemaRef.SubstNestedNameSpecifierLoc(NNSLOc, TemplateArgs);
+    if(NestedNameSpecifier* Substituted = NNSLOc.getNestedNameSpecifier()) {
+      return  UnexpandedParameterPack(Substituted, Pack.getLocation());
+    }
+    return Pack;
+  }
   else {
     D = Pack.getAs<NamedDecl*>();
   }
@@ -853,6 +864,31 @@ UnexpandedParameterPack static findInstantiation(Sema & SemaRef,
   auto* Instantiated = SemaRef.FindInstantiatedDecl(D->getLocation(), D, TemplateArgs);
   return UnexpandedParameterPack(Instantiated, Pack.getLocation());
 }
+
+struct GetContainedPackTypeVisitor : public TypeVisitor<GetContainedPackTypeVisitor> {
+  NamedDecl* Decl = nullptr;
+  void VisitTypedefType(const TypedefType *T) {
+    if (auto *Alias = llvm::dyn_cast<TypeAliasPackDecl>(T->getDecl())) {
+      Decl = Alias;
+    }
+    else if (auto *Alias = dyn_cast<TypeAliasDecl>(T->getDecl());
+               Alias && Alias->getEllipsisLoc().isValid()) {
+      Decl = Alias;
+    }
+  }
+
+  void VisitElaboratedType(const ElaboratedType *T) {
+    //T->getNamedType().dump();
+    Visit(T->getNamedType().getTypePtr());
+  }
+
+  void VisitPackNameType(const PackNameType *T) {
+    //T->getUnderlyingType().dump();
+    Visit(T->getUnderlyingType().getTypePtr());
+  }
+};
+
+
 
 bool Sema::CheckParameterPacksForExpansion(
     SourceLocation EllipsisLoc, SourceRange PatternRange,
@@ -881,19 +917,17 @@ bool Sema::CheckParameterPacksForExpansion(
       std::tie(Depth, Index) = ParmPack.getDepthAndIndex();
 
     auto HandlePackNameType = [&](const Type * T) {
-      if (const auto *Name = ParmPack.getAs<const PackNameType *>()) {
-        if (const auto *ET = dyn_cast<ElaboratedType>(Name->getUnderlyingType())) {
-          QualType Named = ET->getNamedType();
-          if (auto *TT = dyn_cast<TypedefType>(Named)) {
-            T = TT;
-          }
-        }
+      GetContainedPackTypeVisitor Visitor;
+      Visitor.Visit(T);
+      NamedDecl* Pack = Visitor.Decl;
+      if(!Pack)
+        return false;
+      if (const auto *Alias = dyn_cast<TypeAliasPackDecl>(Pack)) {
+        NewPackSize = Alias->expansions().size();
+        return true;
       }
-      if (auto *TT = dyn_cast<TypedefType>(T)) {
-        if (const auto *Alias = dyn_cast<TypeAliasPackDecl>(TT->getDecl())) {
-          NewPackSize = Alias->expansions().size();
-          return true;
-        }
+      else if (const auto *Alias = dyn_cast<TypeAliasDecl>(Pack)) {
+        return false;
       }
       llvm_unreachable("This type does not denote a pack");
     };
@@ -908,7 +942,7 @@ bool Sema::CheckParameterPacksForExpansion(
     } else if (const auto *Subst =
                    ParmPack.getAs<const SubstTemplateTypeParmPackType *>()) {
       NewPackSize = Subst->getNumArgs();
-    } else if (const auto * TT = ParmPack.getAs<const TypedefType *>()) {
+    } else if (const auto * TT = ParmPack.getAs<const Type *>(); TT && !ParmPack.isTemplateParameter()) {
       if(!HandlePackNameType(TT)) {
         ShouldExpand = false;
         continue;
@@ -930,7 +964,7 @@ bool Sema::CheckParameterPacksForExpansion(
         continue;
       }
     } else if(!ParmPack.isTemplateParameter()){
-      llvm_unreachable("This type does not denote a pack");
+      llvm_unreachable("This entity does not denote a pack");
     }
     // Determine the size of this argument pack.
     if (IsVarDeclPack) {

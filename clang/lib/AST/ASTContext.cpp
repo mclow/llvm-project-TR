@@ -5105,16 +5105,17 @@ ASTContext::getMacroQualifiedType(QualType UnderlyingTy,
 
 QualType ASTContext::getDependentNameType(ElaboratedTypeKeyword Keyword,
                                           NestedNameSpecifier *NNS,
+                                          bool IsPack,
                                           const IdentifierInfo *Name,
                                           QualType Canon) const {
   if (Canon.isNull()) {
     NestedNameSpecifier *CanonNNS = getCanonicalNestedNameSpecifier(NNS);
     if (CanonNNS != NNS)
-      Canon = getDependentNameType(Keyword, CanonNNS, Name);
+      Canon = getDependentNameType(Keyword, CanonNNS, IsPack, Name);
   }
 
   llvm::FoldingSetNodeID ID;
-  DependentNameType::Profile(ID, Keyword, NNS, Name);
+  DependentNameType::Profile(ID, Keyword, NNS, IsPack, Name);
 
   void *InsertPos = nullptr;
   DependentNameType *T
@@ -5123,27 +5124,9 @@ QualType ASTContext::getDependentNameType(ElaboratedTypeKeyword Keyword,
     return QualType(T, 0);
 
   T = new (*this, alignof(DependentNameType))
-      DependentNameType(Keyword, NNS, Name, Canon);
+      DependentNameType(Keyword, NNS, IsPack, Name, Canon);
   Types.push_back(T);
   DependentNameTypes.InsertNode(T, InsertPos);
-  return QualType(T, 0);
-}
-
-QualType ASTContext::getPackNameType(QualType Pattern, QualType Canon) const {
-  if (Canon.isNull() && !Pattern.isCanonical())
-    Canon = getPackNameType(getCanonicalType(Pattern));
-
-  llvm::FoldingSetNodeID ID;
-  PackNameType::Profile(ID, Pattern);
-
-  void *InsertPos = nullptr;
-  PackNameType *T = PackNameTypes.FindNodeOrInsertPos(ID, InsertPos);
-  if (T)
-    return QualType(T, 0);
-
-  T = new (*this, alignof(PackNameType)) PackNameType(Pattern, Canon);
-  Types.push_back(T);
-  PackNameTypes.InsertNode(T, InsertPos);
   return QualType(T, 0);
 }
 
@@ -13012,8 +12995,10 @@ static QualType getCommonNonSugarTypeNode(ASTContext &Ctx, const Type *X,
     const auto *NX = cast<DependentNameType>(X),
                *NY = cast<DependentNameType>(Y);
     assert(NX->getIdentifier() == NY->getIdentifier());
+    assert(NX->isPack() == NY->isPack());
     return Ctx.getDependentNameType(
         getCommonTypeKeyword(NX, NY), getCommonNNS(Ctx, NX, NY),
+        NX->isPack(),
         NX->getIdentifier(), NX->getCanonicalTypeInternal());
   }
   case Type::DependentTemplateSpecialization: {

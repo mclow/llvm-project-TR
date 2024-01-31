@@ -273,7 +273,7 @@ static ParsedType recoverFromTypeInKnownDependentBase(Sema &S,
   auto *NNS = NestedNameSpecifier::Create(Context, nullptr, false,
                                           cast<Type>(Context.getRecordType(RD)));
   QualType T =
-      Context.getDependentNameType(ElaboratedTypeKeyword::Typename, NNS, &II);
+      Context.getDependentNameType(ElaboratedTypeKeyword::Typename, NNS, /*IsPack*/false, &II);
 
   CXXScopeSpec SS;
   SS.MakeTrivial(Context, NNS, SourceRange(NameLoc));
@@ -333,7 +333,7 @@ static ParsedType buildNamedType(Sema &S, const CXXScopeSpec *SS, QualType T,
 /// determine whether the name refers to a type. If so, returns an
 /// opaque pointer (actually a QualType) corresponding to that
 /// type. Otherwise, returns NULL.
-ParsedType Sema::getTypeName(const ParsedPackInfo *PackInfo,
+ParsedType Sema::getTypeName(SourceLocation EllipsisLoc,
                              const IdentifierInfo &II, SourceLocation NameLoc,
                              Scope *S, CXXScopeSpec *SS, bool isClassName,
                              bool HasTrailingDot, ParsedType ObjectTypePtr,
@@ -388,7 +388,7 @@ ParsedType Sema::getTypeName(const ParsedPackInfo *PackInfo,
         if (WantNontrivialTypeSourceInfo) {
           return ActOnTypenameType(S, SourceLocation(), *SS, II, NameLoc,
                                    (ImplicitTypenameContext)IsImplicitTypename,
-                                   PackInfo)
+                                   EllipsisLoc)
               .get();
         }
 
@@ -396,7 +396,7 @@ ParsedType Sema::getTypeName(const ParsedPackInfo *PackInfo,
         QualType T = CheckTypenameType(
             IsImplicitTypename ? ElaboratedTypeKeyword::Typename
                                : ElaboratedTypeKeyword::None,
-            SourceLocation(), QualifierLoc, PackInfo, II, NameLoc);
+            SourceLocation(), QualifierLoc, EllipsisLoc, II, NameLoc);
         return ParsedType::make(T);
       }
 
@@ -490,7 +490,8 @@ ParsedType Sema::getTypeName(const ParsedPackInfo *PackInfo,
   case LookupResult::NotFoundInCurrentInstantiation:
     if (AllowImplicitTypename == ImplicitTypenameContext::Yes) {
       QualType T = Context.getDependentNameType(ElaboratedTypeKeyword::None,
-                                                SS->getScopeRep(), &II);
+                                                SS->getScopeRep(),
+                                                EllipsisLoc.isValid(), &II);
       TypeLocBuilder TLB;
       DependentNameTypeLoc TL = TLB.push<DependentNameTypeLoc>(T);
       TL.setElaboratedKeywordLoc(SourceLocation());
@@ -615,7 +616,7 @@ ParsedType Sema::getTypeName(const IdentifierInfo &II, SourceLocation NameLoc,
                              ImplicitTypenameContext AllowImplicitTypename,
                              IdentifierInfo **CorrectedII) {
   return getTypeName(
-      nullptr, II, NameLoc, S, SS, isClassName, HasTrailingDot, ObjectTypePtr,
+      SourceLocation(), II, NameLoc, S, SS, isClassName, HasTrailingDot, ObjectTypePtr,
       IsCtorOrDtorName, WantNontrivialTypeSourceInfo,
       IsClassTemplateDeductionContext, AllowImplicitTypename, CorrectedII);
 }
@@ -627,8 +628,7 @@ ParsedType Sema::getPackName(SourceLocation EllipsisLoc,
                              ImplicitTypenameContext AllowImplicitTypename,
                              IdentifierInfo **CorrectedII) {
   assert(EllipsisLoc.isValid());
-  ParsedPackInfo PackInfo{EllipsisLoc};
-  return getTypeName(&PackInfo, II, NameLoc, S, SS, isClassName, HasTrailingDot,
+  return getTypeName(EllipsisLoc, II, NameLoc, S, SS, isClassName, HasTrailingDot,
                      ObjectType,
                      /*IsCtorOrDtorName=*/false,
                      /*WantNontrivialTypeSourceInfo=*/true,
@@ -701,7 +701,7 @@ ParsedType Sema::ActOnMSVCUnknownTypeName(const IdentifierInfo &II,
   }
 
   QualType T =
-      Context.getDependentNameType(ElaboratedTypeKeyword::None, NNS, &II);
+      Context.getDependentNameType(ElaboratedTypeKeyword::None, NNS, /*IsPack=*/false, &II);
 
   // Build type location information.  We synthesized the qualifier, so we have
   // to build a fake NestedNameSpecifierLoc.

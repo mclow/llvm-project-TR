@@ -1861,9 +1861,6 @@ bool CursorVisitor::VisitDependentNameTypeLoc(DependentNameTypeLoc TL) {
   return VisitNestedNameSpecifierLoc(TL.getQualifierLoc());
 }
 
-bool CursorVisitor::VisitPackNameTypeLoc(PackNameTypeLoc TL) {
-  return Visit(TL.getUnderlyingTypeLoc());
-}
 
 bool CursorVisitor::VisitSubstTypedefPackTypeLoc(SubstTypedefPackTypeLoc TL) {
   return false;

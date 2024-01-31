@@ -73,7 +73,7 @@ ParsedType Sema::getInheritingConstructorName(CXXScopeSpec &SS,
     // typename type for it.
     assert(NNS->getAsIdentifier() == &Name && "not a constructor name");
     Type = Context.getDependentNameType(
-        ElaboratedTypeKeyword::None, NNS->getPrefix(), NNS->getAsIdentifier());
+        ElaboratedTypeKeyword::None, NNS->getPrefix(), /*IsPack=*/false, NNS->getAsIdentifier());
     break;
 
   case NestedNameSpecifier::Global:
@@ -103,7 +103,8 @@ ParsedType Sema::getConstructorName(IdentifierInfo &II,
   // unresolved "typename" type.
   if (CurClass->isDependentContext() && !EnteringContext && SS.getScopeRep()) {
     QualType T = Context.getDependentNameType(ElaboratedTypeKeyword::None,
-                                              SS.getScopeRep(), &II);
+                                              SS.getScopeRep(),
+                                              /*IsPack=*/false, &II);
     return ParsedType::make(T);
   }
 
@@ -367,7 +368,7 @@ ParsedType Sema::getDestructorName(IdentifierInfo &II, SourceLocation NameLoc,
     // FIXME: What if we have no nested-name-specifier?
     QualType T =
         CheckTypenameType(ElaboratedTypeKeyword::None, SourceLocation(),
-                          SS.getWithLocInContext(Context), II, NameLoc);
+                          SS.getWithLocInContext(Context), SourceLocation(), II, NameLoc);
     return ParsedType::make(T);
   }
 
@@ -9022,7 +9023,7 @@ Sema::ActOnTypeRequirement(SourceLocation TypenameKWLoc, CXXScopeSpec &SS,
   if (TypeName) {
     QualType T = CheckTypenameType(
         ElaboratedTypeKeyword::Typename, TypenameKWLoc,
-        SS.getWithLocInContext(Context), /*PackInfo=*/nullptr, *TypeName,
+        SS.getWithLocInContext(Context), SourceLocation(), *TypeName,
         NameLoc, &TSI, /*DeducedTSTContext=*/false);
     if (T.isNull())
       return nullptr;

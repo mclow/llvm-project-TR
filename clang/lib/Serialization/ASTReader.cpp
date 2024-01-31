@@ -7048,10 +7048,6 @@ void TypeLocReader::VisitDependentNameTypeLoc(DependentNameTypeLoc TL) {
   TL.setNameLoc(readSourceLocation());
 }
 
-void TypeLocReader::VisitPackNameTypeLoc(PackNameTypeLoc TL) {
-  TL.setEllipsisLoc(readSourceLocation());
-}
-
 void TypeLocReader::VisitDependentTemplateSpecializationTypeLoc(
        DependentTemplateSpecializationTypeLoc TL) {
   TL.setElaboratedKeywordLoc(readSourceLocation());

@@ -5737,14 +5737,11 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
         NestedNameSpecifier *NNS = SS.getScopeRep();
         NestedNameSpecifier *NNSPrefix = NNS->getPrefix();
         switch (NNS->getKind()) {
+        case NestedNameSpecifier::PackName:
         case NestedNameSpecifier::Identifier:
           ClsType = Context.getDependentNameType(
-              ElaboratedTypeKeyword::None, NNSPrefix, NNS->getAsIdentifier());
-          break;
-
-        case NestedNameSpecifier::PackName:
-          ClsType = Context.getPackNameType(Context.getDependentNameType(
-              ElaboratedTypeKeyword::None, NNSPrefix, NNS->getAsIdentifier()));
+              ElaboratedTypeKeyword::None, NNSPrefix, NNS->getKind() == NestedNameSpecifier::PackName,
+                      NNS->getAsIdentifier());
           break;
 
         case NestedNameSpecifier::Namespace:

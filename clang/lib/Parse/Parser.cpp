@@ -2057,10 +2057,10 @@ bool Parser::TryAnnotateTypeOrScopeToken(
 
     if (Tok.is(tok::ellipsis) && getLangOpts().CPlusPlus26 &&
         NextToken().is(tok::identifier)) {
-      ParsedPackInfo PackInfo{ConsumeToken()};
+      SourceLocation EllipsisLoc = ConsumeToken();
       Ty = Actions.ActOnTypenameType(
           getCurScope(), TypenameLoc, SS, *Tok.getIdentifierInfo(),
-          Tok.getLocation(), ImplicitTypenameContext::No, &PackInfo);
+          Tok.getLocation(), ImplicitTypenameContext::No, EllipsisLoc);
     } else if (Tok.is(tok::identifier)) {
       // FIXME: check whether the next token is '<', first!
       Ty = Actions.ActOnTypenameType(getCurScope(), TypenameLoc, SS,

@@ -5348,7 +5348,7 @@ bool Sema::CheckTemplateTypeArgument(
         // Recover by synthesizing a type using the location information that we
         // already have.
         ArgType = Context.getDependentNameType(ElaboratedTypeKeyword::Typename,
-                                               SS.getScopeRep(), II);
+                                               SS.getScopeRep(), /*IsPack=*/false, II);
         TypeLocBuilder TLB;
         DependentNameTypeLoc TL = TLB.push<DependentNameTypeLoc>(ArgType);
         TL.setElaboratedKeywordLoc(SourceLocation(/*synthesized*/));
@@ -6492,10 +6492,6 @@ bool UnnamedLocalNoLinkageFinder::VisitInjectedClassNameType(
 bool UnnamedLocalNoLinkageFinder::VisitDependentNameType(
                                                    const DependentNameType* T) {
   return VisitNestedNameSpecifier(T->getQualifier());
-}
-
-bool UnnamedLocalNoLinkageFinder::VisitPackNameType(const PackNameType *T) {
-  return Visit(T->getUnderlyingType());
 }
 
 bool UnnamedLocalNoLinkageFinder::VisitDependentTemplateSpecializationType(
@@ -10994,7 +10990,7 @@ Sema::ActOnDependentTag(Scope *S, unsigned TagSpec, TagUseKind TUK,
 
   // Create the resulting type.
   ElaboratedTypeKeyword Kwd = TypeWithKeyword::getKeywordForTagTypeKind(Kind);
-  QualType Result = Context.getDependentNameType(Kwd, NNS, Name);
+  QualType Result = Context.getDependentNameType(Kwd, NNS, /*IsPack=*/false, Name);
 
   // Create type-source location information for this type.
   TypeLocBuilder TLB;
@@ -11010,7 +11006,7 @@ TypeResult Sema::ActOnTypenameType(Scope *S, SourceLocation TypenameLoc,
                                    const IdentifierInfo &II,
                                    SourceLocation IdLoc,
                                    ImplicitTypenameContext IsImplicitTypename,
-                                   const ParsedPackInfo *PackInfo) {
+                                   SourceLocation EllipsisLoc) {
   if (SS.isInvalid())
     return true;
 
@@ -11028,7 +11024,7 @@ TypeResult Sema::ActOnTypenameType(Scope *S, SourceLocation TypenameLoc,
                          IsImplicitTypename == ImplicitTypenameContext::Yes)
                             ? ElaboratedTypeKeyword::Typename
                             : ElaboratedTypeKeyword::None,
-                        TypenameLoc, QualifierLoc, PackInfo, II, IdLoc, &TSI,
+                        TypenameLoc, QualifierLoc, EllipsisLoc, II, IdLoc, &TSI,
                         /*DeducedTSTContext=*/true);
   if (T.isNull())
     return true;
@@ -11171,28 +11167,22 @@ static bool isEnableIf(NestedNameSpecifierLoc NNS, const IdentifierInfo &II,
 QualType Sema::CheckTypenameType(ElaboratedTypeKeyword Keyword,
                                  SourceLocation KeywordLoc,
                                  NestedNameSpecifierLoc QualifierLoc,
-                                 const ParsedPackInfo *PackInfo,
+                                 SourceLocation EllipsisLoc,
                                  const IdentifierInfo &II, SourceLocation IILoc,
                                  TypeSourceInfo **TSI, bool DeducedTSTContext) {
-  QualType T = CheckTypenameType(Keyword, KeywordLoc, QualifierLoc, PackInfo,
+  QualType T = CheckTypenameType(Keyword, KeywordLoc, QualifierLoc, EllipsisLoc,
                                  II, IILoc, DeducedTSTContext);
   if (T.isNull())
     return QualType();
 
   TypeLocBuilder TLB;
 
-  if (auto *Pack = dyn_cast<PackNameType>(T)) {
-      auto InnerTL = TLB.push<DependentNameTypeLoc>(Pack->getUnderlyingType());
-      InnerTL.setElaboratedKeywordLoc(KeywordLoc);
-      InnerTL.setQualifierLoc(QualifierLoc);
-      InnerTL.setNameLoc(IILoc);
-      auto TL = TLB.push<PackNameTypeLoc>(T);
-      TL.setEllipsisLoc(PackInfo->EllipsisLoc);
-  } else if (isa<DependentNameType>(T)) {
+  if (isa<DependentNameType>(T)) {
       auto TL = TLB.push<DependentNameTypeLoc>(T);
       TL.setElaboratedKeywordLoc(KeywordLoc);
       TL.setQualifierLoc(QualifierLoc);
       TL.setNameLoc(IILoc);
+      TL.setEllipsisLoc(EllipsisLoc);
   } else {
       auto *ET = cast<ElaboratedType>(T);
       QualType NamedT = ET->getNamedType();
@@ -11212,6 +11202,7 @@ QualType
 Sema::CheckTypenameType(ElaboratedTypeKeyword Keyword,
                         SourceLocation KeywordLoc,
                         NestedNameSpecifierLoc QualifierLoc,
+                        SourceLocation EllipsisLoc,
                         const IdentifierInfo &II,
                         SourceLocation IILoc, bool DeducedTSTContext) {
   CXXScopeSpec SS;
@@ -11226,6 +11217,7 @@ Sema::CheckTypenameType(ElaboratedTypeKeyword Keyword,
       assert(QualifierLoc.getNestedNameSpecifier()->isDependent());
       return Context.getDependentNameType(Keyword,
                                           QualifierLoc.getNestedNameSpecifier(),
+                                          EllipsisLoc.isValid(),
                                           &II);
     }
 
@@ -11302,6 +11294,7 @@ Sema::CheckTypenameType(ElaboratedTypeKeyword Keyword,
     // Okay, it's a member of an unknown instantiation.
     return Context.getDependentNameType(Keyword,
                                         QualifierLoc.getNestedNameSpecifier(),
+                                        EllipsisLoc.isValid(),
                                         &II);
 
   case LookupResult::Found:
@@ -11391,21 +11384,6 @@ Sema::CheckTypenameType(ElaboratedTypeKeyword Keyword,
              : diag::note_typename_refers_here)
       << Name;
   return QualType();
-}
-
-QualType Sema::CheckTypenameType(ElaboratedTypeKeyword Keyword,
-                                 SourceLocation KeywordLoc,
-                                 NestedNameSpecifierLoc QualifierLoc,
-                                 const ParsedPackInfo *PackInfo,
-                                 const IdentifierInfo &II, SourceLocation IILoc,
-                                 bool DeducedTSTContext) {
-  QualType Pattern = CheckTypenameType(Keyword, KeywordLoc, QualifierLoc, II,
-                                       IILoc, DeducedTSTContext);
-  if (!PackInfo || Pattern.isNull())
-    return Pattern;
-  assert(PackInfo->EllipsisLoc.isValid() && "expected a pack");
-  assert(isa<DependentNameType>(Pattern));
-  return Context.getPackNameType(Pattern);
 }
 
 namespace {

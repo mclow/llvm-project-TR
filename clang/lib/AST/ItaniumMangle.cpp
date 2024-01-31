@@ -4305,10 +4305,6 @@ void CXXNameMangler::mangleType(const DependentNameType *T) {
   Out << 'E';
 }
 
-void CXXNameMangler::mangleType(const PackNameType *T) {
-  mangleType(T->getUnderlyingType());
-}
-
 void CXXNameMangler::mangleType(const DependentTemplateSpecializationType *T) {
   // Dependently-scoped template types are nested if they have a prefix.
   Out << 'N';

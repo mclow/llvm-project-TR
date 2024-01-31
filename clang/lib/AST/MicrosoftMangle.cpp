@@ -3389,14 +3389,6 @@ void MicrosoftCXXNameMangler::mangleType(const DependentNameType *T, Qualifiers,
     << Range;
 }
 
-void MicrosoftCXXNameMangler::mangleType(const PackNameType *T, Qualifiers,
-                                         SourceRange Range) {
-  DiagnosticsEngine &Diags = Context.getDiags();
-  unsigned DiagID = Diags.getCustomDiagID(
-      DiagnosticsEngine::Error, "cannot mangle this dependent name type yet");
-  Diags.Report(Range.getBegin(), DiagID) << Range;
-}
-
 void MicrosoftCXXNameMangler::mangleType(
     const DependentTemplateSpecializationType *T, Qualifiers,
     SourceRange Range) {

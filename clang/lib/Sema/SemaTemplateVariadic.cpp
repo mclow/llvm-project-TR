@@ -8,6 +8,8 @@
 //  This file implements semantic analysis for C++0x variadic templates.
 //===----------------------------------------------------------------------===/
 
+#include "clang/AST/Type.h"
+#include "clang/AST/TypeVisitor.h"
 #include "clang/Sema/Sema.h"
 #include "TypeLocBuilder.h"
 #include "clang/AST/Expr.h"
@@ -78,7 +80,7 @@ const IdentifierInfo *UnexpandedParameterPack::getIdentifier() const {
     return NNS->getAsIdentifier();
   if (const auto *Param = getAs<const TemplateTypeParmType *>())
     return Param->getIdentifier();
-  if (const auto *Param = getAs<const PackNameType *>())
+  if (const auto *Param = getAs<const DependentNameType *>())
     return Param->getIdentifier();
   if (const auto *Param = getAs<const SubstTemplateTypeParmPackType *>())
     return Param->getIdentifier();
@@ -184,14 +186,16 @@ namespace {
       return TraverseDecl(T.getTypedefNameDecl());
     }
 
-    bool VisitPackNameType(PackNameType *T) {
-      addUnexpanded(T);
-      return inherited::TraverseType(T->getUnderlyingType());
+    bool VisitDependentNameType(DependentNameType *T) {
+      if(T->isPack())
+        addUnexpanded(T);
+      return inherited::VisitDependentNameType(T);
     }
 
-    bool VisitPackNameTypeLoc(PackNameTypeLoc T) {
-      addUnexpanded(T.getTypePtr(), T.getEllipsisLoc());
-      return inherited::TraverseTypeLoc(T.getUnderlyingTypeLoc());
+    bool VisitDependentNameTypeLoc(DependentNameTypeLoc T) {
+      if(T.getTypePtr()->isPack())
+        addUnexpanded(T.getTypePtr(), T.getEllipsisLoc());
+      return inherited::VisitDependentNameTypeLoc(T);
     }
 
     bool TraverseNestedNameSpecifier(NestedNameSpecifier *NNS, SourceLocation Loc = {}) {
@@ -876,15 +880,8 @@ struct GetContainedPackTypeVisitor : public TypeVisitor<GetContainedPackTypeVisi
       Decl = Alias;
     }
   }
-
   void VisitElaboratedType(const ElaboratedType *T) {
-    //T->getNamedType().dump();
     Visit(T->getNamedType().getTypePtr());
-  }
-
-  void VisitPackNameType(const PackNameType *T) {
-    //T->getUnderlyingType().dump();
-    Visit(T->getUnderlyingType().getTypePtr());
   }
 };
 

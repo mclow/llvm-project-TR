@@ -2723,7 +2723,7 @@ public:
 
   bool isSimpleTypeSpecifier(tok::TokenKind Kind) const;
 
-  ParsedType getTypeName(const ParsedPackInfo *PackInfo,
+  ParsedType getTypeName(SourceLocation EllipsisLoc,
                          const IdentifierInfo &II, SourceLocation NameLoc,
                          Scope *S, CXXScopeSpec *SS = nullptr,
                          bool isClassName = false, bool HasTrailingDot = false,
@@ -8854,11 +8854,10 @@ public:
   /// \param II the identifier we're retrieving (e.g., 'type' in the example).
   /// \param IdLoc the location of the identifier.
   /// \param IsImplicitTypename context where T::type refers to a type.
-  TypeResult ActOnTypenameType(
-      Scope *S, SourceLocation TypenameLoc, const CXXScopeSpec &SS,
+  TypeResult ActOnTypenameType(Scope *S, SourceLocation TypenameLoc, const CXXScopeSpec &SS,
       const IdentifierInfo &II, SourceLocation IdLoc,
       ImplicitTypenameContext IsImplicitTypename = ImplicitTypenameContext::No,
-      const ParsedPackInfo *PackInfo = nullptr);
+      SourceLocation EllipsisLoc = SourceLocation());
 
   /// Called when the parser has parsed a C++ typename
   /// specifier that ends in a template-id, e.g.,
@@ -8888,22 +8887,16 @@ public:
   QualType CheckTypenameType(ElaboratedTypeKeyword Keyword,
                              SourceLocation KeywordLoc,
                              NestedNameSpecifierLoc QualifierLoc,
-                             const ParsedPackInfo *PackInfo,
+                             SourceLocation EllipsisLoc,
                              const IdentifierInfo &II, SourceLocation IILoc,
                              TypeSourceInfo **TSI, bool DeducedTSTContext);
 
   QualType CheckTypenameType(ElaboratedTypeKeyword Keyword,
                              SourceLocation KeywordLoc,
                              NestedNameSpecifierLoc QualifierLoc,
+                             SourceLocation EllipsisLoc,
                              const IdentifierInfo &II,
                              SourceLocation IILoc,
-                             bool DeducedTSTContext = true);
-
-  QualType CheckTypenameType(ElaboratedTypeKeyword Keyword,
-                             SourceLocation KeywordLoc,
-                             NestedNameSpecifierLoc QualifierLoc,
-                             const ParsedPackInfo *PackInfo,
-                             const IdentifierInfo &II, SourceLocation IILoc,
                              bool DeducedTSTContext = true);
 
   TypeSourceInfo *RebuildTypeInCurrentInstantiation(TypeSourceInfo *T,

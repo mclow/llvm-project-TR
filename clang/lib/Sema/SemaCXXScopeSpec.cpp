@@ -169,10 +169,7 @@ DeclContext *Sema::computeDeclContext(const CXXScopeSpec &SS,
 
   case NestedNameSpecifier::TypeSpec:
   case NestedNameSpecifier::TypeSpecWithTemplate: {
-    const Type *NNSType = NNS->getAsType();
-    if(const auto* PN = NNSType->getAs<PackNameType>())
-      NNSType = PN->getUnderlyingType().getTypePtr();
-    const TagType *Tag = NNSType->getAs<TagType>();
+    const TagType *Tag = NNS->getAsType()->getAs<TagType>();
     assert(Tag && "Non-tag type in nested-name-specifier");
     return Tag->getDecl();
   }
@@ -764,13 +761,6 @@ bool Sema::BuildCXXNestedNameSpecifier(Scope *S, NestedNameSpecInfo &IdInfo,
       TL.setNameLoc(IdInfo.IdentifierLoc);
     } else {
       llvm_unreachable("Unhandled TypeDecl node in nested-name-specifier");
-    }
-
-    if(RebuildPackName) {
-      T = Context.getPackNameType(T);
-      PackNameTypeLoc TL
-          = TLB.push<PackNameTypeLoc>(T);
-      TL.setEllipsisLoc(IdInfo.EllipsisLoc);
     }
 
     SS.Extend(Context, SourceLocation(), TLB.getTypeLocInContext(Context, T),

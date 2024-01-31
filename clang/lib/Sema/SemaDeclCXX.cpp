@@ -4520,7 +4520,7 @@ Sema::BuildMemInitializer(Decl *ConstructorD,
           // specialization, we take it as a type name.
           BaseType = CheckTypenameType(
               ElaboratedTypeKeyword::None, SourceLocation(),
-              SS.getWithLocInContext(Context), *MemberOrBase, IdLoc);
+              SS.getWithLocInContext(Context),  SourceLocation(), *MemberOrBase, IdLoc);
           if (BaseType.isNull())
             return true;
 
@@ -17706,6 +17706,7 @@ DeclResult Sema::ActOnTemplatedFriendTag(
     ElaboratedTypeKeyword Keyword
       = TypeWithKeyword::getKeywordForTagTypeKind(Kind);
     QualType T = CheckTypenameType(Keyword, TagLoc, QualifierLoc,
+                                   SourceLocation(),
                                    *Name, NameLoc);
     if (T.isNull())
       return true;
@@ -17741,7 +17742,7 @@ DeclResult Sema::ActOnTemplatedFriendTag(
   Diag(NameLoc, diag::warn_template_qualified_friend_unsupported)
     << SS.getScopeRep() << SS.getRange() << cast<CXXRecordDecl>(CurContext);
   ElaboratedTypeKeyword ETK = TypeWithKeyword::getKeywordForTagTypeKind(Kind);
-  QualType T = Context.getDependentNameType(ETK, SS.getScopeRep(), Name);
+  QualType T = Context.getDependentNameType(ETK, SS.getScopeRep(), /*IsPack*/false, Name);
   TypeSourceInfo *TSI = Context.CreateTypeSourceInfo(T);
   DependentNameTypeLoc TL = TSI->getTypeLoc().castAs<DependentNameTypeLoc>();
   TL.setElaboratedKeywordLoc(TagLoc);

@@ -856,6 +856,9 @@ let Class = DependentNameType in {
   def : Property<"qualifier", NestedNameSpecifier> {
     let Read = [{ node->getQualifier() }];
   }
+  def : Property<"isPack", Bool> {
+    let Read = [{ node->isPack() }];
+  }
   def : Property<"name", Identifier> {
     let Read = [{ node->getIdentifier() }];
   }
@@ -871,22 +874,9 @@ let Class = DependentNameType in {
     QualType canon = (underlyingType
                         ? ctx.getCanonicalType(*underlyingType)
                         : QualType());
-    return ctx.getDependentNameType(keyword, qualifier, name, canon);
+    return ctx.getDependentNameType(keyword, qualifier, isPack, name, canon);
   }]>;
 }
-
-let Class = PackNameType in {
-  def : Property<"underlyingType", QualType> {
-    let Read = [{
-      node->getUnderlyingType()
-    }];
-  }
-
-  def : Creator<[{
-    return ctx.getPackNameType(ctx.getCanonicalType(underlyingType));
-  }]>;
-}
-
 
 let Class = ObjCObjectType in {
   def : Property<"baseType", QualType> {

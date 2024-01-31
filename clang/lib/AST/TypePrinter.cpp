@@ -238,7 +238,6 @@ bool TypePrinter::canPrefixQualifiers(const Type *T,
     case Type::TemplateSpecialization:
     case Type::InjectedClassName:
     case Type::DependentName:
-    case Type::PackName:
     case Type::DependentTemplateSpecialization:
     case Type::ObjCObject:
     case Type::ObjCTypeParam:
@@ -1691,29 +1690,6 @@ void TypePrinter::printDependentNameBefore(const DependentNameType *T,
 
 void TypePrinter::printDependentNameAfter(const DependentNameType *T,
                                           raw_ostream &OS) {}
-
-void TypePrinter::printPackNameBefore(const PackNameType *T, raw_ostream &OS) {
-
-  const Type *Underlying = T->getUnderlyingType().getTypePtr();
-  if (auto ET = dyn_cast<ElaboratedType>(Underlying)) {
-    OS << TypeWithKeyword::getKeywordName(ET->getKeyword());
-    if (ET->getKeyword() != ElaboratedTypeKeyword::None)
-      OS << " ";
-    NestedNameSpecifier *Qualifier = ET->getQualifier();
-    if (Qualifier)
-      Qualifier->print(OS, Policy);
-    OS << "...";
-    ElaboratedTypePolicyRAII PolicyRAII(Policy);
-    printBefore(ET->getNamedType(), OS);
-  } else {
-    auto DN = cast<DependentNameType>(Underlying);
-    DN->getQualifier()->print(OS, Policy);
-    OS << "..." << T->getIdentifier()->getName();
-    spaceBeforePlaceHolder(OS);
-  }
-}
-
-void TypePrinter::printPackNameAfter(const PackNameType *T, raw_ostream &OS) {}
 
 void TypePrinter::printDependentTemplateSpecializationBefore(
         const DependentTemplateSpecializationType *T, raw_ostream &OS) {

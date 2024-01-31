@@ -2362,6 +2362,7 @@ public:
 // type is some sort of TypeDeclTypeLoc.
 struct DependentNameLocInfo : ElaboratedLocInfo {
   SourceLocation NameLoc;
+  SourceLocation EllipsisLoc;
 };
 
 class DependentNameTypeLoc : public ConcreteTypeLoc<UnqualTypeLoc,
@@ -2397,6 +2398,14 @@ public:
     this->getLocalData()->NameLoc = Loc;
   }
 
+  SourceLocation getEllipsisLoc() const {
+    return this->getLocalData()->EllipsisLoc;
+  }
+
+  SourceLocation setEllipsisLoc(SourceLocation Loc) const {
+    return this->getLocalData()->EllipsisLoc = Loc;
+  }
+
   SourceRange getLocalSourceRange() const {
     if (getElaboratedKeywordLoc().isValid())
       return SourceRange(getElaboratedKeywordLoc(), getNameLoc());
@@ -2411,33 +2420,6 @@ public:
   }
 
   void initializeLocal(ASTContext &Context, SourceLocation Loc);
-};
-
-struct PackNameLocInfo {
-  SourceLocation EllipsisLoc;
-};
-
-class PackNameTypeLoc : public ConcreteTypeLoc<UnqualTypeLoc, PackNameTypeLoc,
-                                               PackNameType, PackNameLocInfo> {
-public:
-  SourceLocation getEllipsisLoc() const {
-    return this->getLocalData()->EllipsisLoc;
-  }
-  SourceLocation setEllipsisLoc(SourceLocation Loc) const {
-    return this->getLocalData()->EllipsisLoc = Loc;
-  }
-
-  TypeLoc getUnderlyingTypeLoc() const { return getInnerTypeLoc(); }
-
-  QualType getInnerType() const { return getTypePtr()->getUnderlyingType(); }
-
-  SourceRange getLocalSourceRange() const LLVM_READONLY {
-    return getUnderlyingTypeLoc().getSourceRange();
-  }
-
-  void initializeLocal(ASTContext &Context, SourceLocation Loc) {
-    setEllipsisLoc(Loc);
-  }
 };
 
 struct DependentTemplateSpecializationLocInfo : DependentNameLocInfo {

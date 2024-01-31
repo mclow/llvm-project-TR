@@ -571,10 +571,6 @@ void TypeLocWriter::VisitDependentNameTypeLoc(DependentNameTypeLoc TL) {
   addSourceLocation(TL.getNameLoc());
 }
 
-void TypeLocWriter::VisitPackNameTypeLoc(PackNameTypeLoc TL) {
-  addSourceLocation(TL.getEllipsisLoc());
-}
-
 void TypeLocWriter::VisitDependentTemplateSpecializationTypeLoc(
        DependentTemplateSpecializationTypeLoc TL) {
   addSourceLocation(TL.getElaboratedKeywordLoc());

@@ -48,6 +48,12 @@ UnexpandedParameterPack::UnexpandedParameterPack(const CXXDependentScopeMemberEx
                                                  SourceLocation Loc)
     : Data(E), Loc(Loc), IsTemplateParameter(false),
                          NeedsInstantiation(true){
+}
+
+UnexpandedParameterPack::UnexpandedParameterPack(const SubstNonTypeTemplateParmPackExpr *E,
+                                                 SourceLocation Loc)
+    : Data(E), Loc(Loc), IsTemplateParameter(false),
+      NeedsInstantiation(false){
 
 }
 
@@ -76,6 +82,8 @@ const IdentifierInfo *UnexpandedParameterPack::getIdentifier() const {
     return ND->getIdentifier();
   if (const auto *E = getAs<const CXXDependentScopeMemberExpr *>())
     return E->getMember().getAsIdentifierInfo();
+  if (const auto *E = getAs<const SubstNonTypeTemplateParmPackExpr *>())
+    return E->getParameterPack()->getIdentifier();
   if (const auto *NNS = getAs<const NestedNameSpecifier *>())
     return NNS->getAsIdentifier();
   if (const auto *Param = getAs<const TemplateTypeParmType *>())
@@ -136,6 +144,11 @@ namespace {
       Unexpanded.emplace_back(E, Loc);
     }
 
+    void addUnexpanded(const SubstNonTypeTemplateParmPackExpr* E,
+                       SourceLocation Loc = SourceLocation()) {
+      Unexpanded.emplace_back(E, Loc);
+    }
+
   public:
     explicit CollectUnexpandedParameterPacksVisitor(
         SmallVectorImpl<UnexpandedParameterPack> &Unexpanded)
@@ -184,6 +197,20 @@ namespace {
         addUnexpanded(D, T.getNameLoc());
 
       return TraverseDecl(T.getTypedefNameDecl());
+    }
+
+    bool VisitTemplateSpecializationType(TemplateSpecializationType *T) {
+      if(T->isTypeAlias())
+        TraverseType(T->getAliasedType());
+      return inherited::VisitTemplateSpecializationType(T);
+    }
+
+
+    bool VisitTemplateSpecializationTypeLoc(TemplateSpecializationTypeLoc T) {
+      const TemplateSpecializationType* Ptr = T.getTypePtr();
+      if(Ptr->isTypeAlias())
+        TraverseType(Ptr->getAliasedType());
+      return inherited::VisitTemplateSpecializationTypeLoc(T);
     }
 
     bool VisitDependentNameType(DependentNameType *T) {
@@ -377,6 +404,13 @@ namespace {
      if(Loc.getTypePtr()->containsUnexpandedParameterPack())
        addUnexpanded(Loc.getTypePtr(), Loc.getBeginLoc());
      return inherited::VisitSubstTemplateTypeParmPackTypeLoc(Loc);
+   }
+
+   bool VisitSubstNonTypeTemplateParmPackExpr(SubstNonTypeTemplateParmPackExpr* E) {
+     if(E->containsUnexpandedParameterPack())
+       addUnexpanded(E);
+
+     return inherited::VisitSubstNonTypeTemplateParmPackExpr(E);
    }
 
     /// Suppress traversal of base specifier pack expansions.
@@ -929,13 +963,12 @@ bool Sema::CheckParameterPacksForExpansion(
       Visitor.Visit(T);
       NamedDecl* Pack = Visitor.Decl;
       if(!Pack)
-        return false;
+        return true;
       if (const auto *Alias = dyn_cast<TypeAliasPackDecl>(Pack)) {
         NewPackSize = Alias->expansions().size();
-        return true;
       }
       else if (const auto *Alias = dyn_cast<TypeAliasDecl>(Pack)) {
-        return false;
+        return true;
       }
       llvm_unreachable("This type does not denote a pack");
     };
@@ -949,6 +982,9 @@ bool Sema::CheckParameterPacksForExpansion(
       NewPackSize = Alias->expansions().size();
     } else if (const auto *Subst =
                    ParmPack.getAs<const SubstTemplateTypeParmPackType *>()) {
+      NewPackSize = Subst->getNumArgs();
+    } else if (const auto *Subst =
+      ParmPack.getAs<const SubstNonTypeTemplateParmPackExpr*>()) {
       NewPackSize = Subst->getNumArgs();
     } else if (const auto * TT = ParmPack.getAs<const Type *>(); TT && !ParmPack.isTemplateParameter()) {
       if(!HandlePackNameType(TT)) {

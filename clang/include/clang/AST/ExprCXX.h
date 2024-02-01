@@ -4571,6 +4571,10 @@ public:
   /// template arguments.
   TemplateArgument getArgumentPack() const;
 
+  unsigned getNumArgs() const {
+    return NumArguments;
+  }
+
   SourceLocation getBeginLoc() const LLVM_READONLY { return NameLoc; }
   SourceLocation getEndLoc() const LLVM_READONLY { return NameLoc; }
 

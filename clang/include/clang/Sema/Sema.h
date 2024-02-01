@@ -239,7 +239,7 @@ namespace threadSafety {
 }
 
 class UnexpandedParameterPack {
-  llvm::PointerUnion<const Type *, const NestedNameSpecifier *, NamedDecl *, const CXXDependentScopeMemberExpr*>
+  llvm::PointerUnion<const Type *, const NestedNameSpecifier *, NamedDecl *, const Expr*>
       Data;
   SourceLocation Loc;
   bool IsTemplateParameter : 1;
@@ -250,6 +250,7 @@ public:
   UnexpandedParameterPack(NamedDecl *ND, SourceLocation);
   UnexpandedParameterPack(const NestedNameSpecifier *NNS, SourceLocation);
   UnexpandedParameterPack(const CXXDependentScopeMemberExpr *E, SourceLocation);
+  UnexpandedParameterPack(const SubstNonTypeTemplateParmPackExpr *E, SourceLocation);
 
   std::pair<unsigned, unsigned> getDepthAndIndex() const;
   bool isTemplateParameter() const;
@@ -265,15 +266,17 @@ public:
       typename = std::enable_if_t<std::is_base_of_v<Type, Decayed> ||
                                   std::is_base_of_v<NamedDecl, Decayed> ||
                                   std::is_same_v<NestedNameSpecifier, Decayed> ||
+                                  std::is_same_v<SubstNonTypeTemplateParmPackExpr, Decayed> ||
                                   std::is_same_v<CXXDependentScopeMemberExpr, Decayed>>>
   const T getAs() const {
     if constexpr (std::is_base_of_v<Type, Decayed>) {
       const auto *type = Data.dyn_cast<const Type *>();
-      return llvm::dyn_cast_if_present<std::remove_pointer_t<const T>>(type);
+      return dyn_cast_if_present<std::remove_pointer_t<const T>>(type);
     } else if constexpr (std::is_same_v<NestedNameSpecifier, Decayed>) {
       return Data.dyn_cast<const NestedNameSpecifier *>();
-    } else if constexpr (std::is_same_v<CXXDependentScopeMemberExpr, Decayed>) {
-      return Data.dyn_cast<const CXXDependentScopeMemberExpr *>();
+    } else if constexpr (std::is_base_of_v<Expr, Decayed>) {
+      const auto* E = Data.dyn_cast<const Expr *>();
+      return dyn_cast_if_present<std::remove_pointer_t<const T>>(E);
     } else {
       auto *type = Data.dyn_cast<NamedDecl *>();
       return llvm::dyn_cast_if_present<std::remove_pointer_t<T>>(type);

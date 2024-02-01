@@ -963,12 +963,13 @@ bool Sema::CheckParameterPacksForExpansion(
       Visitor.Visit(T);
       NamedDecl* Pack = Visitor.Decl;
       if(!Pack)
-        return true;
+        return false;
       if (const auto *Alias = dyn_cast<TypeAliasPackDecl>(Pack)) {
         NewPackSize = Alias->expansions().size();
+        return true;
       }
       else if (const auto *Alias = dyn_cast<TypeAliasDecl>(Pack)) {
-        return true;
+        return false;
       }
       llvm_unreachable("This type does not denote a pack");
     };
@@ -980,6 +981,9 @@ bool Sema::CheckParameterPacksForExpansion(
     } else if (const auto *Alias =
                    ParmPack.getAs<const TypeAliasPackDecl *>()) {
       NewPackSize = Alias->expansions().size();
+    } else if (const auto *Alias = ParmPack.getAs<const TypeAliasDecl *>()) {
+        ShouldExpand = false;
+        continue;
     } else if (const auto *Subst =
                    ParmPack.getAs<const SubstTemplateTypeParmPackType *>()) {
       NewPackSize = Subst->getNumArgs();

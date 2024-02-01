@@ -984,6 +984,14 @@ Decl *TemplateDeclInstantiator::InstantiateTypedefNameDecl(TypedefNameDecl *D,
                                                            bool IsTypeAlias) {
   bool Invalid = false;
   TypeSourceInfo *DI = D->getTypeSourceInfo();
+  if(PackExpansionTypeLoc Expansion = DI->getTypeLoc().getAs<PackExpansionTypeLoc>();
+          Expansion && SemaRef.ArgumentPackSubstitutionIndex != -1) {
+      TypeLocBuilder TLB;
+      TypeLoc Pattern = Expansion.getPatternLoc();
+      TLB.pushFullCopy(Pattern);
+      DI = TLB.getTypeSourceInfo(SemaRef.getASTContext(), Pattern.getType());
+  }
+
   if (DI->getType()->isInstantiationDependentType() ||
       DI->getType()->isVariablyModifiedType()) {
     DI = SemaRef.SubstType(DI, TemplateArgs,
@@ -1082,10 +1090,12 @@ Decl *TemplateDeclInstantiator::instantiateAliasPack(TypeAliasDecl *D) {
   assert(D->isPack() && "Expected an alias pack");
 
   SmallVector<UnexpandedParameterPack, 2> Unexpanded;
+  QualType PatternType =
+      D->getUnderlyingType()->castAs<PackExpansionType>()->getPattern();
 
-  QualType Underlying = SemaRef.SubstType(D->getUnderlyingType(), TemplateArgs,
-                                          D->getBeginLoc(), D->getDeclName());
-  SemaRef.collectUnexpandedParameterPacks(Underlying, Unexpanded);
+  //QualType Underlying = SemaRef.SubstType(), TemplateArgs,
+  //                                        D->getBeginLoc(), D->getDeclName());
+  SemaRef.collectUnexpandedParameterPacks(PatternType, Unexpanded);
 
   // Determine whether the set of unexpanded parameter packs can and should
   // be expanded.

@@ -2013,9 +2013,10 @@ ExprResult TemplateInstantiator::transformNonTypeTemplateParmRef(
 
   Expr *resultExpr = result.get();
   // FIXME: Don't put subst node on final replacement.
-  return new (SemaRef.Context) SubstNonTypeTemplateParmExpr(
+  result = new (SemaRef.Context) SubstNonTypeTemplateParmExpr(
       resultExpr->getType(), resultExpr->getValueKind(), loc, resultExpr,
       AssociatedDecl, parm->getIndex(), PackIndex, refParam);
+  return result;
 }
 
 ExprResult

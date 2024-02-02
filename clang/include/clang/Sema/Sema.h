@@ -244,9 +244,11 @@ class UnexpandedParameterPack {
   SourceLocation Loc;
   bool IsTemplateParameter : 1;
   bool NeedsInstantiation  : 1;
+  std::optional<TypeLoc> TL;
 
 public:
-  UnexpandedParameterPack(const Type *, SourceLocation);
+  UnexpandedParameterPack(const Type *, SourceLocation,
+                          std::optional<TypeLoc> TypeLoc = {});
   UnexpandedParameterPack(NamedDecl *ND, SourceLocation);
   UnexpandedParameterPack(const NestedNameSpecifier *NNS, SourceLocation);
   UnexpandedParameterPack(const CXXDependentScopeMemberExpr *E, SourceLocation);
@@ -259,6 +261,9 @@ public:
   const IdentifierInfo *getIdentifier() const;
 
   SourceLocation getLocation() const { return Loc; }
+  std::optional<TypeLoc> getTypeLoc() const {
+      return TL;
+  }
 
   template <
       typename T,

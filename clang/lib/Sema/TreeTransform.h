@@ -307,19 +307,6 @@ public:
   /// being expanded.
   void ExpandingFunctionParameterPack(ParmVarDecl *Pack) { }
 
-
-  ExprResult SubstituteNonDependentPacks(Expr* Expr) {
-      return Expr;
-  }
-
-  QualType SubstituteNonDependentPacks(QualType Type) {
-      return Type;
-  }
-
-  TypeLoc SubstituteNonDependentPacks(TypeLoc Type) {
-      return Type;
-  }
-
   /// Transforms the given type into another type.
   ///
   /// By default, this routine transforms a type by creating a
@@ -4222,7 +4209,7 @@ bool TreeTransform<Derived>::TransformExprs(Expr *const *Inputs,
     }
 
     if (PackExpansionExpr *Expansion = dyn_cast<PackExpansionExpr>(Inputs[I])) {
-      ExprResult Pattern = SubstituteNonDependentPacks(Expansion->getPattern());
+      ExprResult Pattern = Expansion->getPattern();
       if(Pattern.isInvalid())
           return true;
 
@@ -5939,7 +5926,7 @@ bool TreeTransform<Derived>::TransformFunctionTypeParams(
         // Find the parameter packs that could be expanded.
         TypeLoc TL = OldParm->getTypeSourceInfo()->getTypeLoc();
         PackExpansionTypeLoc ExpansionTL = TL.castAs<PackExpansionTypeLoc>();
-        TypeLoc Pattern = SubstituteNonDependentPacks(ExpansionTL.getPatternLoc());
+        TypeLoc Pattern = ExpansionTL.getPatternLoc();
 
         if(Pattern.isNull())
             return true;
@@ -6057,7 +6044,7 @@ bool TreeTransform<Derived>::TransformFunctionTypeParams(
     if (const PackExpansionType *Expansion
                                        = dyn_cast<PackExpansionType>(OldType)) {
       // We have a function parameter pack that may need to be expanded.
-      QualType Pattern = SubstituteNonDependentPacks(Expansion->getPattern());
+      QualType Pattern = Expansion->getPattern();
       if(Pattern.isNull())
           return true;
 
@@ -6307,7 +6294,7 @@ bool TreeTransform<Derived>::TransformExceptionSpec(
       // We have a pack expansion. Instantiate it.
       SmallVector<UnexpandedParameterPack, 2> Unexpanded;
 
-      QualType Pattern = SubstituteNonDependentPacks(PackExpansion->getPattern());
+      QualType Pattern = PackExpansion->getPattern();
       if(Pattern.isNull())
           return true;
 
@@ -6597,7 +6584,7 @@ TreeTransform<Derived>::TransformPackIndexingType(TypeLocBuilder &TLB,
       continue;
     }
 
-    QualType Pattern = SubstituteNonDependentPacks(T);
+    QualType Pattern = T;
     if(Pattern.isNull())
         return QualType();
 
@@ -7584,7 +7571,7 @@ TreeTransform<Derived>::TransformObjCObjectType(TypeLocBuilder &TLB,
     if (auto PackExpansionLoc = TypeArgLoc.getAs<PackExpansionTypeLoc>()) {
       AnyChanged = true;
 
-      TypeLoc PatternLoc = SubstituteNonDependentPacks(PackExpansionLoc.getPatternLoc());
+      TypeLoc PatternLoc = PackExpansionLoc.getPatternLoc();
       if(PatternLoc.isNull())
           return QualType();
 
@@ -13076,7 +13063,7 @@ TreeTransform<Derived>::TransformTypeTraitExpr(TypeTraitExpr *E) {
 
     // We have a pack expansion. Instantiate it.
     PackExpansionTypeLoc ExpansionTL = FromTL.castAs<PackExpansionTypeLoc>();
-    TypeLoc PatternTL = SubstituteNonDependentPacks(ExpansionTL.getPatternLoc());
+    TypeLoc PatternTL = ExpansionTL.getPatternLoc();
     if(PatternTL.isNull())
         return ExprError();
     SmallVector<UnexpandedParameterPack, 2> Unexpanded;
@@ -14398,7 +14385,7 @@ TreeTransform<Derived>::TransformPackIndexingExpr(PackIndexingExpr *E) {
 
   SmallVector<Expr *, 5> ExpandedExprs;
   if (E->getExpressions().empty()) {
-    ExprResult Pattern = SubstituteNonDependentPacks(E->getPackIdExpression());
+    ExprResult Pattern = E->getPackIdExpression();
     if(!Pattern.isUsable())
         return ExprError();
 
@@ -14510,7 +14497,7 @@ TreeTransform<Derived>::TransformCXXFoldExpr(CXXFoldExpr *E) {
     Callee = cast<UnresolvedLookupExpr>(CalleeResult.get());
   }
 
-  ExprResult Pattern = getDerived().SubstituteNonDependentPacks(E->getPattern());
+  ExprResult Pattern = E->getPattern();
   if (!Pattern.isUsable())
     return ExprError();
 

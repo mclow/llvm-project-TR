@@ -29,9 +29,9 @@ using namespace clang;
 //----------------------------------------------------------------------------
 
 UnexpandedParameterPack::UnexpandedParameterPack(const Type *T,
-                                                 SourceLocation Loc)
+                                                 SourceLocation Loc, std::optional<TypeLoc> TypeLoc)
     : Data(T), Loc(Loc), IsTemplateParameter(isa<TemplateTypeParmType>(T)),
-                         NeedsInstantiation(isa<DependentNameType>(T)) {
+                         NeedsInstantiation(isa<DependentNameType>(T)), TL(TypeLoc) {
 }
 UnexpandedParameterPack::UnexpandedParameterPack(NamedDecl *ND,
                                                  SourceLocation Loc)
@@ -134,6 +134,10 @@ namespace {
       Unexpanded.emplace_back(T, Loc);
     }
 
+    void addUnexpanded(TypeLoc T, SourceLocation Loc = SourceLocation()) {
+      Unexpanded.emplace_back(T.getTypePtr(), Loc, T);
+    }
+
     void addUnexpanded(const NestedNameSpecifier *T,
                        SourceLocation Loc = SourceLocation()) {
       Unexpanded.emplace_back(T, Loc);
@@ -214,14 +218,13 @@ namespace {
     }
 
     bool VisitDependentNameType(DependentNameType *T) {
-      if(T->isPack())
-        addUnexpanded(T);
+      assert(!T->isPack() && "Can extract a Type Loc");
       return inherited::VisitDependentNameType(T);
     }
 
     bool VisitDependentNameTypeLoc(DependentNameTypeLoc T) {
       if(T.getTypePtr()->isPack())
-        addUnexpanded(T.getTypePtr(), T.getEllipsisLoc());
+        addUnexpanded(T, T.getEllipsisLoc());
       return inherited::VisitDependentNameTypeLoc(T);
     }
 
@@ -402,7 +405,7 @@ namespace {
    bool VisitSubstTemplateTypeParmPackTypeLoc(
        const SubstTemplateTypeParmPackTypeLoc &Loc) {
      if(Loc.getTypePtr()->containsUnexpandedParameterPack())
-       addUnexpanded(Loc.getTypePtr(), Loc.getBeginLoc());
+       addUnexpanded(Loc, Loc.getBeginLoc());
      return inherited::VisitSubstTemplateTypeParmPackTypeLoc(Loc);
    }
 
@@ -912,8 +915,8 @@ UnexpandedParameterPack static findInstantiation(Sema & SemaRef,
     }
     return Pack;
   } else if(const DependentNameType* T = Pack.getAs<const DependentNameType*>()) {
-    TypeSourceInfo *TInfo = SemaRef.getASTContext().getTrivialTypeSourceInfo(QualType(T, 0));
-    TInfo = SemaRef.SubstType(TInfo, TemplateArgs, Pack.getLocation(), DeclarationName());
+    TypeSourceInfo * TInfo
+        = SemaRef.SubstType(*Pack.getTypeLoc(), TemplateArgs, Pack.getLocation(), DeclarationName());
     if(!TInfo)
       return Pack;
     GetContainedPackTypeVisitor Visitor;

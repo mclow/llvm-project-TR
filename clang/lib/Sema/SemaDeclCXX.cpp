@@ -13550,11 +13550,6 @@ Decl *Sema::ActOnAliasDeclaration(Scope *S, AccessSpecifier AS,
     Previous.clear();
   }
 
-  if(EllipsisLoc.isValid()) {
-      TInfo = CheckPackExpansion(TInfo, SourceLocation(), std::nullopt);
-  }
-
-
   assert(Name.getKind() == UnqualifiedIdKind::IK_Identifier &&
          "name in alias declaration must be an identifier");
   TypeAliasDecl *NewTD =

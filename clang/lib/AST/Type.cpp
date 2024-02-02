@@ -4116,7 +4116,8 @@ TemplateSpecializationType::TemplateSpecializationType(
                 ? TypeDependence::DependentInstantiation
                 : toSemanticDependence(Canon->getDependence())) |
                (toTypeDependence(T.getDependence()) &
-                TypeDependence::UnexpandedPack)),
+                TypeDependence::UnexpandedPack ) | (!AliasedType.isNull()
+                    ? AliasedType->getDependence() & TypeDependence::UnexpandedPack : TypeDependence::None)),
       Template(T) {
   TemplateSpecializationTypeBits.NumArgs = Args.size();
   TemplateSpecializationTypeBits.TypeAlias = !AliasedType.isNull();

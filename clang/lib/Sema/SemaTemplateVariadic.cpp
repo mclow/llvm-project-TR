@@ -218,7 +218,8 @@ namespace {
     }
 
     bool VisitDependentNameType(DependentNameType *T) {
-      assert(!T->isPack() && "Can extract a Type Loc");
+      if(T->isPack())
+        addUnexpanded(T);
       return inherited::VisitDependentNameType(T);
     }
 
@@ -891,7 +892,8 @@ struct GetContainedPackTypeVisitor : public TypeVisitor<GetContainedPackTypeVisi
 
 UnexpandedParameterPack static findInstantiation(Sema & SemaRef,
                                                  UnexpandedParameterPack Pack,
-                                                 const MultiLevelTemplateArgumentList &TemplateArgs) {
+                                                 const MultiLevelTemplateArgumentList &TemplateArgs,
+                                                 SourceLocation Loc) {
   if(!Pack.needsInstantiation() || !SemaRef.CurrentInstantiationScope)
     return Pack;
 
@@ -915,8 +917,11 @@ UnexpandedParameterPack static findInstantiation(Sema & SemaRef,
     }
     return Pack;
   } else if(const DependentNameType* T = Pack.getAs<const DependentNameType*>()) {
+    TypeLoc TL = Pack.getTypeLoc() ? *Pack.getTypeLoc() : SemaRef.getASTContext()
+                                                          .getTrivialTypeSourceInfo(QualType(Pack.getAs<const Type*>(), 0), Loc)->getTypeLoc();
+
     TypeSourceInfo * TInfo
-        = SemaRef.SubstType(*Pack.getTypeLoc(), TemplateArgs, Pack.getLocation(), DeclarationName());
+        = SemaRef.SubstType(TL, TemplateArgs, Pack.getLocation(), DeclarationName());
     if(!TInfo)
       return Pack;
     GetContainedPackTypeVisitor Visitor;
@@ -956,7 +961,7 @@ bool Sema::CheckParameterPacksForExpansion(
     bool IsVarDeclPack = false;
     unsigned NewPackSize;
 
-    ParmPack = findInstantiation(*this, ParmPack, TemplateArgs);
+    ParmPack = findInstantiation(*this, ParmPack, TemplateArgs, EllipsisLoc);
 
     if (ParmPack.isTemplateParameter())
       std::tie(Depth, Index) = ParmPack.getDepthAndIndex();

@@ -1342,11 +1342,12 @@ substituteConceptTemplateParameter(Sema &S, NamedDecl *D,
       S, ULE->getExprLoc(),
       Sema::InstantiatingTemplate::ConstraintNormalization{}, D,
       ULE->getSourceRange());
-  MultiLevelTemplateArgumentList MLTAL =
-      S.getTemplateInstantiationArgs(D, D->getDeclContext(), /*Final=*/false, TemplateArgs,
+  MultiLevelTemplateArgumentList MLTAL = S.getTemplateInstantiationArgs(D, D->getDeclContext(), /*Final=*/false, TemplateArgs,
                                      /*RelativeToPrimary=*/true,
                                      /*Pattern=*/nullptr,
                                      /*ForConstraintInstantiation=*/true);
+ if(MLTAL.isAnyArgInstantiationDependent())
+    return const_cast<UnresolvedLookupExpr *>(ULE);
 
   ExprResult E = S.SubstExpr(const_cast<UnresolvedLookupExpr *>(ULE), MLTAL);
   return E;
@@ -1497,9 +1498,8 @@ NormalizedConstraint::fromConstraintExpr(Sema &S, NamedDecl *D, const Expr *E,
              ULE && ULE->isConceptReference()) {
     ExprResult Res =
         substituteConceptTemplateParameter(S, D, ULE, TemplateArgs);
-    if (Res.isInvalid()) {
+    if (Res.isInvalid() || Res.get() == ULE)
       return std::nullopt;
-    }
     return fromConstraintExpr(S, D, Res.get(), nullptr, FK);
   } else if (const CXXFoldExpr *FE = dyn_cast<const CXXFoldExpr>(E)) {
     ExprResult Res = substituteConceptTemplateParameter(S, D, FE, TemplateArgs);

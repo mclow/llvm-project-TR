@@ -2716,15 +2716,12 @@ Sema::CheckBuiltinFunctionCall(FunctionDecl *FDecl, unsigned BuiltinID,
   }
   case Builtin::BI__builtin_launder:
     return BuiltinLaunder(*this, TheCall);
-<<<<<<< HEAD
   case Builtin::BI__builtin_char_cast:
     return SemaBuiltinCharCast(*this, TheCall);
-=======
 
   case Builtin::BI__builtin_trivially_relocate:
     return BuiltinTriviallyRelocate(*this, TheCall);
 
->>>>>>> corentin/trivially_relocatable
   case Builtin::BI__sync_fetch_and_add:
   case Builtin::BI__sync_fetch_and_add_1:
   case Builtin::BI__sync_fetch_and_add_2:

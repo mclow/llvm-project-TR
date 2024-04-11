@@ -3704,6 +3704,21 @@ namespace clang {
   }
 }
 
+static TriviallyRelocatableSpecifier InstantiateTriviallyRelocatableSpecifier(
+    Sema &S, const TriviallyRelocatableSpecifier &Pattern,
+    const MultiLevelTemplateArgumentList &TemplateArgs) {
+  if (Pattern.getKind() != TriviallyRelocatableSpecifier::TRK_Dependent)
+    return Pattern;
+  Expr *PatternE = Pattern.getCondition();
+  EnterExpressionEvaluationContext ConstantCtx(
+      S, Sema::ExpressionEvaluationContext::ConstantEvaluated);
+  ExprResult Res = S.SubstExpr(PatternE, TemplateArgs);
+  if (Res.isInvalid())
+    return TriviallyRelocatableSpecifier(
+        TriviallyRelocatableSpecifier::TRK_Invalid, Pattern.getLocation());
+  return S.ActOnTriviallyRelocatableSpecifier(Pattern.getLocation(), Res.get());
+}
+
 /// Instantiate the definition of a class from a given pattern.
 ///
 /// \param PointOfInstantiation The point of instantiation within the
@@ -3790,6 +3805,10 @@ Sema::InstantiateClass(SourceLocation PointOfInstantiation,
 
   // Start the definition of this instantiation.
   Instantiation->startDefinition();
+
+  TriviallyRelocatableSpecifier TRS = InstantiateTriviallyRelocatableSpecifier(
+      *this, Pattern->getTriviallyRelocatableSpecifier(), TemplateArgs);
+  Instantiation->setTriviallyRelocatableSpecifier(TRS);
 
   // The instantiation is visible here, even if it was first declared in an
   // unimported module.

@@ -17,6 +17,7 @@
 #include "clang/AST/ExprConcepts.h"
 #include "clang/AST/OperationKinds.h"
 #include "clang/AST/RecursiveASTVisitor.h"
+#include "clang/AST/TemplateName.h"
 #include "clang/Basic/OperatorPrecedence.h"
 #include "clang/Sema/EnterExpressionEvaluationContext.h"
 #include "clang/Sema/Initialization.h"
@@ -27,6 +28,7 @@
 #include "clang/Sema/SemaInternal.h"
 #include "clang/Sema/Template.h"
 #include "clang/Sema/TemplateDeduction.h"
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/PointerUnion.h"
 #include "llvm/ADT/StringExtras.h"
@@ -1209,7 +1211,7 @@ void Sema::DiagnoseUnsatisfiedConstraint(
 
 const NormalizedConstraint *Sema::getNormalizedAssociatedConstraints(
     NamedDecl *ConstrainedDecl, ArrayRef<const Expr *> AssociatedConstraints,
-    TemplateArgumentList *TemplateArgs, bool TopLevel,
+    std::optional<ArrayRef<TemplateArgument>> TemplateArgs, bool TopLevel,
     AtomicConstraint::FoldKind FK) {
 
   // In case the ConstrainedDecl comes from modules, it is necessary to use
@@ -1228,7 +1230,7 @@ const NormalizedConstraint *Sema::getNormalizedAssociatedConstraints(
   llvm::FoldingSetNodeID ID;
   ID.AddPointer(ConstrainedDecl);
   if(TemplateArgs && AssociatedConstraints.size() == 1 && ExprDenotesConcept(AssociatedConstraints[0])) {
-    for(auto &&Arg : TemplateArgs->asArray()) {
+    for(auto &&Arg : *TemplateArgs) {
       if(Arg.isConceptOrConceptTemplateParameter())
         Arg.Profile(ID, getASTContext());
       else if (Arg.getKind() == TemplateArgument::Pack) {
@@ -1245,7 +1247,7 @@ const NormalizedConstraint *Sema::getNormalizedAssociatedConstraints(
     return CacheEntry->IsInvalid ? nullptr : CacheEntry;
 
   auto Normalized = NormalizedConstraint::fromConstraintExprs(
-      *this, ConstrainedDecl, AssociatedConstraints, TemplateArgs, FK);
+      *this, ConstrainedDecl, AssociatedConstraints, *TemplateArgs, FK);
   if (!Normalized) {
     CacheEntry = new (Context) CachedNormalizedConstraint(ID);
     NormalizationCache.InsertNode(CacheEntry, InsertPos);
@@ -1337,7 +1339,7 @@ static bool substituteParameterMappings(Sema &S, NormalizedConstraint &N,
 static ExprResult
 substituteConceptTemplateParameter(Sema &S, NamedDecl *D,
                                    const UnresolvedLookupExpr *ULE,
-                                   TemplateArgumentList *TemplateArgs) {
+                                   std::optional<ArrayRef<TemplateArgument>> TemplateArgs) {
   Sema::InstantiatingTemplate Inst(
       S, ULE->getExprLoc(),
       Sema::InstantiatingTemplate::ConstraintNormalization{}, D,
@@ -1355,7 +1357,7 @@ substituteConceptTemplateParameter(Sema &S, NamedDecl *D,
 
 static ExprResult
 substituteConceptTemplateParameter(Sema &S, NamedDecl *D, const CXXFoldExpr *FE,
-                                   TemplateArgumentList *TemplateArgs) {
+                                   std::optional<ArrayRef<TemplateArgument>> TemplateArgs) {
   BinaryOperatorKind K = FE->getOperator();
   if (K != BinaryOperatorKind::BO_LAnd && K != BinaryOperatorKind::BO_LOr) {
     return const_cast<CXXFoldExpr *>(FE);
@@ -1388,9 +1390,8 @@ substituteConceptTemplateParameter(Sema &S, NamedDecl *D, const CXXFoldExpr *FE,
   return E;
 }
 
-std::optional<NormalizedConstraint> NormalizedConstraint::fromConstraintExprs(
-    Sema &S, NamedDecl *D, ArrayRef<const Expr *> E,
-    TemplateArgumentList *TemplateArgs, AtomicConstraint::FoldKind FK) {
+std::optional<NormalizedConstraint> NormalizedConstraint::fromConstraintExprs(Sema &S, NamedDecl *D, ArrayRef<const Expr *> E,
+    std::optional<ArrayRef<TemplateArgument> > TemplateArgs, AtomicConstraint::FoldKind FK) {
   assert(E.size() != 0);
   auto Conjunction = fromConstraintExpr(S, D, E[0], TemplateArgs, FK);
   if (!Conjunction)
@@ -1408,7 +1409,7 @@ std::optional<NormalizedConstraint> NormalizedConstraint::fromConstraintExprs(
 static ExprResult
 substituteConceptArguments(Sema &S, ConceptDecl *Concept,
                            const ConceptSpecializationExpr *CSE,
-                           const TemplateArgumentList &Args) {
+                           ArrayRef<TemplateArgument> Args) {
 
   const auto *ArgsAsWritten = CSE->getTemplateArgsAsWritten();
   if (llvm::none_of(
@@ -1419,7 +1420,7 @@ substituteConceptArguments(Sema &S, ConceptDecl *Concept,
   }
 
   MultiLevelTemplateArgumentList MLTAL =
-      S.getTemplateInstantiationArgs(Concept, Concept->getDeclContext(), /*Final=*/false, &Args,
+      S.getTemplateInstantiationArgs(Concept, Concept->getDeclContext(), /*Final=*/false, Args,
                                      /*RelativeToPrimary=*/true,
                                      /*Pattern=*/nullptr,
                                      /*ForConstraintInstantiation=*/true);
@@ -1433,7 +1434,7 @@ substituteConceptArguments(Sema &S, ConceptDecl *Concept,
 
 std::optional<NormalizedConstraint>
 NormalizedConstraint::fromConstraintExpr(Sema &S, NamedDecl *D, const Expr *E,
-                                         TemplateArgumentList *TemplateArgs,
+                                         std::optional<ArrayRef<TemplateArgument>> TemplateArgs,
                                          AtomicConstraint::FoldKind FK) {
   assert(E != nullptr);
 
@@ -1475,13 +1476,12 @@ NormalizedConstraint::fromConstraintExpr(Sema &S, NamedDecl *D, const Expr *E,
       // expression, the program is ill-formed; no diagnostic is required.
       // [...]
       ConceptDecl *CD = CSE->getNamedConcept();
-      TemplateArgumentList Args(TemplateArgumentList::OnStack,
-                                CSE->getTemplateArguments());
-      ExprResult Res = substituteConceptArguments(S, CD, CSE, Args);
+      //TemplateArgumentList Args(CSE->getTemplateArguments());
+      ExprResult Res = substituteConceptArguments(S, CD, CSE, CSE->getTemplateArguments());
       if (Res.isInvalid())
         return std::nullopt;
 
-      SubNF = S.getNormalizedAssociatedConstraints(CD, {Res.get()}, &Args,
+      SubNF = S.getNormalizedAssociatedConstraints(CD, {Res.get()}, CSE->getTemplateArguments(),
                                                    /*TopLevel=*/false, FK);
       if (!SubNF)
         return std::nullopt;
@@ -1500,7 +1500,7 @@ NormalizedConstraint::fromConstraintExpr(Sema &S, NamedDecl *D, const Expr *E,
         substituteConceptTemplateParameter(S, D, ULE, TemplateArgs);
     if (Res.isInvalid() || Res.get() == ULE)
       return std::nullopt;
-    return fromConstraintExpr(S, D, Res.get(), nullptr, FK);
+    return fromConstraintExpr(S, D, Res.get(), std::nullopt, FK);
   } else if (const CXXFoldExpr *FE = dyn_cast<const CXXFoldExpr>(E)) {
     ExprResult Res = substituteConceptTemplateParameter(S, D, FE, TemplateArgs);
     if (Res.isInvalid()) {
@@ -1642,13 +1642,13 @@ static bool subsumes(Sema &S, NamedDecl *DP, ArrayRef<const Expr *> P,
   //   transformed into disjunctive normal form, and Q is transformed into
   //   conjunctive normal form. [...]
   auto *PNormalized =
-      S.getNormalizedAssociatedConstraints(DP, P, nullptr, /*TopLevel=*/true);
+      S.getNormalizedAssociatedConstraints(DP, P, std::nullopt, /*TopLevel=*/true);
   if (!PNormalized)
     return true;
   const NormalForm PDNF = makeDNF(*PNormalized);
 
   auto *QNormalized =
-      S.getNormalizedAssociatedConstraints(DQ, Q, nullptr, /*TopLevel=*/true);
+      S.getNormalizedAssociatedConstraints(DQ, Q, std::nullopt, /*TopLevel=*/true);
   if (!QNormalized)
     return true;
   const NormalForm QCNF = makeCNF(*QNormalized);

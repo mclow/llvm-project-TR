@@ -1253,7 +1253,8 @@ static ExprResult formImmediatelyDeclaredConstraint(
   if (auto *CD = dyn_cast<ConceptDecl>(NamedConcept)) {
     ImmediatelyDeclaredConstraint = S.CheckConceptTemplateId(
         SS, /*TemplateKWLoc=*/SourceLocation(), NameInfo,
-        /*FoundDecl=*/FoundDecl ? FoundDecl : NamedConcept, NamedConcept,
+        // /*FoundDecl=*/FoundDecl ? FoundDecl : NamedConcept,
+        NamedConcept,
         CD, &ConstraintArgs);
     if (ImmediatelyDeclaredConstraint.isInvalid() || !EllipsisLoc.isValid())
       return ImmediatelyDeclaredConstraint;

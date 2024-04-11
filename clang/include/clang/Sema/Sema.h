@@ -11483,7 +11483,7 @@ public:
   SubstConceptTemplateArguments(const ConceptSpecializationExpr *CSE,
                                 const Expr *ConstraintExpr,
                                 const MultiLevelTemplateArgumentList &MLTAL,
-                                const TemplateArgumentList &Args);
+                                ArrayRef<TemplateArgument> Args);
 
   bool CheckInstantiatedFunctionTemplateConstraints(
       SourceLocation PointOfInstantiation, FunctionDecl *Decl,
@@ -11503,9 +11503,9 @@ public:
   DiagnoseUnsatisfiedConstraint(const ASTConstraintSatisfaction &Satisfaction,
                                 bool First = true);
 
-  const NormalizedConstraint *getNormalizedAssociatedConstraints(
-      NamedDecl *ConstrainedDecl, ArrayRef<const Expr *> AssociatedConstraints,
-      TemplateArgumentList *TemplateArgs = nullptr, bool TopLevel = false,
+  const NormalizedConstraint *getNormalizedAssociatedConstraints(NamedDecl *ConstrainedDecl,
+                                                                 ArrayRef<const Expr *> AssociatedConstraints,
+      std::optional<ArrayRef<TemplateArgument> > TemplateArgs = std::nullopt, bool TopLevel = false,
       AtomicConstraint::FoldKind FK = AtomicConstraint::FoldKind::FoldNone);
 
   /// \brief Check whether the given declaration's associated constraints are

@@ -187,11 +187,10 @@ struct NormalizedConstraint {
 private:
   static std::optional<NormalizedConstraint> fromConstraintExprs(
       Sema &S, NamedDecl *D, ArrayRef<const Expr *> E,
-      TemplateArgumentList *TemplateArgs = nullptr,
+      std::optional<ArrayRef<TemplateArgument>> TemplateArgs,
       AtomicConstraint::FoldKind FK = AtomicConstraint::FoldKind::FoldNone);
-  static std::optional<NormalizedConstraint> fromConstraintExpr(
-      Sema &S, NamedDecl *D, const Expr *E,
-      TemplateArgumentList *TemplateArgs = nullptr,
+  static std::optional<NormalizedConstraint> fromConstraintExpr(Sema &S, NamedDecl *D, const Expr *E,
+                                                                std::optional<ArrayRef<TemplateArgument>> TemplateArgs = std::nullopt,
       AtomicConstraint::FoldKind FK = AtomicConstraint::FoldKind::FoldNone);
 
 protected:

@@ -636,7 +636,7 @@ DeduceTemplateArguments(Sema &S, TemplateParameterList *TemplateParams,
   return TemplateDeductionResult::NonDeducedMismatch;
 }
 
-static Sema::TemplateDeductionResult
+static TemplateDeductionResult
 DeduceTemplateArguments(Sema &S, TemplateParameterList *TemplateParams,
                         UniversalTemplateParameterName *Param,
                         TemplateArgument Arg, TemplateDeductionInfo &Info,
@@ -646,11 +646,11 @@ DeduceTemplateArguments(Sema &S, TemplateParameterList *TemplateParams,
   assert(Decl && "unexpected null parameter");
 
   if (Decl->getDepth() != Info.getDeducedDepth())
-    return Sema::TDK_Success;
+    return TemplateDeductionResult::Success;;
 
   DeducedTemplateArgument NewDeduced(Arg);
   Deduced[Decl->getIndex()] = Arg;
-  return Sema::TDK_Success;
+  return TemplateDeductionResult::Success;;
 }
 
 /// Deduce the template arguments by comparing the template parameter
@@ -743,7 +743,7 @@ DeduceTemplateSpecArguments(Sema &S, TemplateParameterList *TemplateParams,
                                  /*NumberOfArgumentsMustMatch=*/true);
 }
 
-static Sema::TemplateDeductionResult DeduceNonTypeTemplateSpecArguments(
+/*static TemplateDeductionResult DeduceNonTypeTemplateSpecArguments(
     Sema &S, TemplateParameterList *TemplateParams, Expr *P, TemplateArgument A,
     TemplateDeductionInfo &Info,
     SmallVectorImpl<DeducedTemplateArgument> &Deduced) {
@@ -753,7 +753,7 @@ static Sema::TemplateDeductionResult DeduceNonTypeTemplateSpecArguments(
     break;
   }
   }
-}
+}*/
 
 static bool IsPossiblyOpaquelyQualifiedTypeInternal(const Type *T) {
   assert(T->isCanonicalUnqualified());
@@ -2490,19 +2490,13 @@ DeduceTemplateArguments(Sema &S, TemplateParameterList *TemplateParams,
     return TemplateDeductionResult::NonDeducedMismatch;
 
   case TemplateArgument::Expression:
-<<<<<<< HEAD
-    if (const NonTypeTemplateParmDecl *NTTP =
-            getDeducedParameterFromExpr(Info, P.getAsExpr())) {
+      if (NonTypeOrVarTemplateParmDecl NTTP =
+              getDeducedNTTParameterFromExpr(Info, P.getAsExpr())) {
       switch (A.getKind()) {
       case TemplateArgument::Integral:
       case TemplateArgument::Expression:
       case TemplateArgument::StructuralValue:
-=======
-    if (NonTypeOrVarTemplateParmDecl NTTP =
-            getDeducedNTTParameterFromExpr(Info, P.getAsExpr())) {
-      if (A.getKind() == TemplateArgument::Integral)
->>>>>>> d0ec1ff0a64a (First pass at argument deduction for non type template parameter)
-        return DeduceNonTypeTemplateArgument(
+          return DeduceNonTypeTemplateArgument(
             S, TemplateParams, NTTP, DeducedTemplateArgument(A),
             A.getNonTypeTemplateArgumentType(), Info, Deduced);
 

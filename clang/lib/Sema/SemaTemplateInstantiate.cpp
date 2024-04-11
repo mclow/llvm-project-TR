@@ -39,6 +39,7 @@
 #include "clang/Sema/Template.h"
 #include "clang/Sema/TemplateDeduction.h"
 #include "clang/Sema/TemplateInstCallback.h"
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/TimeProfiler.h"
@@ -4603,7 +4604,7 @@ ExprResult
 Sema::SubstConceptTemplateArguments(const ConceptSpecializationExpr *CSE,
                                     const Expr *ConstraintExpr,
                                     const MultiLevelTemplateArgumentList &MLTAL,
-                                    const TemplateArgumentList &Args) {
+                                    ArrayRef<TemplateArgument> Args) {
   TemplateInstantiator Instantiator(*this, MLTAL, SourceLocation(),
                                     DeclarationName());
   auto *ArgsAsWritten = CSE->getTemplateArgsAsWritten();
@@ -4628,12 +4629,10 @@ Sema::SubstConceptTemplateArguments(const ConceptSpecializationExpr *CSE,
   for (const auto &ArgLoc : SubstArgs.arguments())
     NewArgList.push_back(ArgLoc.getArgument());
 
-  TemplateArgumentList Rewritten =
-      TemplateArgumentList(TemplateArgumentList::OnStack, NewArgList);
   Sema::SFINAETrap Trap(*this);
   MultiLevelTemplateArgumentList MLTALForConstraint =
       getTemplateInstantiationArgs(CSE->getNamedConcept(), CSE->getNamedConcept()->getDeclContext(), /*Final=*/false,
-                                   &Rewritten,
+                                   NewArgList,
                                    /*RelativeToPrimary=*/true,
                                    /*Pattern=*/nullptr,
                                    /*ForConstraintInstantiation=*/true);

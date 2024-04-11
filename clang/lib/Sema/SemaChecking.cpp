@@ -38,6 +38,7 @@
 #include "clang/AST/TypeLoc.h"
 #include "clang/AST/UnresolvedSet.h"
 #include "clang/Basic/AddressSpaces.h"
+#include "clang/Basic/Builtins.h"
 #include "clang/Basic/CharInfo.h"
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/IdentifierTable.h"
@@ -2215,6 +2216,43 @@ static ExprResult BuiltinLaunder(Sema &S, CallExpr *TheCall) {
   return TheCall;
 }
 
+static ExprResult BuiltinTriviallyRelocate(Sema &S, CallExpr *TheCall) {
+  if (checkArgCount(S, TheCall, 3))
+    return ExprError();
+
+  QualType ArgTy = TheCall->getArg(0)->getType();
+  if (!ArgTy->isPointerType() || ArgTy.getCVRQualifiers() != 0)
+    return ExprError(); // Todo : Diag
+
+  QualType T = ArgTy->getPointeeType();
+  if (S.RequireCompleteType(TheCall->getBeginLoc(), T,
+                            diag::err_incomplete_type))
+    return ExprError();
+
+  if (T.isConstQualified() ||
+      !T.isCppTriviallyRelocatableType(S.getASTContext()))
+    return ExprError();
+
+  TheCall->setType(ArgTy);
+
+  QualType Dest = TheCall->getArg(1)->getType();
+  if (Dest.getCanonicalType() != ArgTy.getCanonicalType())
+    return ExprError();
+
+  Expr *SizeExpr = TheCall->getArg(2);
+  ExprResult Size = S.DefaultLvalueConversion(SizeExpr);
+  if (Size.isInvalid())
+    return ExprError();
+
+  Size = S.tryConvertExprToType(Size.get(), S.getASTContext().getSizeType());
+  if (Size.isInvalid())
+    return ExprError();
+  SizeExpr = Size.get();
+  TheCall->setArg(2, SizeExpr);
+
+  return TheCall;
+}
+
 // Emit an error and return true if the current object format type is in the
 // list of unsupported types.
 static bool CheckBuiltinTargetNotInUnsupported(
@@ -2643,6 +2681,10 @@ Sema::CheckBuiltinFunctionCall(FunctionDecl *FDecl, unsigned BuiltinID,
   }
   case Builtin::BI__builtin_launder:
     return BuiltinLaunder(*this, TheCall);
+
+  case Builtin::BI__builtin_trivially_relocate:
+    return BuiltinTriviallyRelocate(*this, TheCall);
+
   case Builtin::BI__sync_fetch_and_add:
   case Builtin::BI__sync_fetch_and_add_1:
   case Builtin::BI__sync_fetch_and_add_2:

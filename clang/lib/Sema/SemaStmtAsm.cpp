@@ -900,7 +900,8 @@ Sema::LookupInlineAsmVarDeclField(Expr *E, StringRef Member,
     return CXXDependentScopeMemberExpr::Create(
         Context, E, T, /*IsArrow=*/false, AsmLoc, NestedNameSpecifierLoc(),
         SourceLocation(),
-        /*FirstQualifierFoundInScope=*/nullptr, NameInfo, /*TemplateArgs=*/nullptr);
+        /*FirstQualifierFoundInScope=*/nullptr,
+        /*EllipsisLoc=*/SourceLocation(), NameInfo, /*TemplateArgs=*/nullptr);
   }
 
   const RecordType *RT = T->getAs<RecordType>();

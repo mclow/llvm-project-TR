@@ -412,11 +412,17 @@ let Class = TypedefType in {
   def : Property<"underlyingType", QualType> {
     let Read = [{ node->desugar() }];
   }
-
   def : Creator<[{
     return ctx.getTypedefType(cast<TypedefNameDecl>(declaration), underlyingType);
   }]>;
 }
+
+let Class = SubstTypedefPackType in {
+  def : Creator<[{
+    return {};
+  }]>;
+}
+
 
 let Class = TypeOfExprType in {
   def : Property<"expression", ExprRef> {
@@ -876,6 +882,9 @@ let Class = DependentNameType in {
   def : Property<"qualifier", NestedNameSpecifier> {
     let Read = [{ node->getQualifier() }];
   }
+  def : Property<"isPack", Bool> {
+    let Read = [{ node->isPack() }];
+  }
   def : Property<"name", Identifier> {
     let Read = [{ node->getIdentifier() }];
   }
@@ -891,7 +900,7 @@ let Class = DependentNameType in {
     QualType canon = (underlyingType
                         ? ctx.getCanonicalType(*underlyingType)
                         : QualType());
-    return ctx.getDependentNameType(keyword, qualifier, name, canon);
+    return ctx.getDependentNameType(keyword, qualifier, isPack, name, canon);
   }]>;
 }
 

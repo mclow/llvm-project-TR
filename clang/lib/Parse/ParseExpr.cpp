@@ -30,6 +30,7 @@
 #include "clang/Sema/EnterExpressionEvaluationContext.h"
 #include "clang/Sema/ParsedTemplate.h"
 #include "clang/Sema/Scope.h"
+#include "clang/Sema/SemaCUDA.h"
 #include "clang/Sema/SemaSYCL.h"
 #include "clang/Sema/TypoCorrection.h"
 #include "llvm/ADT/SmallVector.h"
@@ -2129,10 +2130,8 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
         }
 
         if (!LHS.isInvalid()) {
-          ExprResult ECResult = Actions.ActOnCUDAExecConfigExpr(getCurScope(),
-                                    OpenLoc,
-                                    ExecConfigExprs,
-                                    CloseLoc);
+          ExprResult ECResult = Actions.CUDA().ActOnExecConfigExpr(
+              getCurScope(), OpenLoc, ExecConfigExprs, CloseLoc);
           if (ECResult.isInvalid())
             LHS = ExprError();
           else
@@ -2293,6 +2292,12 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
       // FIXME: Add support for explicit call of template constructor.
       SourceLocation TemplateKWLoc;
       UnqualifiedId Name;
+      SourceLocation EllipsisLoc;
+
+      // Parse the ellipsis for a dependent pack name
+      if(getLangOpts().CPlusPlus26 && Tok.is(tok::ellipsis))
+        EllipsisLoc = ConsumeToken();
+
       if (getLangOpts().ObjC && OpKind == tok::period &&
           Tok.is(tok::kw_class)) {
         // Objective-C++:
@@ -2318,7 +2323,8 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
 
       if (!LHS.isInvalid())
         LHS = Actions.ActOnMemberAccessExpr(getCurScope(), LHS.get(), OpLoc,
-                                            OpKind, SS, TemplateKWLoc, Name,
+                                            OpKind, SS, TemplateKWLoc, EllipsisLoc,
+                                            Name,
                                  CurParsedObjCImpl ? CurParsedObjCImpl->Dcl
                                                    : nullptr);
       if (!LHS.isInvalid()) {
@@ -2328,6 +2334,10 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
         // Preserve the LHS if the RHS is an invalid member.
         LHS = Actions.CreateRecoveryExpr(OrigLHS->getBeginLoc(),
                                          Name.getEndLoc(), {OrigLHS});
+      }
+
+      if(Tok.is(tok::ellipsis) && GetLookAheadToken(1).is(tok::l_square)) {
+        LHS = ParseCXXPackIndexingExpression(LHS);
       }
       break;
     }

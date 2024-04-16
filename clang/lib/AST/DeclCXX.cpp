@@ -17,6 +17,7 @@
 #include "clang/AST/ASTUnresolvedSet.h"
 #include "clang/AST/Attr.h"
 #include "clang/AST/CXXInheritance.h"
+#include "clang/AST/Decl.h"
 #include "clang/AST/DeclBase.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/DeclarationName.h"
@@ -2607,15 +2608,17 @@ CXXCtorInitializer::CXXCtorInitializer(ASTContext &Context,
                                        SourceLocation L, Expr *Init,
                                        SourceLocation R,
                                        SourceLocation EllipsisLoc)
-    : Initializee(TInfo), Init(Init), MemberOrEllipsisLocation(EllipsisLoc),
+    : Initializee(TInfo), Init(Init), EllipsisLocation(EllipsisLoc),
       LParenLoc(L), RParenLoc(R), IsDelegating(false), IsVirtual(IsVirtual),
       IsWritten(false), SourceOrder(0) {}
 
 CXXCtorInitializer::CXXCtorInitializer(ASTContext &Context, FieldDecl *Member,
                                        SourceLocation MemberLoc,
                                        SourceLocation L, Expr *Init,
-                                       SourceLocation R)
-    : Initializee(Member), Init(Init), MemberOrEllipsisLocation(MemberLoc),
+                                       SourceLocation R,
+                                       SourceLocation EllipsisLoc)
+    : Initializee(Member), Init(Init), MemberLocation(MemberLoc),
+      EllipsisLocation(EllipsisLoc),
       LParenLoc(L), RParenLoc(R), IsDelegating(false), IsVirtual(false),
       IsWritten(false), SourceOrder(0) {}
 
@@ -2623,9 +2626,9 @@ CXXCtorInitializer::CXXCtorInitializer(ASTContext &Context,
                                        IndirectFieldDecl *Member,
                                        SourceLocation MemberLoc,
                                        SourceLocation L, Expr *Init,
-                                       SourceLocation R)
-    : Initializee(Member), Init(Init), MemberOrEllipsisLocation(MemberLoc),
-      LParenLoc(L), RParenLoc(R), IsDelegating(false), IsVirtual(false),
+                                       SourceLocation R, SourceLocation EllipsisLoc)
+    : Initializee(Member), Init(Init), MemberLocation(MemberLoc),
+      EllipsisLocation(EllipsisLoc), LParenLoc(L), RParenLoc(R), IsDelegating(false), IsVirtual(false),
       IsWritten(false), SourceOrder(0) {}
 
 CXXCtorInitializer::CXXCtorInitializer(ASTContext &Context,
@@ -2675,7 +2678,7 @@ SourceRange CXXCtorInitializer::getSourceRange() const {
     return {};
   }
 
-  return SourceRange(getSourceLocation(), getRParenLoc());
+  return SourceRange(getSourceLocation(), getEllipsisLoc().isValid() ? getEllipsisLoc() : getRParenLoc());
 }
 
 CXXConstructorDecl::CXXConstructorDecl(
@@ -3228,6 +3231,23 @@ UsingPackDecl *UsingPackDecl::CreateDeserialized(ASTContext &C, unsigned ID,
     new (Trail + I) NamedDecl*(nullptr);
   return Result;
 }
+
+TypeAliasPackDecl *
+TypeAliasPackDecl::Create(ASTContext &C, DeclContext *DC,
+                          TypedefNameDecl *InstantiatedFrom,
+                          ArrayRef<TypedefNameDecl *> AliasDecls) {
+  size_t Extra = additionalSizeToAlloc<TypedefNameDecl *>(AliasDecls.size());
+  return new (C, DC, Extra)
+      TypeAliasPackDecl(C, DC, InstantiatedFrom, AliasDecls);
+}
+
+bool TypeAliasPackDecl::isDependentExpansion(ASTContext &C) const {
+  return llvm::any_of(expansions(), [&C](const TypedefNameDecl *D) {
+    return C.getTypeDeclType(D)->isDependentType();
+  });
+}
+
+void TypeAliasPackDecl::anchor() {}
 
 void UnresolvedUsingValueDecl::anchor() {}
 

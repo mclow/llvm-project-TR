@@ -1610,6 +1610,8 @@ public:
   QualType getTypedefType(const TypedefNameDecl *Decl,
                           QualType Underlying = QualType()) const;
 
+  QualType getAliasPackType(const TypeAliasPackDecl *Decl) const;
+
   QualType getRecordType(const RecordDecl *Decl) const;
 
   QualType getEnumType(const EnumDecl *Decl) const;
@@ -1665,12 +1667,14 @@ public:
                              TagDecl *OwnedTagDecl = nullptr) const;
   QualType getDependentNameType(ElaboratedTypeKeyword Keyword,
                                 NestedNameSpecifier *NNS,
+                                bool IsParameterPack,
                                 const IdentifierInfo *Name,
                                 QualType Canon = QualType()) const;
 
   QualType getDependentTemplateSpecializationType(
       ElaboratedTypeKeyword Keyword, NestedNameSpecifier *NNS,
       const IdentifierInfo *Name, ArrayRef<TemplateArgumentLoc> Args) const;
+
   QualType getDependentTemplateSpecializationType(
       ElaboratedTypeKeyword Keyword, NestedNameSpecifier *NNS,
       const IdentifierInfo *Name, ArrayRef<TemplateArgument> Args) const;

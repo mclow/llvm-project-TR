@@ -336,6 +336,7 @@ namespace clang {
     RedeclarableResult VisitTypedefNameDecl(TypedefNameDecl *TD);
     void VisitTypedefDecl(TypedefDecl *TD);
     void VisitTypeAliasDecl(TypeAliasDecl *TD);
+    void VisitTypeAliasPackDecl(TypeAliasPackDecl *TD);
     void VisitUnresolvedUsingTypenameDecl(UnresolvedUsingTypenameDecl *D);
     void VisitUnresolvedUsingIfExistsDecl(UnresolvedUsingIfExistsDecl *D);
     RedeclarableResult VisitTagDecl(TagDecl *TD);
@@ -365,6 +366,7 @@ namespace clang {
         VarTemplatePartialSpecializationDecl *D);
     void VisitTemplateTypeParmDecl(TemplateTypeParmDecl *D);
     void VisitValueDecl(ValueDecl *VD);
+    void VisitValuePackDecl(ValuePackDecl *VPD);
     void VisitEnumConstantDecl(EnumConstantDecl *ECD);
     void VisitUnresolvedUsingValueDecl(UnresolvedUsingValueDecl *D);
     void VisitDeclaratorDecl(DeclaratorDecl *DD);
@@ -746,6 +748,10 @@ void ASTDeclReader::VisitTypeAliasDecl(TypeAliasDecl *TD) {
     mergeRedeclarable(TD, Redecl);
 }
 
+void ASTDeclReader::VisitTypeAliasPackDecl(TypeAliasPackDecl *TD) {
+  assert(false && "TODO");
+}
+
 ASTDeclReader::RedeclarableResult ASTDeclReader::VisitTagDecl(TagDecl *TD) {
   RedeclarableResult Redecl = VisitRedeclarable(TD);
   VisitTypeDecl(TD);
@@ -826,7 +832,7 @@ void ASTDeclReader::VisitEnumDecl(EnumDecl *ED) {
       Reader.mergeDefinitionVisibility(OldDef, ED);
       // We don't want to check the ODR hash value for declarations from global
       // module fragment.
-      if (!ED->shouldSkipCheckingODR() &&
+      if (!shouldSkipCheckingODR(ED) &&
           OldDef->getODRHash() != ED->getODRHash())
         Reader.PendingEnumOdrMergeFailures[OldDef].push_back(ED);
     } else {
@@ -868,7 +874,7 @@ void ASTDeclReader::VisitRecordDecl(RecordDecl *RD) {
   VisitRecordDeclImpl(RD);
   // We should only reach here if we're in C/Objective-C. There is no
   // global module fragment.
-  assert(!RD->shouldSkipCheckingODR());
+  assert(!shouldSkipCheckingODR(RD));
   RD->setODRHash(Record.readInt());
 
   // Maintain the invariant of a redeclaration chain containing only
@@ -907,6 +913,10 @@ void ASTDeclReader::VisitValueDecl(ValueDecl *VD) {
     DeferredTypeID = Record.getGlobalTypeID(Record.readInt());
   else
     VD->setType(Record.readType());
+}
+
+void ASTDeclReader::VisitValuePackDecl(ValuePackDecl *VPD) {
+  assert(false && "TODO");
 }
 
 void ASTDeclReader::VisitEnumConstantDecl(EnumConstantDecl *ECD) {
@@ -1103,16 +1113,26 @@ void ASTDeclReader::VisitFunctionDecl(FunctionDecl *FD) {
     FD->setHasODRHash(true);
   }
 
-  if (FD->isDefaulted()) {
-    if (unsigned NumLookups = Record.readInt()) {
+  if (FD->isDefaulted() || FD->isDeletedAsWritten()) {
+    // If 'Info' is nonzero, we need to read an DefaultedOrDeletedInfo; if,
+    // additionally, the second bit is also set, we also need to read
+    // a DeletedMessage for the DefaultedOrDeletedInfo.
+    if (auto Info = Record.readInt()) {
+      bool HasMessage = Info & 2;
+      StringLiteral *DeletedMessage =
+          HasMessage ? cast<StringLiteral>(Record.readExpr()) : nullptr;
+
+      unsigned NumLookups = Record.readInt();
       SmallVector<DeclAccessPair, 8> Lookups;
       for (unsigned I = 0; I != NumLookups; ++I) {
         NamedDecl *ND = Record.readDeclAs<NamedDecl>();
         AccessSpecifier AS = (AccessSpecifier)Record.readInt();
         Lookups.push_back(DeclAccessPair::make(ND, AS));
       }
-      FD->setDefaultedFunctionInfo(FunctionDecl::DefaultedFunctionInfo::Create(
-          Reader.getContext(), Lookups));
+
+      FD->setDefaultedOrDeletedInfo(
+          FunctionDecl::DefaultedOrDeletedFunctionInfo::Create(
+              Reader.getContext(), Lookups, DeletedMessage));
     }
   }
 
@@ -2145,7 +2165,7 @@ void ASTDeclReader::MergeDefinitionData(
   }
 
   // We don't want to check ODR for decls in the global module fragment.
-  if (MergeDD.Definition->shouldSkipCheckingODR())
+  if (shouldSkipCheckingODR(MergeDD.Definition))
     return;
 
   if (D->getODRHash() != MergeDD.ODRHash) {
@@ -3519,7 +3539,7 @@ ASTDeclReader::FindExistingResult ASTDeclReader::findExisting(NamedDecl *D) {
   // same template specialization into the same CXXRecordDecl.
   auto MergedDCIt = Reader.MergedDeclContexts.find(D->getLexicalDeclContext());
   if (MergedDCIt != Reader.MergedDeclContexts.end() &&
-      !D->shouldSkipCheckingODR() && MergedDCIt->second == D->getDeclContext())
+      !shouldSkipCheckingODR(D) && MergedDCIt->second == D->getDeclContext())
     Reader.PendingOdrMergeChecks.push_back(D);
 
   return FindExistingResult(Reader, D, /*Existing=*/nullptr,
@@ -4124,6 +4144,15 @@ Decl *ASTReader::ReadDeclRecord(DeclID ID) {
   // offsets for its tables of lexical and visible declarations.
   if (auto *DC = dyn_cast<DeclContext>(D)) {
     std::pair<uint64_t, uint64_t> Offsets = Reader.VisitDeclContext(DC);
+
+    // Get the lexical and visible block for the delayed namespace.
+    // It is sufficient to judge if ID is in DelayedNamespaceOffsetMap.
+    // But it may be more efficient to filter the other cases.
+    if (!Offsets.first && !Offsets.second && isa<NamespaceDecl>(D))
+      if (auto Iter = DelayedNamespaceOffsetMap.find(ID);
+          Iter != DelayedNamespaceOffsetMap.end())
+        Offsets = Iter->second;
+
     if (Offsets.first &&
         ReadLexicalDeclContextStorage(*Loc.F, DeclsCursor, Offsets.first, DC))
       return nullptr;

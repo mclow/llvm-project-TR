@@ -772,6 +772,7 @@ bool RecursiveASTVisitor<Derived>::TraverseNestedNameSpecifier(
 
   switch (NNS->getKind()) {
   case NestedNameSpecifier::Identifier:
+  case NestedNameSpecifier::PackName:
   case NestedNameSpecifier::Namespace:
   case NestedNameSpecifier::NamespaceAlias:
   case NestedNameSpecifier::Global:
@@ -797,6 +798,7 @@ bool RecursiveASTVisitor<Derived>::TraverseNestedNameSpecifierLoc(
 
   switch (NNS.getNestedNameSpecifier()->getKind()) {
   case NestedNameSpecifier::Identifier:
+  case NestedNameSpecifier::PackName:
   case NestedNameSpecifier::Namespace:
   case NestedNameSpecifier::NamespaceAlias:
   case NestedNameSpecifier::Global:
@@ -1106,6 +1108,7 @@ DEF_TRAVERSE_TYPE(FunctionProtoType, {
 DEF_TRAVERSE_TYPE(UsingType, {})
 DEF_TRAVERSE_TYPE(UnresolvedUsingType, {})
 DEF_TRAVERSE_TYPE(TypedefType, {})
+DEF_TRAVERSE_TYPE(SubstTypedefPackType, {})
 
 DEF_TRAVERSE_TYPE(TypeOfExprType,
                   { TRY_TO(TraverseStmt(T->getUnderlyingExpr())); })
@@ -1396,6 +1399,7 @@ DEF_TRAVERSE_TYPELOC(FunctionProtoType, {
 DEF_TRAVERSE_TYPELOC(UsingType, {})
 DEF_TRAVERSE_TYPELOC(UnresolvedUsingType, {})
 DEF_TRAVERSE_TYPELOC(TypedefType, {})
+DEF_TRAVERSE_TYPELOC(SubstTypedefPackType, {})
 
 DEF_TRAVERSE_TYPELOC(TypeOfExprType,
                      { TRY_TO(TraverseStmt(TL.getUnderlyingExpr())); })
@@ -1474,6 +1478,7 @@ DEF_TRAVERSE_TYPELOC(ElaboratedType, {
 DEF_TRAVERSE_TYPELOC(DependentNameType, {
   TRY_TO(TraverseNestedNameSpecifierLoc(TL.getQualifierLoc()));
 })
+
 
 DEF_TRAVERSE_TYPELOC(DependentTemplateSpecializationType, {
   if (TL.getQualifierLoc()) {
@@ -2009,6 +2014,8 @@ DEF_TRAVERSE_DECL(TypeAliasTemplateDecl, {
   TRY_TO(TraverseTemplateParameterListHelper(D->getTemplateParameters()));
 })
 
+DEF_TRAVERSE_DECL(TypeAliasPackDecl, {})
+
 DEF_TRAVERSE_DECL(ConceptDecl, {
   TRY_TO(TraverseTemplateParameterListHelper(D->getTemplateParameters()));
   TRY_TO(TraverseStmt(D->getConstraintExpr()));
@@ -2141,6 +2148,13 @@ DEF_TRAVERSE_DECL(UnresolvedUsingValueDecl, {
 })
 
 DEF_TRAVERSE_DECL(IndirectFieldDecl, {})
+
+
+DEF_TRAVERSE_DECL(ValuePackDecl, {
+  for(auto *Child : D->expansions())
+    TRY_TO(TraverseDecl(Child));
+})
+
 
 template <typename Derived>
 bool RecursiveASTVisitor<Derived>::TraverseDeclaratorHelper(DeclaratorDecl *D) {

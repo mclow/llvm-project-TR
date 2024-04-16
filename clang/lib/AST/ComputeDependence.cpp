@@ -668,7 +668,15 @@ ExprDependence clang::computeDependence(MemberExpr *E) {
     D |= toExprDependence(A.getArgument().getDependence());
 
   auto *MemberDecl = E->getMemberDecl();
-  if (FieldDecl *FD = dyn_cast<FieldDecl>(MemberDecl)) {
+  FieldDecl *FD = dyn_cast<FieldDecl>(MemberDecl);
+  if(!FD) {
+    if(ValuePackDecl *Pack = dyn_cast<ValuePackDecl>(MemberDecl)) {
+      D |= ExprDependence::UnexpandedPack | ExprDependence::Type;
+      if(FieldDecl *Underlying = dyn_cast<FieldDecl>(Pack->getInstantiatedFromValueDecl()))
+        FD = Underlying;
+    }
+  }
+  if (FD) {
     DeclContext *DC = MemberDecl->getDeclContext();
     // dyn_cast_or_null is used to handle objC variables which do not
     // have a declaration context.
@@ -679,9 +687,12 @@ ExprDependence clang::computeDependence(MemberExpr *E) {
     }
 
     // Bitfield with value-dependent width is type-dependent.
-    if (FD && FD->isBitField() && FD->getBitWidth()->isValueDependent()) {
+    if (FD->isBitField() && FD->getBitWidth()->isValueDependent()) {
       D |= ExprDependence::Type;
     }
+
+    if(FD->isParameterPack())
+      D |= ExprDependence::UnexpandedPack;
   }
   return D;
 }
@@ -864,6 +875,8 @@ ExprDependence clang::computeDependence(CXXDependentScopeMemberExpr *E) {
   D |= getDependenceInExpr(E->getMemberNameInfo());
   for (const auto &A : E->template_arguments())
     D |= toExprDependence(A.getArgument().getDependence());
+  if(E->getEllipsisLoc().isValid())
+    D |= ExprDependence::UnexpandedPack;
   return D;
 }
 

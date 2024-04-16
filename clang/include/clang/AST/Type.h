@@ -1821,9 +1821,22 @@ protected:
     /// An ElaboratedTypeKeyword.  8 bits for efficient access.
     LLVM_PREFERRED_TYPE(ElaboratedTypeKeyword)
     unsigned Keyword : 8;
+
   };
 
   enum { NumTypeWithKeywordBits = NumTypeBits + 8 };
+
+
+  class DependentNameTypeBitfields {
+    friend class DependentNameType;
+
+    LLVM_PREFERRED_TYPE(TypeWithKeywordBitfields)
+    unsigned : NumTypeWithKeywordBits;
+
+    /// Whether the ElaboratedType has a trailing OwnedTagDecl.
+    LLVM_PREFERRED_TYPE(bool)
+    unsigned IsPack : 1;
+  };
 
   class ElaboratedTypeBitfields {
     friend class ElaboratedType;
@@ -2035,6 +2048,7 @@ protected:
     ObjCObjectTypeBitfields ObjCObjectTypeBits;
     ReferenceTypeBitfields ReferenceTypeBits;
     TypeWithKeywordBitfields TypeWithKeywordBits;
+    DependentNameTypeBitfields  DependentNameTypeBits;
     ElaboratedTypeBitfields ElaboratedTypeBits;
     VectorTypeBitfields VectorTypeBits;
     SubstTemplateTypeParmTypeBitfields SubstTemplateTypeParmTypeBits;
@@ -5029,6 +5043,37 @@ public:
   static bool classof(const Type *T) { return T->getTypeClass() == Typedef; }
 };
 
+class SubstTypedefPackType final
+    : public Type,
+      public llvm::FoldingSetNode,
+      private llvm::TrailingObjects<SubstTypedefPackType, QualType> {
+
+  TypedefNameDecl *Decl;
+  QualType Pattern;
+  friend TrailingObjects;
+
+public:
+  SubstTypedefPackType(TypeClass tc, const TypedefNameDecl *D, QualType Pattern,
+                       ArrayRef<QualType> Expansions);
+
+  QualType getPattern() const { return Pattern; }
+
+  bool isSugared() const { return false; }
+  QualType desugar() const { return QualType(this, 0); }
+
+  void Profile(llvm::FoldingSetNodeID &ID);
+  static void Profile(llvm::FoldingSetNodeID &ID, const TypedefNameDecl *Decl,
+                      QualType Underlying) {
+    ID.AddPointer(Decl);
+    if (!Underlying.isNull())
+      Underlying.Profile(ID);
+  }
+
+  static bool classof(const Type *T) {
+    return T->getTypeClass() == SubstTypedefPack;
+  }
+};
+
 /// Sugar type that represents a type that was qualified by a qualifier written
 /// as a macro invocation.
 class MacroQualifiedType : public Type {
@@ -6251,11 +6296,14 @@ class DependentNameType : public TypeWithKeyword, public llvm::FoldingSetNode {
   const IdentifierInfo *Name;
 
   DependentNameType(ElaboratedTypeKeyword Keyword, NestedNameSpecifier *NNS,
-                    const IdentifierInfo *Name, QualType CanonType)
+                    bool IsPack, const IdentifierInfo *Name, QualType CanonType)
       : TypeWithKeyword(Keyword, DependentName, CanonType,
                         TypeDependence::DependentInstantiation |
+                        (IsPack ? TypeDependence::UnexpandedPack : TypeDependence::None) |
                             toTypeDependence(NNS->getDependence())),
-        NNS(NNS), Name(Name) {}
+        NNS(NNS), Name(Name) {
+      DependentNameTypeBits.IsPack = IsPack;
+  }
 
 public:
   /// Retrieve the qualification on this type.
@@ -6270,17 +6318,20 @@ public:
     return Name;
   }
 
+  bool isPack() const {return DependentNameTypeBits.IsPack;}
+
   bool isSugared() const { return false; }
   QualType desugar() const { return QualType(this, 0); }
 
   void Profile(llvm::FoldingSetNodeID &ID) {
-    Profile(ID, getKeyword(), NNS, Name);
+    Profile(ID, getKeyword(), NNS, isPack(), Name);
   }
 
   static void Profile(llvm::FoldingSetNodeID &ID, ElaboratedTypeKeyword Keyword,
-                      NestedNameSpecifier *NNS, const IdentifierInfo *Name) {
+                      NestedNameSpecifier *NNS, bool IsPack, const IdentifierInfo *Name) {
     ID.AddInteger(llvm::to_underlying(Keyword));
     ID.AddPointer(NNS);
+    ID.AddBoolean(IsPack);
     ID.AddPointer(Name);
   }
 

@@ -229,6 +229,7 @@ static NestedNameSpecifier *getFullyQualifiedNestedNameSpecifier(
           Ctx,
           Scope->getAsNamespaceAlias()->getNamespace()->getCanonicalDecl(),
           WithGlobalNsPrefix);
+    case NestedNameSpecifier::PackName:
     case NestedNameSpecifier::Identifier:
       // A function or some other construct that makes it un-namable
       // at the end of the TU. Skip the current component of the name,

@@ -630,6 +630,10 @@ bool Parser::ParseUsingDeclarator(DeclaratorContext Context,
   if (D.SS.isInvalid())
     return true;
 
+  // C++26: Parsing a pack alias declaration
+  if (getLangOpts().CPlusPlus26)
+    TryConsumeToken(tok::ellipsis, D.EllipsisLoc);
+
   // Parse the unqualified-id. We allow parsing of both constructor and
   // destructor names and allow the action module to diagnose any semantic
   // errors.
@@ -664,7 +668,8 @@ bool Parser::ParseUsingDeclarator(DeclaratorContext Context,
       return true;
   }
 
-  if (TryConsumeToken(tok::ellipsis, D.EllipsisLoc))
+  if (D.EllipsisLoc.isInvalid() &&
+      TryConsumeToken(tok::ellipsis, D.EllipsisLoc))
     Diag(Tok.getLocation(), getLangOpts().CPlusPlus17
                                 ? diag::warn_cxx17_compat_using_declaration_pack
                                 : diag::ext_using_declaration_pack);
@@ -922,7 +927,7 @@ Decl *Parser::ParseAliasDeclarationAfterDeclarator(
   else if (D.SS.isNotEmpty())
     Diag(D.SS.getBeginLoc(), diag::err_alias_declaration_not_identifier)
         << FixItHint::CreateRemoval(D.SS.getRange());
-  if (D.EllipsisLoc.isValid())
+  if (!getLangOpts().CPlusPlus26 && D.EllipsisLoc.isValid())
     Diag(D.EllipsisLoc, diag::err_alias_declaration_pack_expansion)
         << FixItHint::CreateRemoval(SourceRange(D.EllipsisLoc));
 
@@ -947,8 +952,8 @@ Decl *Parser::ParseAliasDeclarationAfterDeclarator(
       TemplateParams ? TemplateParams->data() : nullptr,
       TemplateParams ? TemplateParams->size() : 0);
   return Actions.ActOnAliasDeclaration(getCurScope(), AS, TemplateParamsArg,
-                                       UsingLoc, D.Name, Attrs, TypeAlias,
-                                       DeclFromDeclSpec);
+                                       UsingLoc, D.EllipsisLoc, D.Name, Attrs,
+                                       TypeAlias, DeclFromDeclSpec);
 }
 
 static FixItHint getStaticAssertNoMessageFixIt(const Expr *AssertExpr,
@@ -1231,6 +1236,41 @@ SourceLocation Parser::ParsePackIndexingType(DeclSpec &DS) {
     DS.SetTypeSpecType(DeclSpec::TST_typename_pack_indexing, StartLoc, PrevSpec,
                        DiagID, Type, Policy);
     return EndLoc;
+  } else {
+    if (!NextToken().is(tok::ellipsis) ||
+        !GetLookAheadToken(2).is(tok::l_square)) {
+      DS.SetTypeSpecError();
+      return Tok.getEndLoc();
+    }
+
+    ParsedType Ty =
+        Actions.getTypeName(*Tok.getIdentifierInfo(), Tok.getLocation(),
+                            getCurScope(), &DS.getTypeSpecScope());
+    if (!Ty) {
+      DS.SetTypeSpecError();
+      return Tok.getEndLoc();
+    }
+    Type = Ty;
+
+    StartLoc = ConsumeToken();
+    EllipsisLoc = ConsumeToken();
+    BalancedDelimiterTracker T(*this, tok::l_square);
+    T.consumeOpen();
+    ExprResult IndexExpr = ParseConstantExpression();
+    if (T.consumeClose()) {
+      DS.SetTypeSpecError();
+      return IndexExpr.isInvalid() ? StartLoc : IndexExpr.get()->getEndLoc();
+    }
+    if (IndexExpr.isInvalid()) {
+      DS.SetTypeSpecError();
+      return T.getCloseLocation();
+    }
+    DS.SetRangeStart(StartLoc);
+    DS.SetRangeEnd(T.getCloseLocation());
+    DS.SetTypeSpecType(DeclSpec::TST_typename, StartLoc, PrevSpec, DiagID, Type,
+                       Policy);
+    DS.SetPackIndexingExpr(EllipsisLoc, IndexExpr.get());
+    return T.getCloseLocation();
   }
   if (!NextToken().is(tok::ellipsis) ||
       !GetLookAheadToken(2).is(tok::l_square)) {
@@ -3453,6 +3493,7 @@ ExprResult Parser::ParseCXXMemberInitializer(Decl *D, bool IsFunction,
               << 1 /* delete */;
         else
           Diag(ConsumeToken(), diag::err_deleted_non_function);
+        SkipDeletedFunctionBody();
         return ExprError();
       }
     } else if (Tok.is(tok::kw_default)) {

@@ -319,6 +319,9 @@ private:
   LLVM_PREFERRED_TYPE(bool)
   unsigned TopLevelDeclInObjCContainer : 1;
 
+  LLVM_PREFERRED_TYPE(bool)
+  unsigned InstantiatedFromPack : 1;
+
   /// Whether statistic collection is enabled.
   static bool StatisticsEnabled;
 
@@ -395,7 +398,7 @@ protected:
       : NextInContextAndBits(nullptr, getModuleOwnershipKindForChildOf(DC)),
         DeclCtx(DC), Loc(L), DeclKind(DK), InvalidDecl(false), HasAttrs(false),
         Implicit(false), Used(false), Referenced(false),
-        TopLevelDeclInObjCContainer(false), Access(AS_none), FromASTFile(0),
+        TopLevelDeclInObjCContainer(false), InstantiatedFromPack(false), Access(AS_none), FromASTFile(0),
         IdentifierNamespace(getIdentifierNamespaceForKind(DK)),
         CacheValidAndLinkage(llvm::to_underlying(Linkage::Invalid)) {
     if (StatisticsEnabled) add(DK);
@@ -404,6 +407,7 @@ protected:
   Decl(Kind DK, EmptyShell Empty)
       : DeclKind(DK), InvalidDecl(false), HasAttrs(false), Implicit(false),
         Used(false), Referenced(false), TopLevelDeclInObjCContainer(false),
+        InstantiatedFromPack(false),
         Access(AS_none), FromASTFile(0),
         IdentifierNamespace(getIdentifierNamespaceForKind(DK)),
         CacheValidAndLinkage(llvm::to_underlying(Linkage::Invalid)) {
@@ -638,6 +642,14 @@ public:
     TopLevelDeclInObjCContainer = V;
   }
 
+  bool isInstantiatedFromPack() const {
+    return InstantiatedFromPack;
+  }
+
+  void SetInstantiatedFromPack(bool V = true) {
+    InstantiatedFromPack = V;
+  }
+
   /// Looks on this and related declarations for an applicable
   /// external source symbol attribute.
   ExternalSourceSymbolAttr *getExternalSourceSymbolAttr() const;
@@ -671,16 +683,6 @@ public:
 
   /// Whether this declaration comes from explicit global module.
   bool isFromExplicitGlobalModule() const;
-
-  /// Check if we should skip checking ODRHash for declaration \param D.
-  ///
-  /// The existing ODRHash mechanism seems to be not stable enough and
-  /// the false positive ODR violation reports are annoying and we rarely see
-  /// true ODR violation reports. Also we learned that MSVC disabled ODR checks
-  /// for declarations in GMF. So we try to disable ODR checks in the GMF to
-  /// get better user experiences before we make the ODR violation checks stable
-  /// enough.
-  bool shouldSkipCheckingODR() const;
 
   /// Return true if this declaration has an attribute which acts as
   /// definition of the entity, such as 'alias' or 'ifunc'.
@@ -1739,7 +1741,7 @@ class DeclContext {
     LLVM_PREFERRED_TYPE(bool)
     uint64_t IsExplicitlyDefaulted : 1;
     LLVM_PREFERRED_TYPE(bool)
-    uint64_t HasDefaultedFunctionInfo : 1;
+    uint64_t HasDefaultedOrDeletedInfo : 1;
 
     /// For member functions of complete types, whether this is an ineligible
     /// special member function or an unselected destructor. See

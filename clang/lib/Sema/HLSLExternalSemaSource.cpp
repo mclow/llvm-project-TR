@@ -451,9 +451,9 @@ void HLSLExternalSemaSource::defineHLSLVectorAlias() {
           AST.IntTy, VK_LValue),
       SourceLocation());
 
-  auto *Record = TypeAliasDecl::Create(AST, HLSLNamespace, SourceLocation(),
-                                       SourceLocation(), &II,
-                                       AST.getTrivialTypeSourceInfo(AliasType));
+  auto *Record = TypeAliasDecl::Create(
+      AST, HLSLNamespace, SourceLocation(), SourceLocation(), &II,
+      AST.getTrivialTypeSourceInfo(AliasType), SourceLocation());
   Record->setImplicit(true);
 
   auto *Template =

@@ -473,6 +473,7 @@ namespace clang {
     ExpectedDecl VisitTypedefNameDecl(TypedefNameDecl *D, bool IsAlias);
     ExpectedDecl VisitTypedefDecl(TypedefDecl *D);
     ExpectedDecl VisitTypeAliasDecl(TypeAliasDecl *D);
+    ExpectedDecl VisitTypeAliasPackDecl(TypeAliasPackDecl *D);
     ExpectedDecl VisitTypeAliasTemplateDecl(TypeAliasTemplateDecl *D);
     ExpectedDecl VisitLabelDecl(LabelDecl *D);
     ExpectedDecl VisitEnumDecl(EnumDecl *D);
@@ -484,6 +485,7 @@ namespace clang {
     ExpectedDecl VisitCXXDestructorDecl(CXXDestructorDecl *D);
     ExpectedDecl VisitCXXConversionDecl(CXXConversionDecl *D);
     ExpectedDecl VisitCXXDeductionGuideDecl(CXXDeductionGuideDecl *D);
+    ExpectedDecl VisitValuePackDecl(ValuePackDecl *D);
     ExpectedDecl VisitFieldDecl(FieldDecl *D);
     ExpectedDecl VisitIndirectFieldDecl(IndirectFieldDecl *D);
     ExpectedDecl VisitFriendDecl(FriendDecl *D);
@@ -1408,6 +1410,11 @@ ExpectedType ASTNodeImporter::VisitTypedefType(const TypedefType *T) {
   return Importer.getToContext().getTypedefType(ToDecl, *ToUnderlyingTypeOrErr);
 }
 
+ExpectedType
+ASTNodeImporter::VisitSubstTypedefPackType(const SubstTypedefPackType *T) {
+  assert(false && "Todo");
+}
+
 ExpectedType ASTNodeImporter::VisitTypeOfExprType(const TypeOfExprType *T) {
   ExpectedExpr ToExprOrErr = import(T->getUnderlyingExpr());
   if (!ToExprOrErr)
@@ -1690,7 +1697,7 @@ ASTNodeImporter::VisitDependentNameType(const DependentNameType *T) {
 
   return Importer.getToContext().getDependentNameType(T->getKeyword(),
                                                       *ToQualifierOrErr,
-                                                      Name, Canon);
+                                                      T->isPack(), Name, Canon);
 }
 
 ExpectedType
@@ -2764,6 +2771,9 @@ ASTNodeImporter::VisitTypedefNameDecl(TypedefNameDecl *D, bool IsAlias) {
   auto ToUnderlyingType = importChecked(Err, D->getUnderlyingType());
   auto ToTypeSourceInfo = importChecked(Err, D->getTypeSourceInfo());
   auto ToBeginLoc = importChecked(Err, D->getBeginLoc());
+  auto ToEllipsisLoc =
+      IsAlias ? importChecked(Err, cast<TypeAliasDecl>(D)->getEllipsisLoc())
+              : SourceLocation();
   if (Err)
     return std::move(Err);
 
@@ -2773,8 +2783,8 @@ ASTNodeImporter::VisitTypedefNameDecl(TypedefNameDecl *D, bool IsAlias) {
   TypedefNameDecl *ToTypedef;
   if (IsAlias) {
     if (GetImportedOrCreateDecl<TypeAliasDecl>(
-        ToTypedef, D, Importer.getToContext(), DC, ToBeginLoc, Loc,
-        Name.getAsIdentifierInfo(), ToTypeSourceInfo))
+            ToTypedef, D, Importer.getToContext(), DC, ToBeginLoc, Loc,
+            Name.getAsIdentifierInfo(), ToTypeSourceInfo, ToEllipsisLoc))
       return ToTypedef;
   } else if (GetImportedOrCreateDecl<TypedefDecl>(
       ToTypedef, D, Importer.getToContext(), DC, ToBeginLoc, Loc,
@@ -2805,6 +2815,10 @@ ExpectedDecl ASTNodeImporter::VisitTypedefDecl(TypedefDecl *D) {
 
 ExpectedDecl ASTNodeImporter::VisitTypeAliasDecl(TypeAliasDecl *D) {
   return VisitTypedefNameDecl(D, /*IsAlias=*/true);
+}
+
+ExpectedDecl ASTNodeImporter::VisitTypeAliasPackDecl(TypeAliasPackDecl *D) {
+  assert(false && "Todo");
 }
 
 ExpectedDecl
@@ -3949,6 +3963,14 @@ ExpectedDecl ASTNodeImporter::VisitFunctionDecl(FunctionDecl *D) {
     // decl and its redeclarations may be required.
   }
 
+  StringLiteral *Msg = D->getDeletedMessage();
+  if (Msg) {
+    auto Imported = import(Msg);
+    if (!Imported)
+      return Imported.takeError();
+    Msg = *Imported;
+  }
+
   ToFunction->setQualifierInfo(ToQualifierLoc);
   ToFunction->setAccess(D->getAccess());
   ToFunction->setLexicalDeclContext(LexicalDC);
@@ -3962,6 +3984,11 @@ ExpectedDecl ASTNodeImporter::VisitFunctionDecl(FunctionDecl *D) {
       D->FriendConstraintRefersToEnclosingTemplate());
   ToFunction->setRangeEnd(ToEndLoc);
   ToFunction->setDefaultLoc(ToDefaultLoc);
+
+  if (Msg)
+    ToFunction->setDefaultedOrDeletedInfo(
+        FunctionDecl::DefaultedOrDeletedFunctionInfo::Create(
+            Importer.getToContext(), {}, Msg));
 
   // Set the parameters.
   for (auto *Param : Parameters) {
@@ -4067,6 +4094,10 @@ ExpectedDecl ASTNodeImporter::VisitCXXConversionDecl(CXXConversionDecl *D) {
 ExpectedDecl
 ASTNodeImporter::VisitCXXDeductionGuideDecl(CXXDeductionGuideDecl *D) {
   return VisitFunctionDecl(D);
+}
+
+ExpectedDecl ASTNodeImporter::VisitValuePackDecl(ValuePackDecl *D) {
+    assert(false && "TODO");
 }
 
 ExpectedDecl ASTNodeImporter::VisitFieldDecl(FieldDecl *D) {
@@ -8414,6 +8445,7 @@ ExpectedStmt ASTNodeImporter::VisitCXXDependentScopeMemberExpr(
   auto ToType = importChecked(Err, E->getType());
   auto ToOperatorLoc = importChecked(Err, E->getOperatorLoc());
   auto ToQualifierLoc = importChecked(Err, E->getQualifierLoc());
+  auto EllipsisLoc = importChecked(Err, E->getEllipsisLoc());
   auto ToTemplateKeywordLoc = importChecked(Err, E->getTemplateKeywordLoc());
   auto ToFirstQualifierFoundInScope =
       importChecked(Err, E->getFirstQualifierFoundInScope());
@@ -8451,6 +8483,7 @@ ExpectedStmt ASTNodeImporter::VisitCXXDependentScopeMemberExpr(
   return CXXDependentScopeMemberExpr::Create(
       Importer.getToContext(), ToBase, ToType, E->isArrow(), ToOperatorLoc,
       ToQualifierLoc, ToTemplateKeywordLoc, ToFirstQualifierFoundInScope,
+      EllipsisLoc,
       ToMemberNameInfo, ResInfo);
 }
 
@@ -9645,10 +9678,12 @@ ASTImporter::Import(NestedNameSpecifier *FromNNS) {
     return std::move(Err);
 
   switch (FromNNS->getKind()) {
+  case NestedNameSpecifier::PackName:
   case NestedNameSpecifier::Identifier:
     assert(FromNNS->getAsIdentifier() && "NNS should contain identifier.");
     return NestedNameSpecifier::Create(ToContext, Prefix,
-                                       Import(FromNNS->getAsIdentifier()));
+                                       Import(FromNNS->getAsIdentifier()),
+                                       FromNNS->getKind() == NestedNameSpecifier::PackName);
 
   case NestedNameSpecifier::Namespace:
     if (ExpectedDecl NSOrErr = Import(FromNNS->getAsNamespace())) {
@@ -9727,6 +9762,16 @@ ASTImporter::Import(NestedNameSpecifierLoc FromNNS) {
       Builder.Extend(getToContext(), Spec->getAsIdentifier(), ToLocalBeginLoc,
                      ToLocalEndLoc);
       break;
+
+    case NestedNameSpecifier::PackName: {
+        SourceLocation IdLoc;
+        if (Error Err = importInto(IdLoc, NNS.getIdentifierLoc()))
+          return std::move(Err);
+        Builder.Extend(getToContext(), ToLocalBeginLoc, Spec->getAsIdentifier(), IdLoc,
+                       ToLocalEndLoc);
+        break;
+
+    }
 
     case NestedNameSpecifier::Namespace:
       Builder.Extend(getToContext(), Spec->getAsNamespace(), ToLocalBeginLoc,
@@ -10000,15 +10045,16 @@ Expected<CXXCtorInitializer *> ASTImporter::Import(CXXCtorInitializer *From) {
   if (!RParenLocOrErr)
     return RParenLocOrErr.takeError();
 
+  SourceLocation EllipsisLoc;
+  if (From->isPackExpansion())
+    if (Error Err = importInto(EllipsisLoc, From->getEllipsisLoc()))
+      return std::move(Err);
+
+
   if (From->isBaseInitializer()) {
     auto ToTInfoOrErr = Import(From->getTypeSourceInfo());
     if (!ToTInfoOrErr)
       return ToTInfoOrErr.takeError();
-
-    SourceLocation EllipsisLoc;
-    if (From->isPackExpansion())
-      if (Error Err = importInto(EllipsisLoc, From->getEllipsisLoc()))
-        return std::move(Err);
 
     return new (ToContext) CXXCtorInitializer(
         ToContext, *ToTInfoOrErr, From->isBaseVirtual(), *LParenLocOrErr,
@@ -10024,7 +10070,7 @@ Expected<CXXCtorInitializer *> ASTImporter::Import(CXXCtorInitializer *From) {
 
     return new (ToContext) CXXCtorInitializer(
         ToContext, cast_or_null<FieldDecl>(*ToFieldOrErr), *MemberLocOrErr,
-        *LParenLocOrErr, *ToExprOrErr, *RParenLocOrErr);
+        *LParenLocOrErr, *ToExprOrErr, *RParenLocOrErr, EllipsisLoc);
   } else if (From->isIndirectMemberInitializer()) {
     ExpectedDecl ToIFieldOrErr = Import(From->getIndirectMember());
     if (!ToIFieldOrErr)
@@ -10036,7 +10082,7 @@ Expected<CXXCtorInitializer *> ASTImporter::Import(CXXCtorInitializer *From) {
 
     return new (ToContext) CXXCtorInitializer(
         ToContext, cast_or_null<IndirectFieldDecl>(*ToIFieldOrErr),
-        *MemberLocOrErr, *LParenLocOrErr, *ToExprOrErr, *RParenLocOrErr);
+        *MemberLocOrErr, *LParenLocOrErr, *ToExprOrErr, *RParenLocOrErr, EllipsisLoc);
   } else if (From->isDelegatingInitializer()) {
     auto ToTInfoOrErr = Import(From->getTypeSourceInfo());
     if (!ToTInfoOrErr)

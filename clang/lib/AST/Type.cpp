@@ -3774,6 +3774,15 @@ void FunctionProtoType::Profile(llvm::FoldingSetNodeID &ID,
           getExtProtoInfo(), Ctx, isCanonicalUnqualified());
 }
 
+static TypeDependence computeTypedefTypeDependence(QualType T, const TypedefNameDecl *D) {
+  TypeDependence Dep = toSemanticDependence(T->getDependence());
+  if(const auto* Alias = dyn_cast<TypeAliasDecl>(D); Alias && Alias->getEllipsisLoc().isValid())
+    Dep |= TypeDependence::UnexpandedPack;
+  if(const auto* Alias = dyn_cast<TypeAliasPackDecl>(D))
+    Dep |= TypeDependence::UnexpandedPack;
+  return Dep;
+}
+
 TypeCoupledDeclRefInfo::TypeCoupledDeclRefInfo(ValueDecl *D, bool Deref)
     : Data(D, Deref << DerefShift) {}
 
@@ -3813,8 +3822,9 @@ CountAttributedType::CountAttributedType(
 
 TypedefType::TypedefType(TypeClass tc, const TypedefNameDecl *D,
                          QualType Underlying, QualType can)
-    : Type(tc, can, toSemanticDependence(can->getDependence())),
+    : Type(tc, can, computeTypedefTypeDependence(can, D)),
       Decl(const_cast<TypedefNameDecl *>(D)) {
+
   assert(!isa<TypedefType>(can) && "Invalid canonical type");
   TypedefBits.hasTypeDifferentFromDecl = !Underlying.isNull();
   if (!typeMatchesDecl())
@@ -4219,7 +4229,8 @@ TemplateSpecializationType::TemplateSpecializationType(
                 ? TypeDependence::DependentInstantiation
                 : toSemanticDependence(Canon->getDependence())) |
                (toTypeDependence(T.getDependence()) &
-                TypeDependence::UnexpandedPack)),
+                TypeDependence::UnexpandedPack ) | (!AliasedType.isNull()
+                    ? AliasedType->getDependence() & TypeDependence::UnexpandedPack : TypeDependence::None)),
       Template(T) {
   TemplateSpecializationTypeBits.NumArgs = Args.size();
   TemplateSpecializationTypeBits.TypeAlias = !AliasedType.isNull();

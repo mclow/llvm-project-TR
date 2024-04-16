@@ -119,6 +119,7 @@ void ODRHash::AddNestedNameSpecifier(const NestedNameSpecifier *NNS) {
   auto Kind = NNS->getKind();
   ID.AddInteger(Kind);
   switch (Kind) {
+  case NestedNameSpecifier::PackName:
   case NestedNameSpecifier::Identifier:
     AddIdentifierInfo(NNS->getAsIdentifier());
     break;
@@ -700,6 +701,12 @@ void ODRHash::AddFunctionDecl(const FunctionDecl *Function,
   AddBoolean(Function->isPureVirtual());
   AddBoolean(Function->isDeletedAsWritten());
   AddBoolean(Function->isExplicitlyDefaulted());
+
+  StringLiteral *DeletedMessage = Function->getDeletedMessage();
+  AddBoolean(DeletedMessage);
+
+  if (DeletedMessage)
+    ID.AddString(DeletedMessage->getBytes());
 
   AddDecl(Function);
 

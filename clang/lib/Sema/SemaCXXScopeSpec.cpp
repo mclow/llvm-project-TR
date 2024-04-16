@@ -157,6 +157,7 @@ DeclContext *Sema::computeDeclContext(const CXXScopeSpec &SS,
   }
 
   switch (NNS->getKind()) {
+  case NestedNameSpecifier::PackName:
   case NestedNameSpecifier::Identifier:
     llvm_unreachable("Dependent nested-name-specifier has no DeclContext");
 
@@ -397,7 +398,8 @@ NamedDecl *Sema::FindFirstQualifierInScope(Scope *S, NestedNameSpecifier *NNS) {
   while (NNS->getPrefix())
     NNS = NNS->getPrefix();
 
-  if (NNS->getKind() != NestedNameSpecifier::Identifier)
+  if (NNS->getKind() != NestedNameSpecifier::Identifier
+   && NNS->getKind() != NestedNameSpecifier::PackName)
     return nullptr;
 
   LookupResult Found(*this, NNS->getAsIdentifier(), SourceLocation(),
@@ -566,7 +568,8 @@ bool Sema::BuildCXXNestedNameSpecifier(Scope *S, NestedNameSpecInfo &IdInfo,
     // base object type or prior nested-name-specifier, so this
     // nested-name-specifier refers to an unknown specialization. Just build
     // a dependent nested-name-specifier.
-    SS.Extend(Context, IdInfo.Identifier, IdInfo.IdentifierLoc, IdInfo.CCLoc);
+    SS.Extend(Context, IdInfo.EllipsisLoc,
+                       IdInfo.Identifier, IdInfo.IdentifierLoc, IdInfo.CCLoc);
     return false;
   }
 
@@ -689,6 +692,8 @@ bool Sema::BuildCXXNestedNameSpecifier(Scope *S, NestedNameSpecInfo &IdInfo,
        }
     }
 
+    bool RebuildPackName = IdInfo.EllipsisLoc.isInvalid();
+
     if (auto *TD = dyn_cast_or_null<TypedefNameDecl>(SD))
       MarkAnyDeclReferenced(TD->getLocation(), TD, /*OdrUse=*/false);
 
@@ -699,6 +704,11 @@ bool Sema::BuildCXXNestedNameSpecifier(Scope *S, NestedNameSpecInfo &IdInfo,
 
     // The use of a nested name specifier may trigger deprecation warnings.
     DiagnoseUseOfDecl(SD, IdInfo.CCLoc);
+
+    if (auto *TD = dyn_cast_or_null<TypeAliasPackDecl>(SD); TD && ArgumentPackSubstitutionIndex != -1) {
+      SD = TD->expansions()[ArgumentPackSubstitutionIndex];
+      RebuildPackName = false;
+    }
 
     if (NamespaceDecl *Namespace = dyn_cast<NamespaceDecl>(SD)) {
       SS.Extend(Context, Namespace, IdInfo.IdentifierLoc, IdInfo.CCLoc);
@@ -796,7 +806,7 @@ bool Sema::BuildCXXNestedNameSpecifier(Scope *S, NestedNameSpecInfo &IdInfo,
         Diag(IdInfo.IdentifierLoc,
              diag::ext_undeclared_unqual_id_with_dependent_base)
             << IdInfo.Identifier << ContainingClass;
-        SS.Extend(Context, IdInfo.Identifier, IdInfo.IdentifierLoc,
+        SS.Extend(Context, IdInfo.EllipsisLoc, IdInfo.Identifier, IdInfo.IdentifierLoc,
                   IdInfo.CCLoc);
         return false;
       }
@@ -1070,6 +1080,7 @@ bool Sema::ShouldEnterDeclaratorScope(Scope *S, const CXXScopeSpec &SS) {
     return CurContext->getRedeclContext()->isFileContext();
 
   case NestedNameSpecifier::Identifier:
+  case NestedNameSpecifier::PackName:
   case NestedNameSpecifier::TypeSpec:
   case NestedNameSpecifier::TypeSpecWithTemplate:
   case NestedNameSpecifier::Super:

@@ -2349,13 +2349,12 @@ class CXXCtorInitializer final {
   /// end up constructing an object (when multiple arguments are involved).
   Stmt *Init;
 
-  /// The source location for the field name or, for a base initializer
-  /// pack expansion, the location of the ellipsis.
-  ///
   /// In the case of a delegating
   /// constructor, it will still include the type's source location as the
   /// Initializee points to the CXXConstructorDecl (to allow loop detection).
-  SourceLocation MemberOrEllipsisLocation;
+  SourceLocation MemberLocation;
+
+  SourceLocation EllipsisLocation;
 
   /// Location of the left paren of the ctor-initializer.
   SourceLocation LParenLoc;
@@ -2393,13 +2392,13 @@ public:
   explicit
   CXXCtorInitializer(ASTContext &Context, FieldDecl *Member,
                      SourceLocation MemberLoc, SourceLocation L, Expr *Init,
-                     SourceLocation R);
+                     SourceLocation R, SourceLocation EllipsisLoc = {});
 
   /// Creates a new anonymous field initializer.
   explicit
   CXXCtorInitializer(ASTContext &Context, IndirectFieldDecl *Member,
                      SourceLocation MemberLoc, SourceLocation L, Expr *Init,
-                     SourceLocation R);
+                     SourceLocation R, SourceLocation EllipsisLoc = {});
 
   /// Creates a new delegating initializer.
   explicit
@@ -2444,14 +2443,14 @@ public:
 
   /// Determine whether this initializer is a pack expansion.
   bool isPackExpansion() const {
-    return isBaseInitializer() && MemberOrEllipsisLocation.isValid();
+    return EllipsisLocation.isValid();
   }
 
   // For a pack expansion, returns the location of the ellipsis.
   SourceLocation getEllipsisLoc() const {
     if (!isPackExpansion())
       return {};
-    return MemberOrEllipsisLocation;
+    return EllipsisLocation;
   }
 
   /// If this is a base class initializer, returns the type of the
@@ -2499,7 +2498,7 @@ public:
   }
 
   SourceLocation getMemberLocation() const {
-    return MemberOrEllipsisLocation;
+    return MemberLocation;
   }
 
   /// Determine the source location of the initializer.
@@ -3542,6 +3541,102 @@ public:
 
   static bool classof(const Decl *D) { return classofKind(D->getKind()); }
   static bool classofKind(Kind K) { return K == Using || K == UsingEnum; }
+};
+
+/// Represents the declaration of a typedef-name via a C++11
+/// alias-declaration.
+class TypeAliasDecl : public TypedefNameDecl {
+  /// The template for which this is the pattern, if any.
+  TypeAliasTemplateDecl *Template;
+  SourceLocation EllipsisLoc;
+
+  TypeAliasDecl(ASTContext &C, DeclContext *DC, SourceLocation StartLoc,
+                SourceLocation IdLoc, const IdentifierInfo *Id, TypeSourceInfo *TInfo,
+                SourceLocation EllipsisLoc)
+      : TypedefNameDecl(TypeAlias, C, DC, StartLoc, IdLoc, Id, TInfo),
+        Template(nullptr), EllipsisLoc(EllipsisLoc) {}
+
+public:
+  static TypeAliasDecl *Create(ASTContext &C, DeclContext *DC,
+                               SourceLocation StartLoc, SourceLocation IdLoc,
+                               const IdentifierInfo *Id, TypeSourceInfo *TInfo,
+                               SourceLocation EllipsisLoc);
+  static TypeAliasDecl *CreateDeserialized(ASTContext &C, unsigned ID);
+
+  SourceRange getSourceRange() const override LLVM_READONLY;
+
+  TypeAliasTemplateDecl *getDescribedAliasTemplate() const { return Template; }
+  void setDescribedAliasTemplate(TypeAliasTemplateDecl *TAT) { Template = TAT; }
+
+  SourceLocation getEllipsisLoc() const { return EllipsisLoc; }
+
+  bool isPack() const { return EllipsisLoc.isValid(); }
+
+  static bool classof(const Decl *D) { return classofKind(D->getKind()); }
+  static bool classofKind(Kind K) { return K == TypeAlias; }
+};
+
+class TypeAliasPackDecl final
+    : public TypedefNameDecl,
+      private llvm::TrailingObjects<TypeAliasPackDecl, TypedefNameDecl *> {
+
+  TypedefNameDecl *InstantiatedFrom;
+  unsigned NumExpansions;
+
+  TypeAliasPackDecl(ASTContext &C, DeclContext *DC,
+                    TypedefNameDecl *InstantiatedFrom,
+                    ArrayRef<TypedefNameDecl *> UsingDecls)
+      : TypedefNameDecl(TypeAliasPack, C, DC, InstantiatedFrom->getLocation(),
+                        SourceLocation(), InstantiatedFrom->getIdentifier(),
+                        InstantiatedFrom->getTypeSourceInfo()),
+        InstantiatedFrom(InstantiatedFrom), NumExpansions(UsingDecls.size()) {
+    std::uninitialized_copy(UsingDecls.begin(), UsingDecls.end(),
+                            getTrailingObjects<TypedefNameDecl *>());
+  }
+
+  void anchor() override;
+
+public:
+  friend class ASTDeclReader;
+  friend class ASTDeclWriter;
+  friend TrailingObjects;
+
+  TypedefNameDecl *getInstantiatedFromAliasDecl() const {
+    return InstantiatedFrom;
+  }
+
+  QualType getPattern() const {
+    if (auto *Inner =
+            dyn_cast<TypeAliasPackDecl>(getInstantiatedFromAliasDecl()))
+      return Inner->getPattern();
+    return cast<TypeAliasDecl>(getInstantiatedFromAliasDecl())
+        ->getUnderlyingType();
+  }
+
+  ArrayRef<TypedefNameDecl *> expansions() const {
+    return llvm::ArrayRef(getTrailingObjects<TypedefNameDecl *>(),
+                          NumExpansions);
+  }
+
+  bool isDependentExpansion(ASTContext &C) const;
+
+  static TypeAliasPackDecl *Create(ASTContext &C, DeclContext *DC,
+                                   TypedefNameDecl *InstantiatedFrom,
+                                   ArrayRef<TypedefNameDecl *> AliasDecls);
+
+  static TypeAliasPackDecl *CreateDeserialized(ASTContext &C, unsigned ID,
+                                               unsigned NumExpansions);
+
+  SourceRange getSourceRange() const override LLVM_READONLY {
+    return InstantiatedFrom->getSourceRange();
+  }
+
+  // TypeAliasPackDecl *getCanonicalDecl() override { return getFirstDecl(); }
+  // const TypeAliasPackDecl *getCanonicalDecl() const { return getFirstDecl();
+  // }
+
+  static bool classof(const Decl *D) { return classofKind(D->getKind()); }
+  static bool classofKind(Kind K) { return K == TypeAliasPack; }
 };
 
 /// Represents a C++ using-declaration.

@@ -397,6 +397,11 @@ void TextNodeDumper::Visit(const OpenACCClause *C) {
     case OpenACCClauseKind::Default:
       OS << '(' << cast<OpenACCDefaultClause>(C)->getDefaultClauseKind() << ')';
       break;
+    case OpenACCClauseKind::If:
+      // The condition expression will be printed as a part of the 'children',
+      // but print 'clause' here so it is clear what is happening from the dump.
+      OS << " clause";
+      break;
     default:
       // Nothing to do here.
       break;
@@ -842,6 +847,11 @@ void clang::TextNodeDumper::dumpNestedNameSpecifier(const NestedNameSpecifier *N
     switch (NNS->getKind()) {
     case NestedNameSpecifier::Identifier:
       OS << " Identifier";
+      OS << " '" << NNS->getAsIdentifier()->getName() << "'";
+      break;
+
+    case NestedNameSpecifier::PackName:
+      OS << " PackName";
       OS << " '" << NNS->getAsIdentifier()->getName() << "'";
       break;
     case NestedNameSpecifier::Namespace:
@@ -1467,23 +1477,13 @@ void TextNodeDumper::VisitExpressionTraitExpr(const ExpressionTraitExpr *Node) {
 }
 
 void TextNodeDumper::VisitCXXDefaultArgExpr(const CXXDefaultArgExpr *Node) {
-  if (Node->hasRewrittenInit()) {
+  if (Node->hasRewrittenInit())
     OS << " has rewritten init";
-    AddChild([=] {
-      ColorScope Color(OS, ShowColors, StmtColor);
-      Visit(Node->getExpr());
-    });
-  }
 }
 
 void TextNodeDumper::VisitCXXDefaultInitExpr(const CXXDefaultInitExpr *Node) {
-  if (Node->hasRewrittenInit()) {
+  if (Node->hasRewrittenInit())
     OS << " has rewritten init";
-    AddChild([=] {
-      ColorScope Color(OS, ShowColors, StmtColor);
-      Visit(Node->getExpr());
-    });
-  }
 }
 
 void TextNodeDumper::VisitMaterializeTemporaryExpr(
@@ -1948,6 +1948,14 @@ void TextNodeDumper::VisitEnumConstantDecl(const EnumConstantDecl *D) {
   dumpType(D->getType());
 }
 
+void TextNodeDumper::VisitValuePackDecl(const ValuePackDecl *D) {
+  dumpName(D);
+  dumpType(D->getType());
+
+  for (const auto *Child : D->expansions())
+    dumpDeclRef(Child);
+}
+
 void TextNodeDumper::VisitIndirectFieldDecl(const IndirectFieldDecl *D) {
   dumpName(D);
   dumpType(D->getType());
@@ -1982,6 +1990,9 @@ void TextNodeDumper::VisitFunctionDecl(const FunctionDecl *D) {
     OS << " delete";
   if (D->isTrivial())
     OS << " trivial";
+
+  if (const StringLiteral *M = D->getDeletedMessage())
+    AddChild("delete message", [=] { Visit(M); });
 
   if (D->isIneligibleOrNotSelected())
     OS << (isa<CXXDestructorDecl>(D) ? " not_selected" : " ineligible");
@@ -2258,6 +2269,11 @@ void TextNodeDumper::VisitNamespaceAliasDecl(const NamespaceAliasDecl *D) {
 void TextNodeDumper::VisitTypeAliasDecl(const TypeAliasDecl *D) {
   dumpName(D);
   dumpType(D->getUnderlyingType());
+}
+
+void TextNodeDumper::VisitTypeAliasPackDecl(const TypeAliasPackDecl *D) {
+  // dumpName(D);
+  // dumpType(D->getUnderlyingType());
 }
 
 void TextNodeDumper::VisitTypeAliasTemplateDecl(

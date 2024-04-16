@@ -765,6 +765,65 @@ struct QualifierInfo {
                                      ArrayRef<TemplateParameterList *> TPLists);
 };
 
+
+class ValuePackDecl final
+    : public ValueDecl,
+      private llvm::TrailingObjects<ValuePackDecl, ValueDecl *> {
+
+  ValueDecl *InstantiatedFrom;
+  unsigned NumExpansions;
+
+  ValuePackDecl(DeclContext *DC, ValueDecl *InstantiatedFrom,
+                    ArrayRef<ValueDecl *> Decls, QualType Type)
+      : ValueDecl(ValuePack, DC, InstantiatedFrom->getLocation(),
+                  InstantiatedFrom->getDeclName(), Type),
+        InstantiatedFrom(InstantiatedFrom), NumExpansions(Decls.size()) {
+    std::uninitialized_copy(Decls.begin(), Decls.end(),
+                            getTrailingObjects<ValueDecl *>());
+  }
+
+  void anchor() override;
+
+public:
+  friend class ASTDeclReader;
+  friend class ASTDeclWriter;
+  friend TrailingObjects;
+
+  ValueDecl *getInstantiatedFromValueDecl() const {
+    return InstantiatedFrom;
+  }
+
+  ValueDecl* getPattern() const {
+    if (auto *Inner =
+        dyn_cast<ValuePackDecl>(getInstantiatedFromValueDecl()))
+      return Inner->getPattern();
+    return cast<ValueDecl>(getInstantiatedFromValueDecl());
+  }
+
+  ArrayRef<ValueDecl *> expansions() const {
+    return llvm::ArrayRef(getTrailingObjects<ValueDecl *>(),
+                          NumExpansions);
+  }
+
+  bool isDependentExpansion(ASTContext &C) const;
+
+  static ValuePackDecl *Create(ASTContext &C, DeclContext *DC,
+                                   ValueDecl *InstantiatedFrom,
+                                   ArrayRef<ValueDecl *> Decls);
+
+  static ValuePackDecl *CreateDeserialized(ASTContext &C, unsigned ID,
+                                               unsigned NumExpansions);
+
+  SourceRange getSourceRange() const override LLVM_READONLY {
+    return InstantiatedFrom->getSourceRange();
+  }
+
+  static bool classof(const Decl *D) { return classofKind(D->getKind()); }
+  static bool classofKind(Kind K) { return K == ValuePack; }
+};
+
+
+
 /// Represents a ValueDecl that came out of a declarator.
 /// Contains type source information through TypeSourceInfo.
 class DeclaratorDecl : public ValueDecl {
@@ -1993,21 +2052,35 @@ public:
 
   };
 
-  /// Stashed information about a defaulted function definition whose body has
-  /// not yet been lazily generated.
-  class DefaultedFunctionInfo final
-      : llvm::TrailingObjects<DefaultedFunctionInfo, DeclAccessPair> {
+  /// Stashed information about a defaulted/deleted function body.
+  class DefaultedOrDeletedFunctionInfo final
+      : llvm::TrailingObjects<DefaultedOrDeletedFunctionInfo, DeclAccessPair,
+                              StringLiteral *> {
     friend TrailingObjects;
     unsigned NumLookups;
+    bool HasDeletedMessage;
+
+    size_t numTrailingObjects(OverloadToken<DeclAccessPair>) const {
+      return NumLookups;
+    }
 
   public:
-    static DefaultedFunctionInfo *Create(ASTContext &Context,
-                                         ArrayRef<DeclAccessPair> Lookups);
+    static DefaultedOrDeletedFunctionInfo *
+    Create(ASTContext &Context, ArrayRef<DeclAccessPair> Lookups,
+           StringLiteral *DeletedMessage = nullptr);
+
     /// Get the unqualified lookup results that should be used in this
     /// defaulted function definition.
     ArrayRef<DeclAccessPair> getUnqualifiedLookups() const {
       return {getTrailingObjects<DeclAccessPair>(), NumLookups};
     }
+
+    StringLiteral *getDeletedMessage() const {
+      return HasDeletedMessage ? *getTrailingObjects<StringLiteral *>()
+                               : nullptr;
+    }
+
+    void setDeletedMessage(StringLiteral *Message);
   };
 
 private:
@@ -2017,12 +2090,12 @@ private:
   ParmVarDecl **ParamInfo = nullptr;
 
   /// The active member of this union is determined by
-  /// FunctionDeclBits.HasDefaultedFunctionInfo.
+  /// FunctionDeclBits.HasDefaultedOrDeletedInfo.
   union {
     /// The body of the function.
     LazyDeclStmtPtr Body;
     /// Information about a future defaulted function definition.
-    DefaultedFunctionInfo *DefaultedInfo;
+    DefaultedOrDeletedFunctionInfo *DefaultedOrDeletedInfo;
   };
 
   unsigned ODRHash;
@@ -2280,18 +2353,18 @@ public:
 
   /// Returns whether this specific declaration of the function has a body.
   bool doesThisDeclarationHaveABody() const {
-    return (!FunctionDeclBits.HasDefaultedFunctionInfo && Body) ||
+    return (!FunctionDeclBits.HasDefaultedOrDeletedInfo && Body) ||
            isLateTemplateParsed();
   }
 
   void setBody(Stmt *B);
   void setLazyBody(uint64_t Offset) {
-    FunctionDeclBits.HasDefaultedFunctionInfo = false;
+    FunctionDeclBits.HasDefaultedOrDeletedInfo = false;
     Body = LazyDeclStmtPtr(Offset);
   }
 
-  void setDefaultedFunctionInfo(DefaultedFunctionInfo *Info);
-  DefaultedFunctionInfo *getDefaultedFunctionInfo() const;
+  void setDefaultedOrDeletedInfo(DefaultedOrDeletedFunctionInfo *Info);
+  DefaultedOrDeletedFunctionInfo *getDefalutedOrDeletedInfo() const;
 
   /// Whether this function is variadic.
   bool isVariadic() const;
@@ -2494,7 +2567,7 @@ public:
     return FunctionDeclBits.IsDeleted && !isDefaulted();
   }
 
-  void setDeletedAsWritten(bool D = true) { FunctionDeclBits.IsDeleted = D; }
+  void setDeletedAsWritten(bool D = true, StringLiteral *Message = nullptr);
 
   /// Determines whether this function is "main", which is the
   /// entry point into an executable program.
@@ -2648,6 +2721,13 @@ public:
   void getAssociatedConstraints(SmallVectorImpl<const Expr *> &AC) const {
     if (auto *TRC = getTrailingRequiresClause())
       AC.push_back(TRC);
+  }
+
+  /// Get the message that indicates why this function was deleted.
+  StringLiteral *getDeletedMessage() const {
+    return FunctionDeclBits.HasDefaultedOrDeletedInfo
+               ? DefaultedOrDeletedInfo->getDeletedMessage()
+               : nullptr;
   }
 
   void setPreviousDeclaration(FunctionDecl * PrevDecl);
@@ -3205,6 +3285,10 @@ public:
     return hasInClassInitializer() && (BitField ? InitAndBitWidth->Init : Init);
   }
 
+  bool isParameterPack() const {
+    return isa<PackExpansionType>(getType());
+  };
+
   /// Get the C++11 default member initializer for this member, or null if one
   /// has not been set. If a valid declaration has a default member initializer,
   /// but this returns null, then we have not parsed and attached it yet.
@@ -3528,34 +3612,6 @@ public:
   // Implement isa/cast/dyncast/etc.
   static bool classof(const Decl *D) { return classofKind(D->getKind()); }
   static bool classofKind(Kind K) { return K == Typedef; }
-};
-
-/// Represents the declaration of a typedef-name via a C++11
-/// alias-declaration.
-class TypeAliasDecl : public TypedefNameDecl {
-  /// The template for which this is the pattern, if any.
-  TypeAliasTemplateDecl *Template;
-
-  TypeAliasDecl(ASTContext &C, DeclContext *DC, SourceLocation StartLoc,
-                SourceLocation IdLoc, const IdentifierInfo *Id,
-                TypeSourceInfo *TInfo)
-      : TypedefNameDecl(TypeAlias, C, DC, StartLoc, IdLoc, Id, TInfo),
-        Template(nullptr) {}
-
-public:
-  static TypeAliasDecl *Create(ASTContext &C, DeclContext *DC,
-                               SourceLocation StartLoc, SourceLocation IdLoc,
-                               const IdentifierInfo *Id, TypeSourceInfo *TInfo);
-  static TypeAliasDecl *CreateDeserialized(ASTContext &C, unsigned ID);
-
-  SourceRange getSourceRange() const override LLVM_READONLY;
-
-  TypeAliasTemplateDecl *getDescribedAliasTemplate() const { return Template; }
-  void setDescribedAliasTemplate(TypeAliasTemplateDecl *TAT) { Template = TAT; }
-
-  // Implement isa/cast/dyncast/etc.
-  static bool classof(const Decl *D) { return classofKind(D->getKind()); }
-  static bool classofKind(Kind K) { return K == TypeAlias; }
 };
 
 /// Represents the declaration of a struct/union/class/enum.

@@ -697,6 +697,16 @@ public:
   }
 };
 
+/// Wrapper for source info for typedefs.
+class SubstTypedefPackTypeLoc
+    : public InheritingConcreteTypeLoc<TypeSpecTypeLoc, SubstTypedefPackTypeLoc,
+                                       SubstTypedefPackType> {
+public:
+  // TypedefNameDecl *getTypedefNameDecl() const {
+  //   return getTypePtr()->getDecl();
+  // }
+};
+
 /// Wrapper for source info for injected class names of class
 /// templates.
 class InjectedClassNameTypeLoc :
@@ -2389,6 +2399,7 @@ public:
 // type is some sort of TypeDeclTypeLoc.
 struct DependentNameLocInfo : ElaboratedLocInfo {
   SourceLocation NameLoc;
+  SourceLocation EllipsisLoc;
 };
 
 class DependentNameTypeLoc : public ConcreteTypeLoc<UnqualTypeLoc,
@@ -2422,6 +2433,14 @@ public:
 
   void setNameLoc(SourceLocation Loc) {
     this->getLocalData()->NameLoc = Loc;
+  }
+
+  SourceLocation getEllipsisLoc() const {
+    return this->getLocalData()->EllipsisLoc;
+  }
+
+  SourceLocation setEllipsisLoc(SourceLocation Loc) const {
+    return this->getLocalData()->EllipsisLoc = Loc;
   }
 
   SourceRange getLocalSourceRange() const {

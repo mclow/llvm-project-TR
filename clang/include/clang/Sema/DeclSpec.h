@@ -120,7 +120,7 @@ public:
   /// \param IdentifierLoc The location of the identifier.
   ///
   /// \param ColonColonLoc The location of the trailing '::'.
-  void Extend(ASTContext &Context, IdentifierInfo *Identifier,
+  void Extend(ASTContext &Context, SourceLocation EllipsisLoc, IdentifierInfo *Identifier,
               SourceLocation IdentifierLoc, SourceLocation ColonColonLoc);
 
   /// Extend the current nested-name-specifier by another

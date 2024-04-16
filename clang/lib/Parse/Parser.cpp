@@ -16,9 +16,11 @@
 #include "clang/AST/ASTLambda.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/Basic/FileManager.h"
+#include "clang/Basic/TokenKinds.h"
 #include "clang/Parse/ParseDiagnostic.h"
 #include "clang/Parse/RAIIObjectsForParser.h"
 #include "clang/Sema/DeclSpec.h"
+#include "clang/Sema/ParsedPackInfo.h"
 #include "clang/Sema/ParsedTemplate.h"
 #include "clang/Sema/Scope.h"
 #include "clang/Sema/Sema.h"
@@ -1407,6 +1409,7 @@ Decl *Parser::ParseFunctionDefinition(ParsingDeclarator &D,
 
   // Parse function body eagerly if it is either '= delete;' or '= default;' as
   // ActOnStartOfFunctionDef needs to know whether the function is deleted.
+  StringLiteral *DeletedMessage = nullptr;
   Sema::FnBodyKind BodyKind = Sema::FnBodyKind::Other;
   SourceLocation KWLoc;
   if (TryConsumeToken(tok::equal)) {
@@ -1418,6 +1421,7 @@ Decl *Parser::ParseFunctionDefinition(ParsingDeclarator &D,
                       : diag::ext_defaulted_deleted_function)
           << 1 /* deleted */;
       BodyKind = Sema::FnBodyKind::Delete;
+      DeletedMessage = ParseCXXDeletedFunctionMessage();
     } else if (TryConsumeToken(tok::kw_default, KWLoc)) {
       Diag(KWLoc, getLangOpts().CPlusPlus11
                       ? diag::warn_cxx98_compat_defaulted_deleted_function
@@ -1476,7 +1480,7 @@ Decl *Parser::ParseFunctionDefinition(ParsingDeclarator &D,
   D.getMutableDeclSpec().abort();
 
   if (BodyKind != Sema::FnBodyKind::Other) {
-    Actions.SetFunctionBodyKind(Res, KWLoc, BodyKind);
+    Actions.SetFunctionBodyKind(Res, KWLoc, BodyKind, DeletedMessage);
     Stmt *GeneratedBody = Res ? Res->getBody() : nullptr;
     Actions.ActOnFinishFunctionBody(Res, GeneratedBody, false);
     return Res;
@@ -2004,7 +2008,8 @@ bool Parser::TryKeywordIdentFallback(bool DisableKeyword) {
 /// as the current tokens, so only call it in contexts where these are invalid.
 bool Parser::TryAnnotateTypeOrScopeToken(
     ImplicitTypenameContext AllowImplicitTypename) {
-  assert((Tok.is(tok::identifier) || Tok.is(tok::coloncolon) ||
+  assert((Tok.is(tok::ellipsis) ||
+          Tok.is(tok::identifier) || Tok.is(tok::coloncolon) ||
           Tok.is(tok::kw_typename) || Tok.is(tok::annot_cxxscope) ||
           Tok.is(tok::kw_decltype) || Tok.is(tok::annot_template_id) ||
           Tok.is(tok::kw___super) || Tok.is(tok::kw_auto) ||
@@ -2066,7 +2071,14 @@ bool Parser::TryAnnotateTypeOrScopeToken(
     }
 
     TypeResult Ty;
-    if (Tok.is(tok::identifier)) {
+
+    if (Tok.is(tok::ellipsis) && getLangOpts().CPlusPlus26 &&
+        NextToken().is(tok::identifier)) {
+      SourceLocation EllipsisLoc = ConsumeToken();
+      Ty = Actions.ActOnTypenameType(
+          getCurScope(), TypenameLoc, SS, *Tok.getIdentifierInfo(),
+          Tok.getLocation(), ImplicitTypenameContext::No, EllipsisLoc);
+    } else if (Tok.is(tok::identifier)) {
       // FIXME: check whether the next token is '<', first!
       Ty = Actions.ActOnTypenameType(getCurScope(), TypenameLoc, SS,
                                      *Tok.getIdentifierInfo(),
@@ -2089,9 +2101,11 @@ bool Parser::TryAnnotateTypeOrScopeToken(
                      TemplateId->Template, TemplateId->Name,
                      TemplateId->TemplateNameLoc, TemplateId->LAngleLoc,
                      TemplateArgsPtr, TemplateId->RAngleLoc);
+    } else if (Tok.is(tok::annot_pack_indexing_type)) {
+      // TODO wrap that in some other type ?
+      return false;
     } else {
-      Diag(Tok, diag::err_expected_type_name_after_typename)
-        << SS.getRange();
+      Diag(Tok, diag::err_expected_type_name_after_typename) << SS.getRange();
       return true;
     }
 
@@ -2124,14 +2138,31 @@ bool Parser::TryAnnotateTypeOrScopeToken(
 bool Parser::TryAnnotateTypeOrScopeTokenAfterScopeSpec(
     CXXScopeSpec &SS, bool IsNewScope,
     ImplicitTypenameContext AllowImplicitTypename) {
+
+  SourceLocation EllipsisLoc;
+  if (getLangOpts().CPlusPlus26 && Tok.is(tok::ellipsis) &&
+      NextToken().is(tok::identifier)) {
+    EllipsisLoc = ConsumeToken();
+  }
+
   if (Tok.is(tok::identifier)) {
+    ParsedType Ty;
+    if (EllipsisLoc.isValid()) {
+      Ty = Actions.getPackName(EllipsisLoc, *Tok.getIdentifierInfo(),
+                               Tok.getLocation(), getCurScope(), &SS, false,
+                               NextToken().is(tok::period), nullptr,
+                               AllowImplicitTypename);
+    } else {
+      Ty = Actions.getTypeName(
+          *Tok.getIdentifierInfo(), Tok.getLocation(), getCurScope(), &SS,
+          false, NextToken().is(tok::period), nullptr,
+          /*IsCtorOrDtorName=*/false,
+          /*NonTrivialTypeSourceInfo=*/true,
+          /*IsClassTemplateDeductionContext=*/true, AllowImplicitTypename);
+    }
+
     // Determine whether the identifier is a type name.
-    if (ParsedType Ty = Actions.getTypeName(
-            *Tok.getIdentifierInfo(), Tok.getLocation(), getCurScope(), &SS,
-            false, NextToken().is(tok::period), nullptr,
-            /*IsCtorOrDtorName=*/false,
-            /*NonTrivialTypeSourceInfo=*/true,
-            /*IsClassTemplateDeductionContext=*/true, AllowImplicitTypename)) {
+    if (Ty) {
       SourceLocation BeginLoc = Tok.getLocation();
       if (SS.isNotEmpty()) // it was a C++ qualified type name.
         BeginLoc = SS.getBeginLoc();

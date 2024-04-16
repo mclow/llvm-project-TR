@@ -239,6 +239,7 @@ public:
       NestedNameSpecifier::SpecifierKind kind = NNS->getKind();
       asImpl().writeNestedNameSpecifierKind(kind);
       switch (kind) {
+      case NestedNameSpecifier::PackName:
       case NestedNameSpecifier::Identifier:
         asImpl().writeIdentifier(NNS->getAsIdentifier());
         continue;

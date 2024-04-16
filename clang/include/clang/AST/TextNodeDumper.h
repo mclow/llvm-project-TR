@@ -356,6 +356,7 @@ public:
   void VisitEnumDecl(const EnumDecl *D);
   void VisitRecordDecl(const RecordDecl *D);
   void VisitEnumConstantDecl(const EnumConstantDecl *D);
+  void VisitValuePackDecl(const ValuePackDecl *D);
   void VisitIndirectFieldDecl(const IndirectFieldDecl *D);
   void VisitFunctionDecl(const FunctionDecl *D);
   void VisitCXXDeductionGuideDecl(const CXXDeductionGuideDecl *D);
@@ -374,6 +375,7 @@ public:
   void VisitUsingDirectiveDecl(const UsingDirectiveDecl *D);
   void VisitNamespaceAliasDecl(const NamespaceAliasDecl *D);
   void VisitTypeAliasDecl(const TypeAliasDecl *D);
+  void VisitTypeAliasPackDecl(const TypeAliasPackDecl *D);
   void VisitTypeAliasTemplateDecl(const TypeAliasTemplateDecl *D);
   void VisitCXXRecordDecl(const CXXRecordDecl *D);
   void VisitFunctionTemplateDecl(const FunctionTemplateDecl *D);

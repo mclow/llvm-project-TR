@@ -33,10 +33,12 @@
 #include "clang/Sema/Lookup.h"
 #include "clang/Sema/ParsedTemplate.h"
 #include "clang/Sema/ScopeInfo.h"
+#include "clang/Sema/SemaCUDA.h"
 #include "clang/Sema/SemaInternal.h"
 #include "clang/Sema/Template.h"
 #include "clang/Sema/TemplateInstCallback.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/STLForwardCompat.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
@@ -376,11 +378,10 @@ enum TypeAttrLocation {
 static void
 processTypeAttrs(TypeProcessingState &state, QualType &type,
                  TypeAttrLocation TAL, const ParsedAttributesView &attrs,
-                 Sema::CUDAFunctionTarget CFT = Sema::CFT_HostDevice);
+                 CUDAFunctionTarget CFT = CUDAFunctionTarget::HostDevice);
 
 static bool handleFunctionTypeAttr(TypeProcessingState &state, ParsedAttr &attr,
-                                   QualType &type,
-                                   Sema::CUDAFunctionTarget CFT);
+                                   QualType &type, CUDAFunctionTarget CFT);
 
 static bool handleMSPointerTypeQualifierAttr(TypeProcessingState &state,
                                              ParsedAttr &attr, QualType &type);
@@ -627,7 +628,7 @@ static void distributeFunctionTypeAttr(TypeProcessingState &state,
 static bool distributeFunctionTypeAttrToInnermost(
     TypeProcessingState &state, ParsedAttr &attr,
     ParsedAttributesView &attrList, QualType &declSpecType,
-    Sema::CUDAFunctionTarget CFT) {
+    CUDAFunctionTarget CFT) {
   Declarator &declarator = state.getDeclarator();
 
   // Put it on the innermost function chunk, if there is one.
@@ -644,10 +645,10 @@ static bool distributeFunctionTypeAttrToInnermost(
 
 /// A function type attribute was written in the decl spec.  Try to
 /// apply it somewhere.
-static void
-distributeFunctionTypeAttrFromDeclSpec(TypeProcessingState &state,
-                                       ParsedAttr &attr, QualType &declSpecType,
-                                       Sema::CUDAFunctionTarget CFT) {
+static void distributeFunctionTypeAttrFromDeclSpec(TypeProcessingState &state,
+                                                   ParsedAttr &attr,
+                                                   QualType &declSpecType,
+                                                   CUDAFunctionTarget CFT) {
   state.saveDeclSpecAttrs();
 
   // Try to distribute to the innermost.
@@ -664,9 +665,10 @@ distributeFunctionTypeAttrFromDeclSpec(TypeProcessingState &state,
 /// Try to apply it somewhere.
 /// `Attrs` is the attribute list containing the declaration (either of the
 /// declarator or the declaration).
-static void distributeFunctionTypeAttrFromDeclarator(
-    TypeProcessingState &state, ParsedAttr &attr, QualType &declSpecType,
-    Sema::CUDAFunctionTarget CFT) {
+static void distributeFunctionTypeAttrFromDeclarator(TypeProcessingState &state,
+                                                     ParsedAttr &attr,
+                                                     QualType &declSpecType,
+                                                     CUDAFunctionTarget CFT) {
   Declarator &declarator = state.getDeclarator();
 
   // Try to distribute to the innermost.
@@ -694,7 +696,7 @@ static void distributeFunctionTypeAttrFromDeclarator(
 /// declarator or the declaration).
 static void distributeTypeAttrsFromDeclarator(TypeProcessingState &state,
                                               QualType &declSpecType,
-                                              Sema::CUDAFunctionTarget CFT) {
+                                              CUDAFunctionTarget CFT) {
   // The called functions in this loop actually remove things from the current
   // list, so iterating over the existing list isn't possible.  Instead, make a
   // non-owning copy and iterate over that.
@@ -2734,7 +2736,7 @@ QualType Sema::BuildArrayType(QualType T, ArraySizeModifier ASM,
       bool IsCUDADevice = (getLangOpts().CUDA && getLangOpts().CUDAIsDevice);
       targetDiag(Loc,
                  IsCUDADevice ? diag::err_cuda_vla : diag::err_vla_unsupported)
-          << (IsCUDADevice ? CurrentCUDATarget() : 0);
+          << (IsCUDADevice ? llvm::to_underlying(CUDA().CurrentTarget()) : 0);
     } else if (sema::FunctionScopeInfo *FSI = getCurFunction()) {
       // VLAs are supported on this target, but we may need to do delayed
       // checking that the VLA is not being used within a coroutine.
@@ -3616,7 +3618,7 @@ static QualType GetDeclSpecTypeForDeclarator(TypeProcessingState &state,
   // D.getDeclarationAttributes()) because those are always C++11 attributes,
   // and those don't get distributed.
   distributeTypeAttrsFromDeclarator(
-      state, T, SemaRef.IdentifyCUDATarget(D.getAttributes()));
+      state, T, SemaRef.CUDA().IdentifyTarget(D.getAttributes()));
 
   // Find the deduced type in this type. Look in the trailing return type if we
   // have one, otherwise in the DeclSpec type.
@@ -4137,7 +4139,7 @@ static CallingConv getCCForDeclaratorChunk(
       // handleFunctionTypeAttr.
       CallingConv CC;
       if (!S.CheckCallingConvAttr(AL, CC, /*FunctionDecl=*/nullptr,
-                                  S.IdentifyCUDATarget(D.getAttributes())) &&
+                                  S.CUDA().IdentifyTarget(D.getAttributes())) &&
           (!FTI.isVariadic || supportsVariadicCall(CC))) {
         return CC;
       }
@@ -5759,9 +5761,11 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
         NestedNameSpecifier *NNS = SS.getScopeRep();
         NestedNameSpecifier *NNSPrefix = NNS->getPrefix();
         switch (NNS->getKind()) {
+        case NestedNameSpecifier::PackName:
         case NestedNameSpecifier::Identifier:
           ClsType = Context.getDependentNameType(
-              ElaboratedTypeKeyword::None, NNSPrefix, NNS->getAsIdentifier());
+              ElaboratedTypeKeyword::None, NNSPrefix, NNS->getKind() == NestedNameSpecifier::PackName,
+                      NNS->getAsIdentifier());
           break;
 
         case NestedNameSpecifier::Namespace:
@@ -5823,7 +5827,7 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
 
     // See if there are any attributes on this declarator chunk.
     processTypeAttrs(state, T, TAL_DeclChunk, DeclType.getAttrs(),
-                     S.IdentifyCUDATarget(D.getAttributes()));
+                     S.CUDA().IdentifyTarget(D.getAttributes()));
 
     if (DeclType.Kind != DeclaratorChunk::Paren) {
       if (ExpectNoDerefChunk && !IsNoDerefableChunk(DeclType))
@@ -6029,6 +6033,22 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
     //   only be used in a parameter-declaration. Such a parameter-declaration
     //   is a parameter pack (14.5.3). [...]
     switch (D.getContext()) {
+    case DeclaratorContext::File:
+    case DeclaratorContext::Member:
+    case DeclaratorContext::Block:
+        if (!T->containsUnexpandedParameterPack()) {
+          S.Diag(D.getEllipsisLoc(),
+               diag::err_variable_pack_without_parameter_packs)
+            << T <<  D.getSourceRange();
+          D.setEllipsisLoc(SourceLocation());
+        } else {
+            S.Diag(D.getEllipsisLoc(),
+                 diag::warn_variable_packs)
+                    << T <<  D.getSourceRange();
+          T = Context.getPackExpansionType(T, std::nullopt,
+                                           /*ExpectPackInType=*/false);
+        }
+        break;
     case DeclaratorContext::Prototype:
     case DeclaratorContext::LambdaExprParameter:
     case DeclaratorContext::RequiresExpr:
@@ -6070,7 +6090,6 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
                  : diag::ext_variadic_templates);
       break;
 
-    case DeclaratorContext::File:
     case DeclaratorContext::KNRTypeList:
     case DeclaratorContext::ObjCParameter: // FIXME: special diagnostic here?
     case DeclaratorContext::ObjCResult:    // FIXME: special diagnostic here?
@@ -6079,8 +6098,6 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
     case DeclaratorContext::CXXNew:
     case DeclaratorContext::AliasDecl:
     case DeclaratorContext::AliasTemplate:
-    case DeclaratorContext::Member:
-    case DeclaratorContext::Block:
     case DeclaratorContext::ForInit:
     case DeclaratorContext::SelectionInit:
     case DeclaratorContext::Condition:
@@ -8027,8 +8044,7 @@ static bool handleArmStateAttribute(Sema &S,
 /// Process an individual function attribute.  Returns true to
 /// indicate that the attribute was handled, false if it wasn't.
 static bool handleFunctionTypeAttr(TypeProcessingState &state, ParsedAttr &attr,
-                                   QualType &type,
-                                   Sema::CUDAFunctionTarget CFT) {
+                                   QualType &type, CUDAFunctionTarget CFT) {
   Sema &S = state.getSema();
 
   FunctionTypeUnwrapper unwrapped(S, type);
@@ -8862,7 +8878,7 @@ static void HandleHLSLParamModifierAttr(QualType &CurType,
 static void processTypeAttrs(TypeProcessingState &state, QualType &type,
                              TypeAttrLocation TAL,
                              const ParsedAttributesView &attrs,
-                             Sema::CUDAFunctionTarget CFT) {
+                             CUDAFunctionTarget CFT) {
 
   state.setParsedNoDeref(false);
   if (attrs.empty())
@@ -9737,7 +9753,8 @@ bool Sema::RequireLiteralType(SourceLocation Loc, QualType T,
                                     : diag::note_non_literal_nontrivial_dtor)
           << RD;
       if (!Dtor->isUserProvided())
-        SpecialMemberIsTrivial(Dtor, CXXDestructor, TAH_IgnoreTrivialABI,
+        SpecialMemberIsTrivial(Dtor, CXXSpecialMemberKind::Destructor,
+                               TAH_IgnoreTrivialABI,
                                /*Diagnose*/ true);
     }
   }
@@ -9926,8 +9943,10 @@ QualType Sema::BuildPackIndexingType(QualType Pattern, Expr *IndexExpr,
     }
   }
 
-  return Context.getPackIndexingType(Pattern, IndexExpr, FullySubstituted,
-                                     Expansions, Index.value_or(-1));
+  QualType T = Context.getPackIndexingType(Pattern, IndexExpr, FullySubstituted,
+                                           Expansions, Index.value_or(-1));
+
+  return ExpandNonDependentPack(T, Loc);
 }
 
 static QualType GetEnumUnderlyingType(Sema &S, QualType BaseType,

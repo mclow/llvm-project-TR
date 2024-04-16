@@ -879,6 +879,12 @@ void JSONNodeDumper::VisitTypeAliasDecl(const TypeAliasDecl *TAD) {
   JOS.attribute("type", createQualType(TAD->getUnderlyingType()));
 }
 
+void JSONNodeDumper::VisitTypeAliasPackDecl(const TypeAliasPackDecl *TAD) {
+  VisitNamedDecl(TAD);
+  JOS.attribute("type", createQualType(TAD->getUnderlyingType()));
+  assert(false && "todo");
+}
+
 void JSONNodeDumper::VisitNamespaceDecl(const NamespaceDecl *ND) {
   VisitNamedDecl(ND);
   attributeOnlyIfTrue("isInline", ND->isInline());
@@ -915,6 +921,10 @@ void JSONNodeDumper::VisitUsingEnumDecl(const UsingEnumDecl *UED) {
 
 void JSONNodeDumper::VisitUsingShadowDecl(const UsingShadowDecl *USD) {
   JOS.attribute("target", createBareDeclRef(USD->getTargetDecl()));
+}
+
+void JSONNodeDumper::VisitValuePackDecl(const ValuePackDecl *VPD) {
+  assert(false && "todo");
 }
 
 void JSONNodeDumper::VisitVarDecl(const VarDecl *VD) {
@@ -975,6 +985,9 @@ void JSONNodeDumper::VisitFunctionDecl(const FunctionDecl *FD) {
   if (FD->isDefaulted())
     JOS.attribute("explicitlyDefaulted",
                   FD->isDeleted() ? "deleted" : "default");
+
+  if (StringLiteral *Msg = FD->getDeletedMessage())
+    JOS.attribute("deletedMessage", Msg->getString());
 }
 
 void JSONNodeDumper::VisitEnumDecl(const EnumDecl *ED) {
@@ -1574,6 +1587,14 @@ void JSONNodeDumper::VisitMaterializeTemporaryExpr(
   }
 
   attributeOnlyIfTrue("boundToLValueRef", MTE->isBoundToLvalueReference());
+}
+
+void JSONNodeDumper::VisitCXXDefaultArgExpr(const CXXDefaultArgExpr *Node) {
+  attributeOnlyIfTrue("hasRewrittenInit", Node->hasRewrittenInit());
+}
+
+void JSONNodeDumper::VisitCXXDefaultInitExpr(const CXXDefaultInitExpr *Node) {
+  attributeOnlyIfTrue("hasRewrittenInit", Node->hasRewrittenInit());
 }
 
 void JSONNodeDumper::VisitCXXDependentScopeMemberExpr(

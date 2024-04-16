@@ -247,12 +247,14 @@ public:
   void VisitNamedDecl(const NamedDecl *ND);
   void VisitTypedefDecl(const TypedefDecl *TD);
   void VisitTypeAliasDecl(const TypeAliasDecl *TAD);
+  void VisitTypeAliasPackDecl(const TypeAliasPackDecl *TAD);
   void VisitNamespaceDecl(const NamespaceDecl *ND);
   void VisitUsingDirectiveDecl(const UsingDirectiveDecl *UDD);
   void VisitNamespaceAliasDecl(const NamespaceAliasDecl *NAD);
   void VisitUsingDecl(const UsingDecl *UD);
   void VisitUsingEnumDecl(const UsingEnumDecl *UED);
   void VisitUsingShadowDecl(const UsingShadowDecl *USD);
+  void VisitValuePackDecl(const ValuePackDecl *VPD);
   void VisitVarDecl(const VarDecl *VD);
   void VisitFieldDecl(const FieldDecl *FD);
   void VisitFunctionDecl(const FunctionDecl *FD);
@@ -310,6 +312,8 @@ public:
   void VisitMaterializeTemporaryExpr(const MaterializeTemporaryExpr *MTE);
   void VisitCXXDependentScopeMemberExpr(const CXXDependentScopeMemberExpr *ME);
   void VisitRequiresExpr(const RequiresExpr *RE);
+  void VisitCXXDefaultArgExpr(const CXXDefaultArgExpr *Node);
+  void VisitCXXDefaultInitExpr(const CXXDefaultInitExpr *Node);
 
   void VisitObjCEncodeExpr(const ObjCEncodeExpr *OEE);
   void VisitObjCMessageExpr(const ObjCMessageExpr *OME);

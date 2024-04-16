@@ -407,6 +407,13 @@ bool Parser::ParseOptionalCXXScopeSpecifier(
       continue;
     }
 
+    Token DependentPackEllipsisTok;
+    DependentPackEllipsisTok.startToken();
+    if(getLangOpts().CPlusPlus26 && Tok.is(tok::ellipsis) && NextToken().is(tok::identifier)) {
+      DependentPackEllipsisTok = Tok;
+      ConsumeToken();
+    }
+
     // The rest of the nested-name-specifier possibilities start with
     // tok::identifier.
     if (Tok.isNot(tok::identifier))
@@ -414,13 +421,43 @@ bool Parser::ParseOptionalCXXScopeSpecifier(
 
     IdentifierInfo &II = *Tok.getIdentifierInfo();
 
+
+    Token Next = NextToken();
+
     // nested-name-specifier:
     //   type-name '::'
     //   namespace-name '::'
     //   nested-name-specifier identifier '::'
-    Token Next = NextToken();
-    Sema::NestedNameSpecInfo IdInfo(&II, Tok.getLocation(), Next.getLocation(),
+    Sema::NestedNameSpecInfo IdInfo(&II, DependentPackEllipsisTok.getLocation(),
+                                    Tok.getLocation(), Next.getLocation(),
                                     ObjectType);
+
+    if (Next.is(tok::ellipsis) && GetLookAheadToken(2).is(tok::l_square)) {
+      SourceLocation Start = Tok.getLocation();
+      DeclSpec DS(AttrFactory);
+      SourceLocation CCLoc;
+      DS.getTypeSpecScope() = SS;
+      SourceLocation EndLoc = ParsePackIndexingType(DS);
+      if (DS.getTypeSpecType() == DeclSpec::TST_error) {
+        if(DependentPackEllipsisTok.is(tok::ellipsis))
+          UnconsumeToken(DependentPackEllipsisTok);
+        return false;
+      }
+      QualType Type = Actions.ActOnPackIndexingType(
+          DS.getRepAsType().get(), DS.getPackIndexingExpr(), DS.getBeginLoc(),
+          DS.getEllipsisLoc());
+      if (Type.isNull())
+        return true;
+      if (TryConsumeToken(tok::coloncolon, CCLoc)) {
+        if (Actions.ActOnCXXNestedNameSpecifierIndexedPack(SS, DS, CCLoc,
+                                                           std::move(Type)))
+          return false;
+        HasScopeSpecifier = true;
+      } else {
+        AnnotateExistingIndexedTypeNamePack(ParsedType::make(Type), Start,
+                                            EndLoc);
+      }
+    }
 
     // If we get foo:bar, this is almost certainly a typo for foo::bar.  Recover
     // and emit a fixit hint for it.
@@ -574,6 +611,10 @@ bool Parser::ParseOptionalCXXScopeSpecifier(
 
     // We don't have any tokens that form the beginning of a
     // nested-name-specifier, so we're done.
+
+    // If we parsed a dependent pack ellipsis, revert that.
+    if(DependentPackEllipsisTok.is(tok::ellipsis))
+      UnconsumeToken(DependentPackEllipsisTok);
     break;
   }
 

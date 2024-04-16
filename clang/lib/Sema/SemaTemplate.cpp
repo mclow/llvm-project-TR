@@ -37,6 +37,7 @@
 #include "clang/Sema/ParsedTemplate.h"
 #include "clang/Sema/Scope.h"
 #include "clang/Sema/Sema.h"
+#include "clang/Sema/SemaCUDA.h"
 #include "clang/Sema/SemaInternal.h"
 #include "clang/Sema/Template.h"
 #include "clang/Sema/TemplateDeduction.h"
@@ -771,7 +772,8 @@ Sema::ActOnDependentIdExpression(const CXXScopeSpec &SS,
         Context, /*This=*/nullptr, ThisType,
         /*IsArrow=*/!Context.getLangOpts().HLSL,
         /*Op=*/SourceLocation(), SS.getWithLocInContext(Context), TemplateKWLoc,
-        FirstQualifierInScope, NameInfo, TemplateArgs);
+        FirstQualifierInScope,
+        /*EllipsisLoc=*/SourceLocation(), NameInfo, TemplateArgs);
   }
 
   return BuildDependentDeclRefExpr(SS, TemplateKWLoc, NameInfo, TemplateArgs);
@@ -2362,10 +2364,11 @@ public:
       QualType Transformed =
           TransformType(InnerTLB, OrigDecl->getTypeSourceInfo()->getTypeLoc());
       TypeSourceInfo *TSI = InnerTLB.getTypeSourceInfo(Context, Transformed);
-      if (isa<TypeAliasDecl>(OrigDecl))
+      if (auto *AliasDecl = dyn_cast<TypeAliasDecl>(OrigDecl))
         Decl = TypeAliasDecl::Create(
-            Context, Context.getTranslationUnitDecl(), OrigDecl->getBeginLoc(),
-            OrigDecl->getLocation(), OrigDecl->getIdentifier(), TSI);
+            Context, Context.getTranslationUnitDecl(), AliasDecl->getBeginLoc(),
+            AliasDecl->getLocation(), AliasDecl->getIdentifier(), TSI,
+            AliasDecl->getEllipsisLoc());
       else {
         assert(isa<TypedefDecl>(OrigDecl) && "Not a Type alias or typedef");
         Decl = TypedefDecl::Create(
@@ -6056,7 +6059,7 @@ bool Sema::CheckTemplateTypeArgument(
         // Recover by synthesizing a type using the location information that we
         // already have.
         ArgType = Context.getDependentNameType(ElaboratedTypeKeyword::Typename,
-                                               SS.getScopeRep(), II);
+                                               SS.getScopeRep(), /*IsPack=*/false, II);
         TypeLocBuilder TLB;
         DependentNameTypeLoc TL = TLB.push<DependentNameTypeLoc>(ArgType);
         TL.setElaboratedKeywordLoc(SourceLocation(/*synthesized*/));
@@ -7433,6 +7436,7 @@ bool UnnamedLocalNoLinkageFinder::VisitNestedNameSpecifier(
 
   switch (NNS->getKind()) {
   case NestedNameSpecifier::Identifier:
+  case NestedNameSpecifier::PackName:
   case NestedNameSpecifier::Namespace:
   case NestedNameSpecifier::NamespaceAlias:
   case NestedNameSpecifier::Global:
@@ -10645,9 +10649,9 @@ bool Sema::CheckFunctionTemplateSpecialization(
       // take target attributes into account, we reject candidates
       // here that have a different target.
       if (LangOpts.CUDA &&
-          IdentifyCUDATarget(Specialization,
-                             /* IgnoreImplicitHDAttr = */ true) !=
-              IdentifyCUDATarget(FD, /* IgnoreImplicitHDAttr = */ true)) {
+          CUDA().IdentifyTarget(Specialization,
+                                /* IgnoreImplicitHDAttr = */ true) !=
+              CUDA().IdentifyTarget(FD, /* IgnoreImplicitHDAttr = */ true)) {
         FailedCandidates.addCandidate().set(
             I.getPair(), FunTmpl->getTemplatedDecl(),
             MakeDeductionFailureInfo(
@@ -10818,7 +10822,7 @@ bool Sema::CheckFunctionTemplateSpecialization(
   // virtue e.g. of being constexpr, and it passes these implicit
   // attributes on to its specializations.)
   if (LangOpts.CUDA)
-    inheritCUDATargetAttrs(FD, *Specialization->getPrimaryTemplate());
+    CUDA().inheritTargetAttrs(FD, *Specialization->getPrimaryTemplate());
 
   // The "previous declaration" for this function template specialization is
   // the prior function template specialization.
@@ -11854,9 +11858,9 @@ DeclResult Sema::ActOnExplicitInstantiation(Scope *S,
     // target attributes into account, we reject candidates here that
     // have a different target.
     if (LangOpts.CUDA &&
-        IdentifyCUDATarget(Specialization,
-                           /* IgnoreImplicitHDAttr = */ true) !=
-            IdentifyCUDATarget(D.getDeclSpec().getAttributes())) {
+        CUDA().IdentifyTarget(Specialization,
+                              /* IgnoreImplicitHDAttr = */ true) !=
+            CUDA().IdentifyTarget(D.getDeclSpec().getAttributes())) {
       FailedCandidates.addCandidate().set(
           P.getPair(), FunTmpl->getTemplatedDecl(),
           MakeDeductionFailureInfo(
@@ -12017,7 +12021,7 @@ TypeResult Sema::ActOnDependentTag(Scope *S, unsigned TagSpec, TagUseKind TUK,
 
   // Create the resulting type.
   ElaboratedTypeKeyword Kwd = TypeWithKeyword::getKeywordForTagTypeKind(Kind);
-  QualType Result = Context.getDependentNameType(Kwd, NNS, Name);
+  QualType Result = Context.getDependentNameType(Kwd, NNS, /*IsPack=*/false, Name);
 
   // Create type-source location information for this type.
   TypeLocBuilder TLB;
@@ -12032,7 +12036,8 @@ TypeResult Sema::ActOnTypenameType(Scope *S, SourceLocation TypenameLoc,
                                    const CXXScopeSpec &SS,
                                    const IdentifierInfo &II,
                                    SourceLocation IdLoc,
-                                   ImplicitTypenameContext IsImplicitTypename) {
+                                   ImplicitTypenameContext IsImplicitTypename,
+                                   SourceLocation EllipsisLoc) {
   if (SS.isInvalid())
     return true;
 
@@ -12050,7 +12055,7 @@ TypeResult Sema::ActOnTypenameType(Scope *S, SourceLocation TypenameLoc,
                          IsImplicitTypename == ImplicitTypenameContext::Yes)
                             ? ElaboratedTypeKeyword::Typename
                             : ElaboratedTypeKeyword::None,
-                        TypenameLoc, QualifierLoc, II, IdLoc, &TSI,
+                        TypenameLoc, QualifierLoc, EllipsisLoc, II, IdLoc, &TSI,
                         /*DeducedTSTContext=*/true);
   if (T.isNull())
     return true;
@@ -12185,32 +12190,35 @@ static bool isEnableIf(NestedNameSpecifierLoc NNS, const IdentifierInfo &II,
   return true;
 }
 
-QualType
-Sema::CheckTypenameType(ElaboratedTypeKeyword Keyword,
-                        SourceLocation KeywordLoc,
-                        NestedNameSpecifierLoc QualifierLoc,
-                        const IdentifierInfo &II,
-                        SourceLocation IILoc,
-                        TypeSourceInfo **TSI,
-                        bool DeducedTSTContext) {
-  QualType T = CheckTypenameType(Keyword, KeywordLoc, QualifierLoc, II, IILoc,
-                                 DeducedTSTContext);
+QualType Sema::CheckTypenameType(ElaboratedTypeKeyword Keyword,
+                                 SourceLocation KeywordLoc,
+                                 NestedNameSpecifierLoc QualifierLoc,
+                                 SourceLocation EllipsisLoc,
+                                 const IdentifierInfo &II, SourceLocation IILoc,
+                                 TypeSourceInfo **TSI, bool DeducedTSTContext) {
+  QualType T = CheckTypenameType(Keyword, KeywordLoc, QualifierLoc, EllipsisLoc,
+                                 II, IILoc, DeducedTSTContext);
   if (T.isNull())
     return QualType();
 
-  *TSI = Context.CreateTypeSourceInfo(T);
+  TypeLocBuilder TLB;
+
   if (isa<DependentNameType>(T)) {
-    DependentNameTypeLoc TL =
-        (*TSI)->getTypeLoc().castAs<DependentNameTypeLoc>();
-    TL.setElaboratedKeywordLoc(KeywordLoc);
-    TL.setQualifierLoc(QualifierLoc);
-    TL.setNameLoc(IILoc);
+      auto TL = TLB.push<DependentNameTypeLoc>(T);
+      TL.setElaboratedKeywordLoc(KeywordLoc);
+      TL.setQualifierLoc(QualifierLoc);
+      TL.setNameLoc(IILoc);
+      TL.setEllipsisLoc(EllipsisLoc);
   } else {
-    ElaboratedTypeLoc TL = (*TSI)->getTypeLoc().castAs<ElaboratedTypeLoc>();
-    TL.setElaboratedKeywordLoc(KeywordLoc);
-    TL.setQualifierLoc(QualifierLoc);
-    TL.getNamedTypeLoc().castAs<TypeSpecTypeLoc>().setNameLoc(IILoc);
+      auto *ET = cast<ElaboratedType>(T);
+      QualType NamedT = ET->getNamedType();
+      TLB.pushTypeSpec(NamedT);
+      auto TL = TLB.push<ElaboratedTypeLoc>(T);
+      TL.setElaboratedKeywordLoc(KeywordLoc);
+      TL.setQualifierLoc(QualifierLoc);
+      TL.getNamedTypeLoc().castAs<TypeSpecTypeLoc>().setNameLoc(IILoc);
   }
+  *TSI = TLB.getTypeSourceInfo(getASTContext(), T);
   return T;
 }
 
@@ -12220,6 +12228,7 @@ QualType
 Sema::CheckTypenameType(ElaboratedTypeKeyword Keyword,
                         SourceLocation KeywordLoc,
                         NestedNameSpecifierLoc QualifierLoc,
+                        SourceLocation EllipsisLoc,
                         const IdentifierInfo &II,
                         SourceLocation IILoc, bool DeducedTSTContext) {
   CXXScopeSpec SS;
@@ -12234,6 +12243,7 @@ Sema::CheckTypenameType(ElaboratedTypeKeyword Keyword,
       assert(QualifierLoc.getNestedNameSpecifier()->isDependent());
       return Context.getDependentNameType(Keyword,
                                           QualifierLoc.getNestedNameSpecifier(),
+                                          EllipsisLoc.isValid(),
                                           &II);
     }
 
@@ -12310,6 +12320,7 @@ Sema::CheckTypenameType(ElaboratedTypeKeyword Keyword,
     // Okay, it's a member of an unknown instantiation.
     return Context.getDependentNameType(Keyword,
                                         QualifierLoc.getNestedNameSpecifier(),
+                                        EllipsisLoc.isValid(),
                                         &II);
 
   case LookupResult::Found:

@@ -4706,6 +4706,9 @@ QualType ASTContext::getTypeDeclTypeSlow(const TypeDecl *Decl) const {
   if (const auto *Typedef = dyn_cast<TypedefNameDecl>(Decl))
     return getTypedefType(Typedef);
 
+  if (const auto *Typedef = dyn_cast<TypeAliasPackDecl>(Decl))
+    return getTypeDeclTypeSlow(Typedef->getInstantiatedFromAliasDecl());
+
   assert(!isa<TemplateTypeParmDecl>(Decl) &&
          "Template type parameter types are always available.");
 
@@ -4739,7 +4742,7 @@ QualType ASTContext::getTypedefType(const TypedefNameDecl *Decl,
   }
   if (Underlying.isNull() || Decl->getUnderlyingType() == Underlying)
     return QualType(Decl->TypeForDecl, 0);
-  assert(hasSameType(Decl->getUnderlyingType(), Underlying));
+  // assert(hasSameType(Decl->getUnderlyingType(), Underlying));
 
   llvm::FoldingSetNodeID ID;
   TypedefType::Profile(ID, Decl, Underlying);
@@ -4758,6 +4761,19 @@ QualType ASTContext::getTypedefType(const TypedefNameDecl *Decl,
   TypedefTypes.InsertNode(NewType, InsertPos);
   Types.push_back(NewType);
   return QualType(NewType, 0);
+}
+
+QualType ASTContext::getAliasPackType(const TypeAliasPackDecl *Decl) const {
+  llvm::FoldingSetNodeID ID;
+  if (!Decl->TypeForDecl) {
+    QualType T = Decl->getPattern();
+    auto *NewType = new (*this, alignof(TypedefType))
+        TypedefType(Type::Typedef, Decl, QualType(), getCanonicalType(T));
+    Decl->TypeForDecl = NewType;
+    Types.push_back(NewType);
+    return QualType(NewType, 0);
+  }
+  return QualType(Decl->TypeForDecl, 0);
 }
 
 QualType ASTContext::getUsingType(const UsingShadowDecl *Found,
@@ -5165,16 +5181,17 @@ ASTContext::getMacroQualifiedType(QualType UnderlyingTy,
 
 QualType ASTContext::getDependentNameType(ElaboratedTypeKeyword Keyword,
                                           NestedNameSpecifier *NNS,
+                                          bool IsPack,
                                           const IdentifierInfo *Name,
                                           QualType Canon) const {
   if (Canon.isNull()) {
     NestedNameSpecifier *CanonNNS = getCanonicalNestedNameSpecifier(NNS);
     if (CanonNNS != NNS)
-      Canon = getDependentNameType(Keyword, CanonNNS, Name);
+      Canon = getDependentNameType(Keyword, CanonNNS, IsPack, Name);
   }
 
   llvm::FoldingSetNodeID ID;
-  DependentNameType::Profile(ID, Keyword, NNS, Name);
+  DependentNameType::Profile(ID, Keyword, NNS, IsPack, Name);
 
   void *InsertPos = nullptr;
   DependentNameType *T
@@ -5183,7 +5200,7 @@ QualType ASTContext::getDependentNameType(ElaboratedTypeKeyword Keyword,
     return QualType(T, 0);
 
   T = new (*this, alignof(DependentNameType))
-      DependentNameType(Keyword, NNS, Name, Canon);
+      DependentNameType(Keyword, NNS, IsPack, Name, Canon);
   Types.push_back(T);
   DependentNameTypes.InsertNode(T, InsertPos);
   return QualType(T, 0);
@@ -6565,6 +6582,7 @@ static bool isSameQualifier(const NestedNameSpecifier *X,
   // FIXME: For namespaces and types, we're permitted to check that the entity
   // is named via the same tokens. We should probably do so.
   switch (X->getKind()) {
+  case NestedNameSpecifier::PackName:
   case NestedNameSpecifier::Identifier:
     if (X->getAsIdentifier() != Y->getAsIdentifier())
       return false;
@@ -6936,10 +6954,11 @@ ASTContext::getCanonicalNestedNameSpecifier(NestedNameSpecifier *NNS) const {
 
   switch (NNS->getKind()) {
   case NestedNameSpecifier::Identifier:
+  case NestedNameSpecifier::PackName:
     // Canonicalize the prefix but keep the identifier the same.
     return NestedNameSpecifier::Create(*this,
                          getCanonicalNestedNameSpecifier(NNS->getPrefix()),
-                                       NNS->getAsIdentifier());
+                                       NNS->getAsIdentifier(), /*IsPackName=*/NNS->getKind() == NestedNameSpecifier::PackName);
 
   case NestedNameSpecifier::Namespace:
     // A namespace is canonical; build a nested-name-specifier with
@@ -6968,8 +6987,9 @@ ASTContext::getCanonicalNestedNameSpecifier(NestedNameSpecifier *NNS) const {
     //   typedef typename T::type T1;
     //   typedef typename T1::type T2;
     if (const auto *DNT = T->getAs<DependentNameType>())
-      return NestedNameSpecifier::Create(*this, DNT->getQualifier(),
-                                         DNT->getIdentifier());
+      return NestedNameSpecifier::Create(
+          *this, DNT->getQualifier(),
+          DNT->getIdentifier(), /*IsPackName=*/false);
     if (const auto *DTST = T->getAs<DependentTemplateSpecializationType>())
       return NestedNameSpecifier::Create(*this, DTST->getQualifier(), true, T);
 
@@ -13105,8 +13125,10 @@ static QualType getCommonNonSugarTypeNode(ASTContext &Ctx, const Type *X,
     const auto *NX = cast<DependentNameType>(X),
                *NY = cast<DependentNameType>(Y);
     assert(NX->getIdentifier() == NY->getIdentifier());
+    assert(NX->isPack() == NY->isPack());
     return Ctx.getDependentNameType(
         getCommonTypeKeyword(NX, NY), getCommonNNS(Ctx, NX, NY),
+        NX->isPack(),
         NX->getIdentifier(), NX->getCanonicalTypeInternal());
   }
   case Type::DependentTemplateSpecialization: {

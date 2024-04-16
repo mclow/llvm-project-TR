@@ -26,6 +26,7 @@
 #include "clang/Sema/Lookup.h"
 #include "clang/Sema/ParsedTemplate.h"
 #include "clang/Sema/Scope.h"
+#include "clang/Sema/SemaCUDA.h"
 #include "clang/Sema/SemaDiagnostic.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallString.h"
@@ -2379,10 +2380,6 @@ Parser::DeclGroupPtrTy Parser::ParseDeclGroup(ParsingDeclSpec &DS,
       if (getLangOpts().CPlusPlus23) {
         auto &LastRecord = Actions.ExprEvalContexts.back();
         LastRecord.InLifetimeExtendingContext = true;
-
-        // Materialize non-`cv void` prvalue temporaries in discarded
-        // expressions. These materialized temporaries may be lifetime-extented.
-        LastRecord.InMaterializeTemporaryObjectContext = true;
       }
 
       if (getLangOpts().OpenMP)
@@ -2665,7 +2662,8 @@ Decl *Parser::ParseDeclarationAfterDeclaratorAndAttributes(
     }
   }
 
-  Sema::CUDATargetContextRAII X(Actions, Sema::CTCK_InitGlobalVar, ThisDecl);
+  SemaCUDA::CUDATargetContextRAII X(Actions.CUDA(),
+                                    SemaCUDA::CTCK_InitGlobalVar, ThisDecl);
   switch (TheInitKind) {
   // Parse declarator '=' initializer.
   case InitKind::Equal: {
@@ -2677,6 +2675,7 @@ Decl *Parser::ParseDeclarationAfterDeclaratorAndAttributes(
           << 1 /* delete */;
       else
         Diag(ConsumeToken(), diag::err_deleted_non_function);
+      SkipDeletedFunctionBody();
     } else if (Tok.is(tok::kw_default)) {
       if (D.isFunctionDeclarator())
         Diag(ConsumeToken(), diag::err_default_delete_in_multiple_declaration)
@@ -3735,6 +3734,19 @@ void Parser::ParseDeclarationSpecifiers(
         ConsumeAnnotationToken(); // The typename
       }
 
+      else if (Next.is(tok::annot_pack_indexing_type)) {
+        DS.getTypeSpecScope() = SS;
+        ConsumeAnnotationToken(); // The C++ scope.
+        TypeResult T = getTypeAnnotation(Tok);
+        isInvalid = DS.SetTypeSpecType(DeclSpec::TST_typename_pack_indexing,
+                                       Tok.getAnnotationEndLoc(), PrevSpec,
+                                       DiagID, T, Policy);
+        if (isInvalid)
+          break;
+        DS.SetRangeEnd(Tok.getAnnotationEndLoc());
+        ConsumeAnnotationToken(); // The pack alias
+      }
+
       if (AllowImplicitTypename == ImplicitTypenameContext::Yes &&
           Next.is(tok::annot_template_id) &&
           static_cast<TemplateIdAnnotation *>(Next.getAnnotationValue())
@@ -3744,9 +3756,45 @@ void Parser::ParseDeclarationSpecifiers(
         AnnotateTemplateIdTokenAsType(SS, AllowImplicitTypename);
         continue;
       }
+      SourceLocation DependentEllipsisLoc;
+      if (Next.is(tok::ellipsis) && GetLookAheadToken(2).is(tok::identifier)) {
+        DependentEllipsisLoc = Next.getLocation();
+        IdentifierInfo *II = GetLookAheadToken(2).getIdentifierInfo();
 
-      if (Next.isNot(tok::identifier))
+        SuppressAccessChecks SAC(*this, IsTemplateSpecOrInst);
+
+        ParsedType TypeRep = Actions.getPackName(
+            DependentEllipsisLoc, *II, GetLookAheadToken(2).getLocation(),
+            getCurScope(), &SS, false, false, nullptr, AllowImplicitTypename);
+
+        if (IsTemplateSpecOrInst)
+          SAC.done();
+
+        if (!TypeRep) {
+          // Todo corentin: recover ?
+          goto DoneWithDeclSpec;
+        }
+
+        DS.getTypeSpecScope() = SS;
+        ConsumeAnnotationToken(); // The C++ scope.
+
+        isInvalid = DS.SetTypeSpecType(DeclSpec::TST_typename, Loc, PrevSpec,
+                                       DiagID, TypeRep, Policy);
+        if (isInvalid)
+          break;
+
+        // Consume the ellipsis
+        ConsumeToken();
+
+        DS.SetRangeEnd(Tok.getLocation());
+        // consume the identifier
+        ConsumeToken();
+        continue;
+      }
+
+      if (Next.isNot(tok::identifier)) {
         goto DoneWithDeclSpec;
+      }
 
       // Check whether this is a constructor declaration. If we're in a
       // context where the identifier could be a class name, and it has the
@@ -6457,7 +6505,9 @@ void Parser::ParseDeclaratorInternal(Declarator &D,
       (Tok.is(tok::coloncolon) || Tok.is(tok::kw_decltype) ||
        (Tok.is(tok::identifier) &&
         (NextToken().is(tok::coloncolon) || NextToken().is(tok::less))) ||
-       Tok.is(tok::annot_cxxscope))) {
+       Tok.is(tok::annot_cxxscope) ||
+       (Tok.is(tok::coloncolon) && NextToken().is(tok::ellipsis) &&
+        GetLookAheadToken(2).is(tok::identifier)))) {
     bool EnteringContext = D.getContext() == DeclaratorContext::File ||
                            D.getContext() == DeclaratorContext::Member;
     CXXScopeSpec SS;

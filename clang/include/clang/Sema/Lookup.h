@@ -403,7 +403,10 @@ public:
   /// Retrieve the accepted (re)declaration of the given declaration,
   /// if there is one.
   NamedDecl *getAcceptableDecl(NamedDecl *D) const {
-    if (!D->isInIdentifierNamespace(IDNS))
+    if (!D->isInIdentifierNamespace(IDNS) || D->isInstantiatedFromPack())
+      return nullptr;
+
+    if(D->isInstantiatedFromPack())
       return nullptr;
 
     if (isAvailableForLookup(getSema(), D) || isHiddenDeclarationVisible(D))

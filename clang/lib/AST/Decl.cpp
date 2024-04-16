@@ -5564,7 +5564,7 @@ TypedefDecl *TypedefDecl::CreateDeserialized(ASTContext &C, unsigned ID) {
 
 TypeAliasDecl *TypeAliasDecl::Create(ASTContext &C, DeclContext *DC,
                                      SourceLocation StartLoc,
-                                     SourceLocation IdLoc, IdentifierInfo *Id,
+                                     SourceLocation IdLoc, const IdentifierInfo *Id,
                                      TypeSourceInfo *TInfo,
                                      SourceLocation EllipsisLoc) {
   return new (C, DC)

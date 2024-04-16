@@ -24,12 +24,12 @@ struct S {
 };
 template <typename... Ts>
 struct e1 {
-   using a = S<Ts...>::...types;
-   using b = S<Ts...>::...types::a;
-   using ...c = S<Ts...>::types;
-   using ...d = S<Ts...>::types::a;
-   S<Ts...>::...types e;
-   S<Ts...>::...types::a f;
+   using a = S<Ts...>::...types; // expected-error {{declaration type contains unexpanded parameter pack 'types'}}
+   using b = S<Ts...>::...types::a; // expected-error {{declaration type contains unexpanded parameter pack 'types'}}
+   using ...c = S<Ts...>::types; // expected-error {{'typename S<Ts...>::types' does not contain an unexpanded pack}}
+   using ...d = S<Ts...>::types::a; // expected-error {{'typename S<Ts...>::types::a' does not contain an unexpanded pack}}
+   S<Ts...>::...types e; // expected-error {{data member type contains unexpanded parameter pack 'types'}}
+   S<Ts...>::...types::a f; // expected-error {{data member type contains unexpanded parameter pack 'types'}}
 };
 
 template <typename... Ts>

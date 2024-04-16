@@ -3507,7 +3507,7 @@ class TypeAliasDecl : public TypedefNameDecl {
   SourceLocation EllipsisLoc;
 
   TypeAliasDecl(ASTContext &C, DeclContext *DC, SourceLocation StartLoc,
-                SourceLocation IdLoc, IdentifierInfo *Id, TypeSourceInfo *TInfo,
+                SourceLocation IdLoc, const IdentifierInfo *Id, TypeSourceInfo *TInfo,
                 SourceLocation EllipsisLoc)
       : TypedefNameDecl(TypeAlias, C, DC, StartLoc, IdLoc, Id, TInfo),
         Template(nullptr), EllipsisLoc(EllipsisLoc) {}
@@ -3515,7 +3515,7 @@ class TypeAliasDecl : public TypedefNameDecl {
 public:
   static TypeAliasDecl *Create(ASTContext &C, DeclContext *DC,
                                SourceLocation StartLoc, SourceLocation IdLoc,
-                               IdentifierInfo *Id, TypeSourceInfo *TInfo,
+                               const IdentifierInfo *Id, TypeSourceInfo *TInfo,
                                SourceLocation EllipsisLoc);
   static TypeAliasDecl *CreateDeserialized(ASTContext &C, unsigned ID);
 

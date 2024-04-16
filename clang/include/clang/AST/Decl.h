@@ -1159,6 +1159,9 @@ protected:
 
     LLVM_PREFERRED_TYPE(bool)
     unsigned EscapingByref : 1;
+
+    LLVM_PREFERRED_TYPE(bool)
+    unsigned IsCXXCondDecl : 1;
   };
 
   union {
@@ -1648,6 +1651,15 @@ public:
     NonParmVarDeclBits.EscapingByref = true;
   }
 
+  bool isCXXCondDecl() const {
+    return isa<ParmVarDecl>(this) ? false : NonParmVarDeclBits.IsCXXCondDecl;
+  }
+
+  void setCXXCondDecl() {
+    assert(!isa<ParmVarDecl>(this));
+    NonParmVarDeclBits.IsCXXCondDecl = true;
+  }
+
   /// Determines if this variable's alignment is dependent.
   bool hasDependentAlignment() const;
 
@@ -1778,7 +1790,7 @@ public:
   static ImplicitParamDecl *CreateDeserialized(ASTContext &C, unsigned ID);
 
   ImplicitParamDecl(ASTContext &C, DeclContext *DC, SourceLocation IdLoc,
-                    IdentifierInfo *Id, QualType Type,
+                    const IdentifierInfo *Id, QualType Type,
                     ImplicitParamKind ParamKind)
       : VarDecl(ImplicitParam, C, DC, IdLoc, IdLoc, Id, Type,
                 /*TInfo=*/nullptr, SC_None) {
@@ -1812,7 +1824,7 @@ public:
 
 protected:
   ParmVarDecl(Kind DK, ASTContext &C, DeclContext *DC, SourceLocation StartLoc,
-              SourceLocation IdLoc, IdentifierInfo *Id, QualType T,
+              SourceLocation IdLoc, const IdentifierInfo *Id, QualType T,
               TypeSourceInfo *TInfo, StorageClass S, Expr *DefArg)
       : VarDecl(DK, C, DC, StartLoc, IdLoc, Id, T, TInfo, S) {
     assert(ParmVarDeclBits.HasInheritedDefaultArg == false);
@@ -1824,10 +1836,10 @@ protected:
 
 public:
   static ParmVarDecl *Create(ASTContext &C, DeclContext *DC,
-                             SourceLocation StartLoc,
-                             SourceLocation IdLoc, IdentifierInfo *Id,
-                             QualType T, TypeSourceInfo *TInfo,
-                             StorageClass S, Expr *DefArg);
+                             SourceLocation StartLoc, SourceLocation IdLoc,
+                             const IdentifierInfo *Id, QualType T,
+                             TypeSourceInfo *TInfo, StorageClass S,
+                             Expr *DefArg);
 
   static ParmVarDecl *CreateDeserialized(ASTContext &C, unsigned ID);
 
@@ -2040,21 +2052,35 @@ public:
 
   };
 
-  /// Stashed information about a defaulted function definition whose body has
-  /// not yet been lazily generated.
-  class DefaultedFunctionInfo final
-      : llvm::TrailingObjects<DefaultedFunctionInfo, DeclAccessPair> {
+  /// Stashed information about a defaulted/deleted function body.
+  class DefaultedOrDeletedFunctionInfo final
+      : llvm::TrailingObjects<DefaultedOrDeletedFunctionInfo, DeclAccessPair,
+                              StringLiteral *> {
     friend TrailingObjects;
     unsigned NumLookups;
+    bool HasDeletedMessage;
+
+    size_t numTrailingObjects(OverloadToken<DeclAccessPair>) const {
+      return NumLookups;
+    }
 
   public:
-    static DefaultedFunctionInfo *Create(ASTContext &Context,
-                                         ArrayRef<DeclAccessPair> Lookups);
+    static DefaultedOrDeletedFunctionInfo *
+    Create(ASTContext &Context, ArrayRef<DeclAccessPair> Lookups,
+           StringLiteral *DeletedMessage = nullptr);
+
     /// Get the unqualified lookup results that should be used in this
     /// defaulted function definition.
     ArrayRef<DeclAccessPair> getUnqualifiedLookups() const {
       return {getTrailingObjects<DeclAccessPair>(), NumLookups};
     }
+
+    StringLiteral *getDeletedMessage() const {
+      return HasDeletedMessage ? *getTrailingObjects<StringLiteral *>()
+                               : nullptr;
+    }
+
+    void setDeletedMessage(StringLiteral *Message);
   };
 
 private:
@@ -2064,12 +2090,12 @@ private:
   ParmVarDecl **ParamInfo = nullptr;
 
   /// The active member of this union is determined by
-  /// FunctionDeclBits.HasDefaultedFunctionInfo.
+  /// FunctionDeclBits.HasDefaultedOrDeletedInfo.
   union {
     /// The body of the function.
     LazyDeclStmtPtr Body;
     /// Information about a future defaulted function definition.
-    DefaultedFunctionInfo *DefaultedInfo;
+    DefaultedOrDeletedFunctionInfo *DefaultedOrDeletedInfo;
   };
 
   unsigned ODRHash;
@@ -2327,18 +2353,18 @@ public:
 
   /// Returns whether this specific declaration of the function has a body.
   bool doesThisDeclarationHaveABody() const {
-    return (!FunctionDeclBits.HasDefaultedFunctionInfo && Body) ||
+    return (!FunctionDeclBits.HasDefaultedOrDeletedInfo && Body) ||
            isLateTemplateParsed();
   }
 
   void setBody(Stmt *B);
   void setLazyBody(uint64_t Offset) {
-    FunctionDeclBits.HasDefaultedFunctionInfo = false;
+    FunctionDeclBits.HasDefaultedOrDeletedInfo = false;
     Body = LazyDeclStmtPtr(Offset);
   }
 
-  void setDefaultedFunctionInfo(DefaultedFunctionInfo *Info);
-  DefaultedFunctionInfo *getDefaultedFunctionInfo() const;
+  void setDefaultedOrDeletedInfo(DefaultedOrDeletedFunctionInfo *Info);
+  DefaultedOrDeletedFunctionInfo *getDefalutedOrDeletedInfo() const;
 
   /// Whether this function is variadic.
   bool isVariadic() const;
@@ -2541,7 +2567,7 @@ public:
     return FunctionDeclBits.IsDeleted && !isDefaulted();
   }
 
-  void setDeletedAsWritten(bool D = true) { FunctionDeclBits.IsDeleted = D; }
+  void setDeletedAsWritten(bool D = true, StringLiteral *Message = nullptr);
 
   /// Determines whether this function is "main", which is the
   /// entry point into an executable program.
@@ -2695,6 +2721,13 @@ public:
   void getAssociatedConstraints(SmallVectorImpl<const Expr *> &AC) const {
     if (auto *TRC = getTrailingRequiresClause())
       AC.push_back(TRC);
+  }
+
+  /// Get the message that indicates why this function was deleted.
+  StringLiteral *getDeletedMessage() const {
+    return FunctionDeclBits.HasDefaultedOrDeletedInfo
+               ? DefaultedOrDeletedInfo->getDeletedMessage()
+               : nullptr;
   }
 
   void setPreviousDeclaration(FunctionDecl * PrevDecl);
@@ -3142,7 +3175,7 @@ class FieldDecl : public DeclaratorDecl, public Mergeable<FieldDecl> {
 
 protected:
   FieldDecl(Kind DK, DeclContext *DC, SourceLocation StartLoc,
-            SourceLocation IdLoc, IdentifierInfo *Id, QualType T,
+            SourceLocation IdLoc, const IdentifierInfo *Id, QualType T,
             TypeSourceInfo *TInfo, Expr *BW, bool Mutable,
             InClassInitStyle InitStyle)
       : DeclaratorDecl(DK, DC, IdLoc, Id, T, TInfo, StartLoc), BitField(false),
@@ -3158,7 +3191,7 @@ public:
 
   static FieldDecl *Create(const ASTContext &C, DeclContext *DC,
                            SourceLocation StartLoc, SourceLocation IdLoc,
-                           IdentifierInfo *Id, QualType T,
+                           const IdentifierInfo *Id, QualType T,
                            TypeSourceInfo *TInfo, Expr *BW, bool Mutable,
                            InClassInitStyle InitStyle);
 
@@ -3383,8 +3416,9 @@ public:
   friend class ASTDeclReader;
 
   static IndirectFieldDecl *Create(ASTContext &C, DeclContext *DC,
-                                   SourceLocation L, IdentifierInfo *Id,
-                                   QualType T, llvm::MutableArrayRef<NamedDecl *> CH);
+                                   SourceLocation L, const IdentifierInfo *Id,
+                                   QualType T,
+                                   llvm::MutableArrayRef<NamedDecl *> CH);
 
   static IndirectFieldDecl *CreateDeserialized(ASTContext &C, unsigned ID);
 
@@ -3432,9 +3466,9 @@ class TypeDecl : public NamedDecl {
   void anchor() override;
 
 protected:
-  TypeDecl(Kind DK, DeclContext *DC, SourceLocation L, IdentifierInfo *Id,
+  TypeDecl(Kind DK, DeclContext *DC, SourceLocation L, const IdentifierInfo *Id,
            SourceLocation StartL = SourceLocation())
-    : NamedDecl(DK, DC, L, Id), LocStart(StartL) {}
+      : NamedDecl(DK, DC, L, Id), LocStart(StartL) {}
 
 public:
   // Low-level accessor. If you just want the type defined by this node,
@@ -3476,7 +3510,7 @@ class TypedefNameDecl : public TypeDecl, public Redeclarable<TypedefNameDecl> {
 protected:
   TypedefNameDecl(Kind DK, ASTContext &C, DeclContext *DC,
                   SourceLocation StartLoc, SourceLocation IdLoc,
-                  IdentifierInfo *Id, TypeSourceInfo *TInfo)
+                  const IdentifierInfo *Id, TypeSourceInfo *TInfo)
       : TypeDecl(DK, DC, IdLoc, Id, StartLoc), redeclarable_base(C),
         MaybeModedTInfo(TInfo, 0) {}
 
@@ -3563,13 +3597,14 @@ private:
 /// type specifier.
 class TypedefDecl : public TypedefNameDecl {
   TypedefDecl(ASTContext &C, DeclContext *DC, SourceLocation StartLoc,
-              SourceLocation IdLoc, IdentifierInfo *Id, TypeSourceInfo *TInfo)
+              SourceLocation IdLoc, const IdentifierInfo *Id,
+              TypeSourceInfo *TInfo)
       : TypedefNameDecl(Typedef, C, DC, StartLoc, IdLoc, Id, TInfo) {}
 
 public:
   static TypedefDecl *Create(ASTContext &C, DeclContext *DC,
                              SourceLocation StartLoc, SourceLocation IdLoc,
-                             IdentifierInfo *Id, TypeSourceInfo *TInfo);
+                             const IdentifierInfo *Id, TypeSourceInfo *TInfo);
   static TypedefDecl *CreateDeserialized(ASTContext &C, unsigned ID);
 
   SourceRange getSourceRange() const override LLVM_READONLY;
@@ -4455,7 +4490,7 @@ public:
 ///
 /// \note This is used in libInterpreter, clang -cc1 -fincremental-extensions
 /// and in tools such as clang-repl.
-class TopLevelStmtDecl : public Decl {
+class TopLevelStmtDecl : public Decl, public DeclContext {
   friend class ASTDeclReader;
   friend class ASTDeclWriter;
 
@@ -4463,7 +4498,7 @@ class TopLevelStmtDecl : public Decl {
   bool IsSemiMissing = false;
 
   TopLevelStmtDecl(DeclContext *DC, SourceLocation L, Stmt *S)
-      : Decl(TopLevelStmt, DC, L), Statement(S) {}
+      : Decl(TopLevelStmt, DC, L), DeclContext(TopLevelStmt), Statement(S) {}
 
   virtual void anchor();
 
@@ -4474,15 +4509,19 @@ public:
   SourceRange getSourceRange() const override LLVM_READONLY;
   Stmt *getStmt() { return Statement; }
   const Stmt *getStmt() const { return Statement; }
-  void setStmt(Stmt *S) {
-    assert(IsSemiMissing && "Operation supported for printing values only!");
-    Statement = S;
-  }
+  void setStmt(Stmt *S);
   bool isSemiMissing() const { return IsSemiMissing; }
   void setSemiMissing(bool Missing = true) { IsSemiMissing = Missing; }
 
   static bool classof(const Decl *D) { return classofKind(D->getKind()); }
   static bool classofKind(Kind K) { return K == TopLevelStmt; }
+
+  static DeclContext *castToDeclContext(const TopLevelStmtDecl *D) {
+    return static_cast<DeclContext *>(const_cast<TopLevelStmtDecl *>(D));
+  }
+  static TopLevelStmtDecl *castFromDeclContext(const DeclContext *DC) {
+    return static_cast<TopLevelStmtDecl *>(const_cast<DeclContext *>(DC));
+  }
 };
 
 /// Represents a block literal declaration, which is like an

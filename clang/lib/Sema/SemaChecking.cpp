@@ -17197,6 +17197,8 @@ void Sema::CheckForIntOverflow (const Expr *E) {
         E->EvaluateForOverflow(Context);
     }
 
+    void VisitFullExpr(const FullExpr *E) { }
+
     void VisitObjCBoxeExpr(const ObjCBoxedExpr *E) { CheckForOverflow(E); }
 
     void VisitUnaryOperator(const UnaryOperator *E) { CheckForOverflow(E); }

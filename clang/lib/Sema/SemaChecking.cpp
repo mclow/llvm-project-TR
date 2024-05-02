@@ -17189,21 +17189,19 @@ void Sema::CheckBoolLikeConversion(Expr *E, SourceLocation CC) {
 /// results in integer overflow
 void Sema::CheckForIntOverflow (const Expr *E) {
   // Use a work list to deal with nested struct initializers.
-  SmallVector<const Expr *, 2> Exprs(1, E);
+  SmallVector<const Expr *, 6> Exprs(1, E);
 
   do {
     const Expr *OriginalE = Exprs.pop_back_val();
     const Expr *E = OriginalE->IgnoreParenCasts();
 
-    if (isa<BinaryOperator, UnaryOperator>(E)) {
+    if (isa<BinaryOperator, UnaryOperator, ObjCBoxedExpr>(E)) {
       E->EvaluateForOverflow(Context);
       continue;
     }
 
     if (const auto *InitList = dyn_cast<InitListExpr>(OriginalE))
       Exprs.append(InitList->inits().begin(), InitList->inits().end());
-    else if (isa<ObjCBoxedExpr>(OriginalE))
-      E->EvaluateForOverflow(Context);
     else if (const auto *Call = dyn_cast<CallExpr>(E))
       Exprs.append(Call->arg_begin(), Call->arg_end());
     else if (const auto *Message = dyn_cast<ObjCMessageExpr>(E))

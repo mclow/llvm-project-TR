@@ -17188,40 +17188,24 @@ void Sema::CheckBoolLikeConversion(Expr *E, SourceLocation CC) {
 /// Diagnose when expression is an integer constant expression and its evaluation
 /// results in integer overflow
 void Sema::CheckForIntOverflow (const Expr *E) {
-  // Use a work list to deal with nested struct initializers.
-  SmallVector<const Expr *, 2> Exprs(1, E);
+  struct OverflowChecker : ConstEvaluatedExprVisitor<OverflowChecker> {
+    using Base = ConstEvaluatedExprVisitor<OverflowChecker>;
+    using Base::Base;
 
-  do {
-    const Expr *OriginalE = Exprs.pop_back_val();
-    const Expr *E = OriginalE->IgnoreParenCasts();
-
-    if (isa<BinaryOperator, UnaryOperator>(E)) {
-      E->EvaluateForOverflow(Context);
-      continue;
+    void CheckForOverflow(const Expr *E) {
+      if (E->getType()->isArithmeticType())
+        E->EvaluateForOverflow(Context);
     }
 
-    if (const auto *InitList = dyn_cast<InitListExpr>(OriginalE))
-      Exprs.append(InitList->inits().begin(), InitList->inits().end());
-    else if (isa<ObjCBoxedExpr>(OriginalE))
-      E->EvaluateForOverflow(Context);
-    else if (const auto *Call = dyn_cast<CallExpr>(E))
-      Exprs.append(Call->arg_begin(), Call->arg_end());
-    else if (const auto *Message = dyn_cast<ObjCMessageExpr>(E))
-      Exprs.append(Message->arg_begin(), Message->arg_end());
-    else if (const auto *Construct = dyn_cast<CXXConstructExpr>(E))
-      Exprs.append(Construct->arg_begin(), Construct->arg_end());
-    else if (const auto *Temporary = dyn_cast<CXXBindTemporaryExpr>(E))
-      Exprs.push_back(Temporary->getSubExpr());
-    else if (const auto *Array = dyn_cast<ArraySubscriptExpr>(E))
-      Exprs.push_back(Array->getIdx());
-    else if (const auto *Compound = dyn_cast<CompoundLiteralExpr>(E))
-      Exprs.push_back(Compound->getInitializer());
-    else if (const auto *New = dyn_cast<CXXNewExpr>(E);
-             New && New->isArray()) {
-      if (auto ArraySize = New->getArraySize())
-        Exprs.push_back(*ArraySize);
-    }
-  } while (!Exprs.empty());
+    void VisitObjCBoxeExpr(const ObjCBoxedExpr *E) { CheckForOverflow(E); }
+
+    void VisitUnaryOperator(const UnaryOperator *E) { CheckForOverflow(E); }
+
+    void VisitBinaryOperator(const BinaryOperator *E) { CheckForOverflow(E); }
+
+  } Checker(getASTContext());
+
+  Checker.Visit(E);
 }
 
 namespace {

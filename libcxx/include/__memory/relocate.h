@@ -14,10 +14,10 @@ _LIBCPP_BEGIN_NAMESPACE_STD
 
 #if _LIBCPP_STD_VER >= 20
 
-template <class T>
-  requires(is_trivially_relocatable_v<T> && !is_const_v<T>)
-_LIBCPP_EXPORTED_FROM_ABI T* trivially_relocate(T* begin, T* end, T* new_location) {
-  return __builtin_trivially_relocate(new_location, begin, end - begin);
+template <class _Tp>
+  requires(is_trivially_relocatable_v<_Tp> && !is_const_v<_Tp>)
+_LIBCPP_EXPORTED_FROM_ABI _Tp* trivially_relocate(_Tp* __begin, _Tp* __end, _Tp* __new_location) noexcept {
+  return __builtin_trivially_relocate(__new_location, __begin, sizeof(_Tp) * (__end - __begin));
 }
 
 #endif

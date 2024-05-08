@@ -21,6 +21,7 @@
 #include <__memory/allocator_traits.h>
 #include <__memory/construct_at.h>
 #include <__memory/pointer_traits.h>
+#include <__memory/relocate.h>
 #include <__memory/voidify.h>
 #include <__type_traits/enable_if.h>
 #include <__type_traits/extent.h>
@@ -615,11 +616,22 @@ struct __allocator_has_trivial_destroy<allocator<_Tp>, _Up> : true_type {};
 // - is_nothrow_move_constructible<_Tp>
 // - is_copy_constructible<_Tp>
 // - __libcpp_is_trivially_relocatable<_Tp>
+// - is_trivially_relocatable_v<_Tp>
 template <class _Alloc, class _Tp>
 _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX14 void
 __uninitialized_allocator_relocate(_Alloc& __alloc, _Tp* __first, _Tp* __last, _Tp* __result) {
   static_assert(__is_cpp17_move_insertable<_Alloc>::value,
                 "The specified type does not meet the requirements of Cpp17MoveInsertable");
+
+#if _LIBCPP_STD_VER >= 20
+  if (!__libcpp_is_constant_evaluated()) {
+    if constexpr (is_trivially_relocatable_v<_Tp>) {
+      (void) trivially_relocate(__first, __last, const_cast<__remove_const_t<_Tp>*>(__result));
+      return ;
+     }
+  }
+#endif
+
   if (__libcpp_is_constant_evaluated() || !__libcpp_is_trivially_relocatable<_Tp>::value ||
       !__allocator_has_trivial_move_construct<_Alloc, _Tp>::value ||
       !__allocator_has_trivial_destroy<_Alloc, _Tp>::value) {

@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -std=c++2b -verify %s
+// RUN: %clang_cc1 -std=c++2c -verify %s
 
 namespace Expressions {
 
@@ -140,3 +140,60 @@ class TestDependentErrors trivially_relocatable : T {};
 TestDependentErrors<Trivial> Ok;
 TestDependentErrors<NonRelocatable> Err; // expected-note {{in instantiation of template class}}
 }
+
+
+namespace std {
+
+template <class T>
+struct swap_uses_value_representation {
+    static constexpr bool value = __can_swap_using_value_representation(T);
+};
+
+
+template <class T>
+constexpr bool swap_uses_value_representation_v = swap_uses_value_representation<T>::value;
+
+}
+
+class S1 {};
+class S2 { int m1; };
+class S3 { const int m1;  int m2; }; // expected-warning {{does not declare any constructor to initialize its non-modifiable members}} \
+                                     // expected-note {{const member 'm1' will never be initialized}}
+class S4 { const int &m1; int m2; }; // expected-warning {{does not declare any constructor to initialize its non-modifiable members}} \
+                                     // expected-note {{reference member 'm1' will never be initialized}}
+class S5 { int &m1; };               // expected-warning {{does not declare any constructor to initialize its non-modifiable members}} \
+                                     // expected-note {{reference member 'm1' will never be initialized}}
+
+class Bad { int m1; };
+
+namespace std {
+template <>
+struct swap_uses_value_representation<Bad> {
+    static constexpr bool value = false;
+};
+
+}
+
+
+using std::swap_uses_value_representation_v;
+
+static_assert(swap_uses_value_representation_v<int>);
+static_assert(!swap_uses_value_representation_v<int const>);
+static_assert(!swap_uses_value_representation_v<int &>);
+static_assert(!swap_uses_value_representation_v<int &&>);
+static_assert( swap_uses_value_representation_v<S1>);
+static_assert( swap_uses_value_representation_v<S2>);
+static_assert(!swap_uses_value_representation_v<S3>);
+static_assert(!swap_uses_value_representation_v<S4>);
+static_assert(!swap_uses_value_representation_v<S5>);
+static_assert(!swap_uses_value_representation_v<Bad>);
+
+struct empty {};
+struct Test {
+    empty nothing [[no_unique_address]];
+    int   data;
+};
+
+static_assert( swap_uses_value_representation_v<empty>);
+static_assert( swap_uses_value_representation_v<Test>);
+static_assert( sizeof(Test) == sizeof(int));

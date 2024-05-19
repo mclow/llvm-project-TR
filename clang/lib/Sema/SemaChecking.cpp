@@ -2222,7 +2222,7 @@ static ExprResult SemaBuiltinCharCast(Sema &S, CallExpr *TheCall) {
 
   QualType ArgType = TheCall->getArg(0)->getType();
   QualType RetType = TheCall->getArg(1)->getType();
-  if(!ArgType->isPointerType() && !RetType->isPointerType())
+  if(!ArgType->isPointerType() || !RetType->isPointerType())
     return ExprError();
 
   QualType InCharTy  = ArgType->getPointeeType();
@@ -2248,6 +2248,7 @@ static ExprResult SemaBuiltinCharCast(Sema &S, CallExpr *TheCall) {
   if (Arg.isInvalid())
     return ExprError();
   TheCall->setArg(0, Arg.get());
+  return TheCall;
 }
 
 static ExprResult BuiltinTriviallyRelocate(Sema &S, CallExpr *TheCall) {

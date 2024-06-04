@@ -1133,7 +1133,7 @@ void Preprocessor::CollectPpImportSuffix(SmallVectorImpl<Token> &Toks) {
 }
 
 
-void Preprocessor::CheckModuleName(Token Tok, bool AllowMacroExpansion) {
+void Preprocessor::CheckModuleName(Token & Tok, bool AllowMacroExpansion) {
   assert(Tok.is(tok::identifier) && "The first token must be an identifier");
   bool ExpectsIdentifier = false;
   SmallVector<Token, 8> ModuleName{Tok}, PartitionName;
@@ -1181,13 +1181,6 @@ void Preprocessor::CheckModuleName(Token Tok, bool AllowMacroExpansion) {
     break;
   }
 
-  Tok.clearFlag(Token::DisableExpand);
-  auto LastTokCopy = std::make_unique<Token[]>(1);
-  *LastTokCopy.get() = Tok;
-  EnterTokenStream(std::move(LastTokCopy), 1,
-                   /*DisableMacroExpansion=*/false,
-                   /*IsReinject=*/false);
-
   auto CreateAnnotTok = [&](ArrayRef<Token> Names) {
     Token NameTok;
     NameTok.startToken();
@@ -1210,10 +1203,14 @@ void Preprocessor::CheckModuleName(Token Tok, bool AllowMacroExpansion) {
   }
 
   // Put the last token back to stream, it's not a valid part of module name.
+  // We lexed it unexpanded but it might be a valid macro expansion
+  Tok.clearFlag(Token::DisableExpand);
+  Toks.push_back(std::move(Tok));
+
   auto ToksCopy = std::make_unique<Token[]>(Toks.size());
   std::copy(Toks.begin(), Toks.end(), ToksCopy.get());
   EnterTokenStream(std::move(ToksCopy), Toks.size(),
-                   /*DisableMacroExpansion=*/true,
+                   /*DisableMacroExpansion=*/false,
                    /*IsReinject=*/false);
 }
 

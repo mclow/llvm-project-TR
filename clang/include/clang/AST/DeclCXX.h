@@ -127,33 +127,32 @@ public:
   static bool classofKind(Kind K) { return K == AccessSpec; }
 };
 
-class TriviallyRelocatableSpecifier {
+enum class MemberwiseRelocatableOrReplaceableKind {
+  Relocatable,
+  Replaceable
+};
+
+template <MemberwiseRelocatableOrReplaceableKind MK>
+class BasicMemberwiseSpecifier {
 public:
-  enum Kind { TRK_Invalid, TRK_True, TRK_False, TRK_Dependent };
-  TriviallyRelocatableSpecifier() = default;
-  TriviallyRelocatableSpecifier(Kind TriviallyRelocatableKind,
-                                SourceLocation Begin, Expr *E = nullptr)
-      : ExprAndKind(E, TriviallyRelocatableKind), Loc(Begin) {}
-  void SetTriviallyRelocatable(Kind TriviallyRelocatableKind,
-                               SourceLocation Begin, Expr *E = nullptr) {
-    ExprAndKind.setPointerAndInt(E, TriviallyRelocatableKind);
+  BasicMemberwiseSpecifier() = default;
+  BasicMemberwiseSpecifier(SourceLocation Begin)
+      : Loc(Begin) {}
+  void Set(SourceLocation Begin) {
     Loc = Begin;
   }
 
   bool isSet() const { return !Loc.isInvalid(); }
 
-  bool isValid() const { return ExprAndKind.getInt() != TRK_Invalid; }
-
-  Kind getKind() const { return ExprAndKind.getInt(); }
-
   SourceLocation getLocation() const { return Loc; }
 
-  Expr *getCondition() const { return ExprAndKind.getPointer(); }
-
 private:
-  llvm::PointerIntPair<Expr *, 2, Kind> ExprAndKind{nullptr, TRK_Invalid};
   SourceLocation Loc;
 };
+
+using TriviallyRelocatableSpecifier  = BasicMemberwiseSpecifier<MemberwiseRelocatableOrReplaceableKind::Relocatable>;
+using MemberwiseReplaceableSpecifier = BasicMemberwiseSpecifier<MemberwiseRelocatableOrReplaceableKind::Replaceable>;
+
 
 /// Represents a base class of a C++ class.
 ///
@@ -378,6 +377,8 @@ private:
     LazyDeclPtr FirstFriend;
 
     TriviallyRelocatableSpecifier TriviallyRelocatable;
+
+    MemberwiseReplaceableSpecifier MemberwiseReplaceable;
 
     DefinitionData(CXXRecordDecl *D);
 
@@ -752,6 +753,14 @@ public:
     return data().DefaultedMoveConstructorIsDeleted;
   }
 
+  bool defaultedMoveAssignmentIsDeleted() const {
+    assert((!needsOverloadResolutionForMoveAssignment() ||
+            (data().DeclaredSpecialMembers & SMF_MoveAssignment)) &&
+           "this property has not yet been computed by Sema");
+    return data().DefaultedMoveAssignmentIsDeleted;
+  }
+
+
   /// \c true if a defaulted destructor for this class would be deleted.
   bool defaultedDestructorIsDeleted() const {
     assert((!needsOverloadResolutionForDestructor() ||
@@ -834,6 +843,18 @@ public:
   /// When false, a copy constructor will be implicitly declared.
   bool hasUserDeclaredCopyConstructor() const {
     return data().UserDeclaredSpecialMembers & SMF_CopyConstructor;
+  }
+
+  bool hasUserProvidedCopyAssignment() const {
+    return data().UserProvidedCopyAssignment;
+  }
+
+  bool hasUserProvidedMoveAssignment() const {
+    return data().UserProvidedCopyAssignment;
+  }
+
+  bool hasExplicitlyDeletedMoveAssignmentOpOrCtr() const {
+    return data().ExplicitlyDeletedMoveAssignmentOrCtr;
   }
 
   /// Determine whether this class needs an implicit copy
@@ -1498,10 +1519,21 @@ public:
     return data().TriviallyRelocatable;
   }
 
+  MemberwiseReplaceableSpecifier getMemberwiseReplaceableSpecifier() const {
+    return data().MemberwiseReplaceable;
+  }
+
   bool isTriviallyRelocatable() const { return data().IsTriviallyRelocatable; }
 
   void setIsTriviallyRelocatable(bool Set) {
     data().IsTriviallyRelocatable = Set;
+  }
+
+
+  bool isMemberwiseReplaceable() const { return data().IsMemberwiseReplaceable; }
+
+  void setIsMemberwiseReplaceable(bool Set) {
+    data().IsMemberwiseReplaceable = Set;
   }
 
   /// Notify the class that this destructor is now selected.
@@ -1941,6 +1973,9 @@ public:
 
   void setTriviallyRelocatableSpecifier(TriviallyRelocatableSpecifier TRS) {
     data().TriviallyRelocatable = TRS;
+  }
+  void setMemberwiseReplaceableSpecifier(MemberwiseReplaceableSpecifier MRS) {
+    data().MemberwiseReplaceable = MRS;
   }
 };
 

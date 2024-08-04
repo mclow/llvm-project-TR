@@ -13,6 +13,7 @@
 #ifndef LLVM_CLANG_PARSE_PARSER_H
 #define LLVM_CLANG_PARSE_PARSER_H
 
+#include "clang/AST/DeclCXX.h"
 #include "clang/Basic/OpenACCKinds.h"
 #include "clang/Basic/OperatorPrecedence.h"
 #include "clang/Lex/CodeCompletionHandler.h"
@@ -165,6 +166,7 @@ class Parser : public CodeCompletionHandler {
   mutable IdentifierInfo *Ident_GNU_final;
   mutable IdentifierInfo *Ident_override;
   mutable IdentifierInfo *Ident_trivially_relocatable;
+  mutable IdentifierInfo *Ident_memberwise_replaceable;
 
   // C++2a contextual keywords.
   mutable IdentifierInfo *Ident_import;
@@ -3168,9 +3170,15 @@ private:
 
   bool isCXX2CTriviallyRelocatableKeyword(Token Tok) const;
   bool isCXX2CTriviallyRelocatableKeyword() const;
-  void ParseOptionalCXX2CTriviallyRelocatableSpecifier(
-      TriviallyRelocatableSpecifier &TRS);
   bool SkipCXX2CTriviallyRelocatableSpecifier();
+  void ParseOptionalCXX2CTriviallyRelocatableSpecifier(TriviallyRelocatableSpecifier &TRS);
+
+
+  bool isCXX2CMemberwiseReplaceableKeyword(Token Tok) const;
+  bool isCXX2CMemberwiseReplaceableKeyword() const;
+  void ParseOptionalCXX2CMemberwiseReplaceableSpecifier(MemberwiseReplaceableSpecifier &MRS);
+  bool SkipCXX2CMemberwiseReplaceableSpecifier();
+
 
   bool isClassCompatibleKeyword(Token Tok) const;
   bool isClassCompatibleKeyword() const;

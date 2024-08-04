@@ -558,7 +558,7 @@ TYPE_TRAIT_2(/*EmptySpellingName*/, IsDeducible, KEYCXX)
 
 TYPE_TRAIT_1(__is_bitwise_cloneable, IsBitwiseCloneable, KEYALL)
 TYPE_TRAIT_1(__is_cpp_trivially_relocatable, IsCppTriviallyRelocatable, KEYCXX)
-TYPE_TRAIT_1(__can_swap_using_value_representation, CanSwapUsingValueRepresentation, KEYCXX)
+TYPE_TRAIT_1(__is_memberwise_replaceable, IsMemberwiseReplaceable, KEYCXX)
 
 // Embarcadero Expression Traits
 EXPRESSION_TRAIT(__is_lvalue_expr, IsLValueExpr, KEYCXX)

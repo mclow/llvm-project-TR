@@ -32,6 +32,7 @@
 #include "clang/Basic/Builtins.h"
 #include "clang/Basic/HLSLRuntime.h"
 #include "clang/Basic/PartialDiagnostic.h"
+#include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Lex/HeaderSearch.h" // TODO: Sema shouldn't depend on Lex
@@ -18026,37 +18027,18 @@ bool Sema::ActOnDuplicateDefinition(Decl *Prev, SkipBodyInfo &SkipBody) {
   return true;
 }
 
-TriviallyRelocatableSpecifier
-Sema::ActOnTriviallyRelocatableSpecifier(SourceLocation Loc, Expr *E) {
-  TriviallyRelocatableSpecifier Spec;
-  llvm::APSInt Result;
-  TriviallyRelocatableSpecifier::Kind Kind =
-      TriviallyRelocatableSpecifier::TRK_True;
-  if (E) {
-    if (DiagnoseUnexpandedParameterPack(E))
-      Kind = TriviallyRelocatableSpecifier::TRK_Invalid;
-    else if (E->isTypeDependent())
-      Kind = TriviallyRelocatableSpecifier::TRK_Dependent;
-    else {
-      ExprResult Converted = CheckConvertedConstantExpression(
-          E, Context.BoolTy, Result, CCEK_TriviallyRelocatable);
-      if (!Converted.isUsable())
-        Kind = TriviallyRelocatableSpecifier::TRK_Invalid;
-      else if (Converted.get()->isValueDependent())
-        Kind = TriviallyRelocatableSpecifier::TRK_Dependent;
-      else
-        Kind = Result.getBoolValue() ? TriviallyRelocatableSpecifier::TRK_True
-                                     : TriviallyRelocatableSpecifier::TRK_False;
-      E = Converted.get();
-    }
-  }
-  Spec.SetTriviallyRelocatable(Kind, Loc, E);
-  return Spec;
+TriviallyRelocatableSpecifier Sema::ActOnTriviallyRelocatableSpecifier(SourceLocation Loc) {
+    return {Loc};
+}
+
+MemberwiseReplaceableSpecifier Sema::ActOnMemberwiseReplaceableSpecifier(SourceLocation Loc) {
+    return {Loc};
 }
 
 void Sema::ActOnStartCXXMemberDeclarations(
     Scope *S, Decl *TagD, SourceLocation FinalLoc, bool IsFinalSpelledSealed,
     bool IsAbstract, TriviallyRelocatableSpecifier TriviallyRelocatable,
+    MemberwiseReplaceableSpecifier MemberwiseReplaceable,
     SourceLocation LBraceLoc) {
   AdjustDeclIfTemplate(TagD);
   CXXRecordDecl *Record = cast<CXXRecordDecl>(TagD);
@@ -18076,8 +18058,11 @@ void Sema::ActOnStartCXXMemberDeclarations(
                                           : FinalAttr::Keyword_final));
   }
 
-  if (TriviallyRelocatable.isValid() && !Record->isInvalidDecl())
+  if (TriviallyRelocatable.isSet() && !Record->isInvalidDecl())
     Record->setTriviallyRelocatableSpecifier(TriviallyRelocatable);
+
+  if (MemberwiseReplaceable.isSet() && !Record->isInvalidDecl())
+    Record->setMemberwiseReplaceableSpecifier(MemberwiseReplaceable);
 
   // C++ [class]p2:
   //   [...] The class-name is also inserted into the scope of the

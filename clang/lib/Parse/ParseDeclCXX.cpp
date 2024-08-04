@@ -11,12 +11,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/AST/ASTContext.h"
+#include "clang/AST/DeclCXX.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/PrettyDeclStackTrace.h"
 #include "clang/Basic/AttributeCommonInfo.h"
 #include "clang/Basic/Attributes.h"
 #include "clang/Basic/CharInfo.h"
 #include "clang/Basic/OperatorKinds.h"
+#include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Basic/TokenKinds.h"
 #include "clang/Lex/LiteralSupport.h"
@@ -2027,9 +2029,7 @@ void Parser::ParseClassSpecifier(tok::TokenKind TagTokKind,
             getLangOpts().CPlusPlus && Tok.is(tok::colon)) ||
            (isClassCompatibleKeyword() &&
             (NextToken().is(tok::l_brace) || NextToken().is(tok::colon) ||
-             isClassCompatibleKeyword(NextToken()) ||
-             (isCXX2CTriviallyRelocatableKeyword() &&
-              NextToken().is(tok::l_paren))))) {
+             isClassCompatibleKeyword(NextToken())))) {
     if (DS.isFriendSpecified()) {
       // C++ [class.friend]p2:
       //   A class shall not be defined in a friend declaration.
@@ -2704,7 +2704,7 @@ bool Parser::isCXX2CTriviallyRelocatableKeyword(Token Tok) const {
     return false;
   if (!Ident_trivially_relocatable)
     Ident_trivially_relocatable =
-        &PP.getIdentifierTable().get("trivially_relocatable");
+        &PP.getIdentifierTable().get("memberwise_trivially_relocatable");
   IdentifierInfo *II = Tok.getIdentifierInfo();
   return II == Ident_trivially_relocatable;
 }
@@ -2713,38 +2713,48 @@ bool Parser::isCXX2CTriviallyRelocatableKeyword() const {
   return isCXX2CTriviallyRelocatableKeyword(Tok);
 }
 
-void Parser::ParseOptionalCXX2CTriviallyRelocatableSpecifier(
-    TriviallyRelocatableSpecifier &TRS) {
+void Parser::ParseOptionalCXX2CTriviallyRelocatableSpecifier(TriviallyRelocatableSpecifier &TRS) {
   assert(isCXX2CTriviallyRelocatableKeyword() &&
          "expected a trivially_relocatable specifier");
-  Expr *E = nullptr;
-  SourceLocation Loc = ConsumeToken();
-  if (Tok.is(tok::l_paren)) {
-    BalancedDelimiterTracker T(*this, tok::l_paren);
-    T.consumeOpen();
-    ExprResult Res = ParseConstantExpression();
-    T.consumeClose();
-    if (!Res.isInvalid())
-      E = Res.get();
-  }
-  TRS = Actions.ActOnTriviallyRelocatableSpecifier(Loc, E);
+  TRS = Actions.ActOnTriviallyRelocatableSpecifier(ConsumeToken());
 }
 
 bool Parser::SkipCXX2CTriviallyRelocatableSpecifier() {
   assert(isCXX2CTriviallyRelocatableKeyword() &&
          "expected a trivially_relocatable specifier");
   ConsumeToken();
-  if (Tok.is(tok::l_paren)) {
-    ConsumeParen();
-    return SkipUntil(tok::r_paren, StopAtSemi);
-  }
+  return true;
+}
+
+bool Parser::isCXX2CMemberwiseReplaceableKeyword(Token Tok) const {
+  if (!getLangOpts().CPlusPlus || Tok.isNot(tok::identifier))
+    return false;
+  if (!Ident_memberwise_replaceable)
+    Ident_memberwise_replaceable =
+        &PP.getIdentifierTable().get("memberwise_replaceable");
+  IdentifierInfo *II = Tok.getIdentifierInfo();
+  return II == Ident_memberwise_replaceable;
+}
+
+bool Parser::isCXX2CMemberwiseReplaceableKeyword() const {
+  return isCXX2CMemberwiseReplaceableKeyword(Tok);
+}
+void Parser::ParseOptionalCXX2CMemberwiseReplaceableSpecifier(MemberwiseReplaceableSpecifier &MRS) {
+  assert(isCXX2CMemberwiseReplaceableKeyword() &&
+         "expected a memberwise_replacable specifier");
+  MRS = Actions.ActOnMemberwiseReplaceableSpecifier(ConsumeToken());
+}
+bool Parser::SkipCXX2CMemberwiseReplaceableSpecifier() {
+  assert(isCXX2CMemberwiseReplaceableKeyword() &&
+         "expected a memberwise_replacable specifier");
+  ConsumeToken();
   return true;
 }
 
 /// isClassCompatibleKeyword - Determine whether the next token is a C++11
 /// 'final' or Microsoft 'sealed' or 'abstract' contextual keywords.
 bool Parser::isClassCompatibleKeyword(Token Tok) const {
-  if (isCXX2CTriviallyRelocatableKeyword(Tok))
+  if (isCXX2CTriviallyRelocatableKeyword(Tok) || isCXX2CMemberwiseReplaceableKeyword(Tok))
     return true;
   VirtSpecifiers::Specifier Specifier = isCXX11VirtSpecifier(Tok);
   return Specifier == VirtSpecifiers::VS_Final ||
@@ -3865,6 +3875,7 @@ void Parser::ParseCXXMemberSpecification(SourceLocation RecordLoc,
   bool IsFinalSpelledSealed = false;
   bool IsAbstract = false;
   TriviallyRelocatableSpecifier TriviallyRelocatable;
+  MemberwiseReplaceableSpecifier MemberwiseReplacable;
 
   // Parse the optional 'final' keyword.
   if (getLangOpts().CPlusPlus && Tok.is(tok::identifier)) {
@@ -3875,13 +3886,26 @@ void Parser::ParseCXXMemberSpecification(SourceLocation RecordLoc,
           if (TriviallyRelocatable.isSet()) {
             auto Skipped = Tok;
             SkipCXX2CTriviallyRelocatableSpecifier();
-            Diag(Skipped, diag::err_duplicate_class_trivially_relocatable)
-                << TriviallyRelocatable.getLocation();
-          } else {
-            ParseOptionalCXX2CTriviallyRelocatableSpecifier(
-                TriviallyRelocatable);
-            continue;
+            Diag(Skipped, diag::err_duplicate_class_memberwise_specifier)
+                << 0 << TriviallyRelocatable.getLocation();
           }
+          else {
+            ParseOptionalCXX2CTriviallyRelocatableSpecifier(
+              TriviallyRelocatable);
+          }
+          continue;
+        }
+        else if (isCXX2CMemberwiseReplaceableKeyword(Tok)) {
+          if (MemberwiseReplacable.isSet()) {
+            auto Skipped = Tok;
+            SkipCXX2CMemberwiseReplaceableSpecifier();
+            Diag(Skipped, diag::err_duplicate_class_memberwise_specifier)
+                << 1 << MemberwiseReplacable.getLocation();
+          }
+          else {
+          ParseOptionalCXX2CMemberwiseReplaceableSpecifier(MemberwiseReplacable);
+          }
+          continue;
         } else {
           break;
         }
@@ -3922,7 +3946,7 @@ void Parser::ParseCXXMemberSpecification(SourceLocation RecordLoc,
         Diag(FinalLoc, diag::ext_warn_gnu_final);
     }
     assert((FinalLoc.isValid() || AbstractLoc.isValid() ||
-            TriviallyRelocatable.isSet()) &&
+            TriviallyRelocatable.isSet() || MemberwiseReplacable.isSet()) &&
            "not a class definition");
 
     // Parse any C++11 attributes after 'final' keyword.
@@ -3997,7 +4021,7 @@ void Parser::ParseCXXMemberSpecification(SourceLocation RecordLoc,
   if (TagDecl)
     Actions.ActOnStartCXXMemberDeclarations(
         getCurScope(), TagDecl, FinalLoc, IsFinalSpelledSealed, IsAbstract,
-        TriviallyRelocatable, T.getOpenLocation());
+        TriviallyRelocatable, MemberwiseReplacable, T.getOpenLocation());
 
   // C++ 11p3: Members of a class defined with the keyword class are private
   // by default. Members of a class defined with the keywords struct or union

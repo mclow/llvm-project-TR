@@ -17,9 +17,14 @@
 #include "clang/APINotes/APINotesManager.h"
 #include "clang/AST/ASTFwd.h"
 #include "clang/AST/Attr.h"
+<<<<<<< HEAD
 #include "clang/AST/AttrIterator.h"
 #include "clang/AST/CharUnits.h"
 #include "clang/AST/DeclBase.h"
+=======
+#include "clang/AST/Availability.h"
+#include "clang/AST/ComparisonCategories.h"
+>>>>>>> dec76e3b17fb (rough draft of memberwise_trivially_relocatable/memberwise_repleceable)
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/DeclarationName.h"
@@ -3983,8 +3988,9 @@ public:
   /// Invoked when we enter a tag definition that we're skipping.
   SkippedDefinitionContext ActOnTagStartSkippedDefinition(Scope *S, Decl *TD);
 
-  TriviallyRelocatableSpecifier
-  ActOnTriviallyRelocatableSpecifier(SourceLocation Loc, Expr *E);
+  TriviallyRelocatableSpecifier ActOnTriviallyRelocatableSpecifier(SourceLocation Loc);
+
+  MemberwiseReplaceableSpecifier ActOnMemberwiseReplaceableSpecifier(SourceLocation Loc);
 
   /// ActOnStartCXXMemberDeclarations - Invoked when we have parsed a
   /// C++ record definition's base-specifiers clause and are starting its
@@ -3993,6 +3999,7 @@ public:
       Scope *S, Decl *TagDecl, SourceLocation FinalLoc,
       bool IsFinalSpelledSealed, bool IsAbstract,
       TriviallyRelocatableSpecifier TriviallyRelocatable,
+      MemberwiseReplaceableSpecifier MemberwiseReplaceable,
       SourceLocation LBraceLoc);
 
   /// ActOnTagFinishDefinition - Invoked once we have finished parsing
@@ -4001,6 +4008,8 @@ public:
                                 SourceRange BraceRange);
 
   void CheckCXX2CTriviallyRelocatable(CXXRecordDecl *D);
+
+  void CheckMemberwiseReplaceable(CXXRecordDecl *D);
 
   void ActOnTagFinishSkippedDefinition(SkippedDefinitionContext Context);
 

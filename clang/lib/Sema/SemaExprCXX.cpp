@@ -5085,7 +5085,7 @@ static bool CheckUnaryTypeTraitTypeCompleteness(Sema &S, TypeTrait UTT,
   case UTT_IsTriviallyRelocatable:
   case UTT_IsTriviallyEqualityComparable:
   case UTT_IsCppTriviallyRelocatable:
-  case UTT_CanSwapUsingValueRepresentation:
+  case UTT_IsMemberwiseReplaceable:
   case UTT_CanPassInRegs:
   // Per the GCC type traits documentation, T shall be a complete type, cv void,
   // or an array of unknown bound. But GCC actually imposes the same constraints
@@ -5120,42 +5120,6 @@ static bool CheckUnaryTypeTraitTypeCompleteness(Sema &S, TypeTrait UTT,
     return !S.RequireCompleteType(
         Loc, ArgTy, diag::err_incomplete_type_used_in_type_trait_expr);
   }
-}
-
-static bool lookupStdTypeTraitMember(Sema &S, LookupResult &TraitMemberLookup,
-                                     SourceLocation Loc, StringRef Trait,
-                                     TemplateArgumentListInfo &Args,
-                                     unsigned DiagID) {
-
-  DeclarationName Value = S.PP.getIdentifierInfo("value");
-  LookupResult R(S, Value, Loc, Sema::LookupOrdinaryName);
-
-  NamespaceDecl *Std = S.getStdNamespace();
-  if (!Std)
-    return false;
-
-  LookupResult Result(S, &S.PP.getIdentifierTable().get(Trait),
-                      Loc, Sema::LookupOrdinaryName);
-  if (!S.LookupQualifiedName(Result, Std) || Result.isAmbiguous())
-    return false;
-
-  ClassTemplateDecl *TraitTD = Result.getAsSingle<ClassTemplateDecl>();
-  if (!TraitTD) {
-    Result.suppressDiagnostics();
-    return false;
-  }
-
-  // Build the template-id.
-  QualType TraitTy = S.CheckTemplateIdType(TemplateName(TraitTD), Loc, Args);
-  if (TraitTy.isNull() || !S.isCompleteType(Loc, TraitTy))
-    return false;
-
-  CXXRecordDecl *RD = TraitTy->getAsCXXRecordDecl();
-  assert(RD && "specialization of class template is not a class?");
-
-  // Look up the member of the trait type.
-  S.LookupQualifiedName(TraitMemberLookup, RD);
-  return !TraitMemberLookup.isAmbiguous();
 }
 
 static bool HasNoThrowOperator(const RecordType *RT, OverloadedOperatorKind Op,
@@ -5694,36 +5658,8 @@ static bool EvaluateUnaryTypeTrait(Sema &Self, TypeTrait UTT,
     return T.isBitwiseCloneableType(C);
   case UTT_IsCppTriviallyRelocatable:
     return T.isCppTriviallyRelocatableType(C);
-  case UTT_CanSwapUsingValueRepresentation: {
-      if(T->isIncompleteType() || T.isConstQualified()
-          || !T.isCppTriviallyRelocatableType(C))
-        return false;
-      CXXRecordDecl *RD = T->getAsCXXRecordDecl();
-      if(!RD)
-        return true;
-      if(RD->isPolymorphic())
-        return false;
-
-      return llvm::all_of(RD->fields(), [&](const FieldDecl *FD) {
-        auto Type = FD->getType();
-        DeclarationName Value = Self.PP.getIdentifierInfo("value");
-        LookupResult R(Self, Value, KeyLoc, Sema::LookupOrdinaryName);
-        TemplateArgumentListInfo Args(KeyLoc, KeyLoc);
-        Args.addArgument(Self.getTrivialTemplateArgumentLoc(Type, QualType(), KeyLoc));
-        if (!lookupStdTypeTraitMember(Self, R, KeyLoc, "swap_uses_value_representation", Args, /*DiagID*/ 0) ||
-            R.empty())
-          return false;
-        ExprResult E = Self.BuildDeclarationNameExpr(CXXScopeSpec(), R, /*NeedsADL*/false);
-        if (E.isInvalid())
-          return false;
-        llvm::APSInt Result;
-        E = Self.VerifyIntegerConstantExpression(E.get(), &Result);
-        if(E.isInvalid())
-            return false;
-        return Result.getBoolValue();
-      });
-      break;
-    }
+  case UTT_IsMemberwiseReplaceable:
+      return T.isMemberwiseReplaceableType(C);
   case UTT_IsReferenceable:
     return T.isReferenceable();
   case UTT_CanPassInRegs:

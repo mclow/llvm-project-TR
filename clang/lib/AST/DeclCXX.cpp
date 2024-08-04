@@ -103,14 +103,18 @@ CXXRecordDecl::DefinitionData::DefinitionData(CXXRecordDecl *D)
       HasConstexprDefaultConstructor(false),
       DefaultedDestructorIsConstexpr(true),
       HasNonLiteralTypeFieldsOrBases(false), StructuralIfLiteral(true),
-      UserProvidedDefaultConstructor(false), DeclaredSpecialMembers(0),
+      UserProvidedDefaultConstructor(false),
+      UserProvidedMoveAssignment(false),
+      UserProvidedCopyAssignment(false),
+      ExplicitlyDeletedMoveAssignmentOrCtr(false),
+      DeclaredSpecialMembers(0),
       ImplicitCopyConstructorCanHaveConstParamForVBase(true),
       ImplicitCopyConstructorCanHaveConstParamForNonVBase(true),
       ImplicitCopyAssignmentHasConstParam(true),
       HasDeclaredCopyConstructorWithConstParam(false),
       HasDeclaredCopyAssignmentWithConstParam(false),
       IsAnyDestructorNoReturn(false), IsHLSLIntangible(false),
-      IsTriviallyRelocatable(false), IsLambda(false),
+      IsTriviallyRelocatable(false), IsMemberwiseReplaceable(false), IsLambda(false),
       IsParsingBaseSpecifiers(false), ComputedVisibleConversions(false),
       HasODRHash(false), Definition(D) {}
 
@@ -894,15 +898,15 @@ void CXXRecordDecl::addedMember(Decl *D) {
 
     if (Method->isCopyAssignmentOperator()) {
       SMKind |= SMF_CopyAssignment;
-
       const auto *ParamTy =
           Method->getNonObjectParameter(0)->getType()->getAs<ReferenceType>();
       if (!ParamTy || ParamTy->getPointeeType().isConstQualified())
         data().HasDeclaredCopyAssignmentWithConstParam = true;
     }
 
-    if (Method->isMoveAssignmentOperator())
+    if (Method->isMoveAssignmentOperator()) {
       SMKind |= SMF_MoveAssignment;
+    }
 
     // Keep the list of conversion functions up-to-date.
     if (auto *Conversion = dyn_cast<CXXConversionDecl>(D)) {
@@ -1495,7 +1499,10 @@ void CXXRecordDecl::addedEligibleSpecialMemberFunction(const CXXMethodDecl *MD,
     if (DD->isNoReturn())
       data().IsAnyDestructorNoReturn = true;
   }
-
+  if(SMKind == SMF_CopyAssignment)
+    data().UserProvidedCopyAssignment = MD->isUserProvided();
+  else if(SMKind == SMF_MoveAssignment)
+    data().UserProvidedMoveAssignment = MD->isUserProvided();
   if (!MD->isImplicit() && !MD->isUserProvided()) {
     // This method is user-declared but not user-provided. We can't work
     // out whether it's trivial yet (not until we get to the end of the
@@ -1517,6 +1524,9 @@ void CXXRecordDecl::addedEligibleSpecialMemberFunction(const CXXMethodDecl *MD,
     if (!MD->isUserProvided())
       data().DeclaredNonTrivialSpecialMembersForCall |= SMKind;
   }
+
+  if(MD->isDeleted() && (SMKind == SMF_MoveConstructor || SMKind == SMF_MoveAssignment))
+    data().ExplicitlyDeletedMoveAssignmentOrCtr = true;
 }
 
 void CXXRecordDecl::finishedDefaultedOrDeletedMember(CXXMethodDecl *D) {

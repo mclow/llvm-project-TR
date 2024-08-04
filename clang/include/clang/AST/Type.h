@@ -1144,6 +1144,8 @@ public:
 
   bool isCppTriviallyRelocatableType(const ASTContext &Context) const;
 
+  bool isMemberwiseReplaceableType(const ASTContext &Context) const;
+
   /// Returns true if it is a class and it might be dynamic.
   bool mayBeDynamicClass() const;
 

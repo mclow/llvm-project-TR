@@ -1880,7 +1880,7 @@ static ExprResult BuiltinIsWithinLifetime(Sema &S, CallExpr *TheCall) {
     return ExprError();
   }
 static ExprResult BuiltinTriviallyRelocate(Sema &S, CallExpr *TheCall) {
-  if (checkArgCount(S, TheCall, 3))
+  if (S.checkArgCount(TheCall, 3))
     return ExprError();
 
   QualType ArgTy = TheCall->getArg(0)->getType();

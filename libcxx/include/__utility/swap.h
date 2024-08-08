@@ -14,6 +14,8 @@
 #include <__type_traits/enable_if.h>
 #include <__type_traits/is_assignable.h>
 #include <__type_traits/is_constructible.h>
+#include <__type_traits/is_trivially_assignable.h>
+#include <__type_traits/is_trivially_constructible.h>
 #include <__type_traits/is_nothrow_assignable.h>
 #include <__type_traits/is_nothrow_constructible.h>
 #include <__type_traits/is_swappable.h>
@@ -60,13 +62,13 @@ void swap_value_representations(_Tp& __a, _Tp& __b) {
   char __buffer[__size];
   if constexpr (__chunk) {
     for (std::size_t n = 0; n < __chunk; n++, __aptr += __size, __bptr += __size) {
-      __builtin_memmove(__buffer, __aptr, __size);
+      __builtin_memcpy(__buffer, __aptr, __size);
       __builtin_memmove(__aptr, __bptr, __size);
       __builtin_memmove(__bptr, __buffer, __size);
     }
   }
   if constexpr (__rem) {
-    __builtin_memmove(__buffer, __aptr, __rem);
+    __builtin_memcpy(__buffer, __aptr, __rem);
     __builtin_memmove(__aptr, __bptr, __rem);
     __builtin_memmove(__bptr, __buffer, __rem);
   }
@@ -78,8 +80,8 @@ inline _LIBCPP_HIDE_FROM_ABI __swap_result_t<_Tp> _LIBCPP_CONSTEXPR_SINCE_CXX20 
     _NOEXCEPT_(is_nothrow_move_constructible<_Tp>::value&& is_nothrow_move_assignable<_Tp>::value) {
 #if _LIBCPP_STD_VER >= 26
   if !consteval {
-    if constexpr (!__is_scalar(_Tp) && std::is_trivially_relocatable_v<_Tp> && std::is_replaceable_v<_Tp> &&
-                  sizeof(_Tp) > sizeof(void*)) {
+    if constexpr (!(std::is_trivially_move_assignable_v<_Tp> && std::is_trivially_move_constructible_v<_Tp>)
+                 && std::is_trivially_relocatable_v<_Tp> && std::is_replaceable_v<_Tp>) {
       bool __is_eligible = true;
       if constexpr (__is_polymorphic(_Tp)) {
         if (typeid(__x) != typeid(_Tp) || typeid(__y) != typeid(_Tp))

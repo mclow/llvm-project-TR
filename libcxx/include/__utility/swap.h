@@ -41,10 +41,15 @@ template <class>
 using __swap_result_t = void;
 #endif
 
+//void __swap_overlapping(char* a, char* b, std::size_t n);
+//{
+//  _LIBCPP_ASSERT_NON_OVERLAPPING_RANGES(false, "swapping overlapping ranges");
+//}
+
 #if _LIBCPP_STD_VER >= 26
 template <class _Tp>
   requires std::is_trivially_relocatable_v<_Tp> && std::is_replaceable_v<_Tp>
-void swap_value_representations(_Tp& __a, _Tp& __b) noexcept {
+void swap_value_representations(_Tp& __a, _Tp& __b) {
   char* __aptr = reinterpret_cast<char*>(&__a);
   char* __bptr = reinterpret_cast<char*>(&__b);
 
@@ -52,10 +57,12 @@ void swap_value_representations(_Tp& __a, _Tp& __b) noexcept {
   _LIBCPP_ASSERT_ARGUMENT_WITHIN_DOMAIN(typeid(__a) == typeid(_Tp), "the dynamic type of a is not that of T");
   _LIBCPP_ASSERT_ARGUMENT_WITHIN_DOMAIN(typeid(__b) == typeid(_Tp), "the dynamic type of b is not that of T");
 
-  _LIBCPP_ASSERT_ARGUMENT_WITHIN_DOMAIN(
-      !__is_pointer_in_range(__aptr, __aptr + __datasizeof(_Tp), __bptr) &&
-          !__is_pointer_in_range(__bptr, __bptr + __datasizeof(_Tp), __aptr),
-      "Supporting overlapping objects would prevent optimizations");
+
+  //auto abs = [](auto __a) { return __a < ptrdiff_t(0) ? - __a : __a; };
+  //if (abs(&__aptr - &__bptr) < ptrdiff_t(__datasizeof(_Tp))) [[unlikely]] {
+  //  __swap_overlapping(__aptr, __bptr, __datasizeof(_Tp));
+  //  return;
+  //}
 
   // TODO: research better memswap algorithms
   constexpr size_t __size  = __datasizeof(_Tp) < 256 ? __datasizeof(_Tp) : 256;
@@ -89,9 +96,6 @@ inline _LIBCPP_HIDE_FROM_ABI __swap_result_t<_Tp> _LIBCPP_CONSTEXPR_SINCE_CXX20 
         if (typeid(__x) != typeid(_Tp) || typeid(__y) != typeid(_Tp))
           __is_eligible = false;
       }
-      auto abs = [](auto a) { return a < ptrdiff_t(0) ? -a : a; };
-      if (abs(&__x - &__y) < ptrdiff_t(__datasizeof(_Tp))) [[unlikely]]
-        __is_eligible = false;
       if (__is_eligible) [[likely]] {
         swap_value_representations(__x, __y);
         return;

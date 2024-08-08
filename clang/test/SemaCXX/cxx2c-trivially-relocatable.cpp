@@ -107,3 +107,125 @@ class TestDependentErrors memberwise_trivially_relocatable : T {};
 // expected-note@-2 {{because it inherits from a non trivially-relocatable class 'NonRelocatable'}}
 TestDependentErrors<Trivial> Ok;
 TestDependentErrors<NonRelocatable> Err; // expected-note {{in instantiation of template class}}
+
+struct DeletedMove {
+    DeletedMove(DeletedMove&&) = delete;
+};
+struct DeletedCopy {
+    DeletedCopy(const DeletedCopy&) = delete;
+};
+struct DeletedMoveAssign {
+    DeletedMoveAssign& operator=(DeletedMoveAssign&&) = delete;
+};
+
+static_assert(!__is_cpp_trivially_relocatable(DeletedMove));
+static_assert(!__is_cpp_trivially_relocatable(DeletedCopy));
+static_assert(!__is_cpp_trivially_relocatable(DeletedMoveAssign));
+
+
+
+namespace replaceable {
+
+struct DeletedMove {
+    DeletedMove(DeletedMove&&) = delete;
+};
+struct DeletedCopy {
+    DeletedCopy(const DeletedCopy&) = delete;
+};
+struct DeletedMoveAssign {
+    DeletedMoveAssign& operator=(DeletedMoveAssign&&) = delete;
+};
+
+struct DefaultedMove {
+    DefaultedMove(DefaultedMove&&) = default;
+    DefaultedMove& operator=(DefaultedMove&&) = default;
+};
+struct DefaultedCopy {
+    DefaultedCopy(const DefaultedCopy&) = default;
+    DefaultedCopy(DefaultedCopy&&) = default;
+    DefaultedCopy& operator=(DefaultedCopy&&) = default;
+};
+struct DefaultedMoveAssign {
+    DefaultedMoveAssign(DefaultedMoveAssign&&) = default;
+    DefaultedMoveAssign& operator=(DefaultedMoveAssign&&) = default;
+};
+
+struct UserProvidedMove {
+    UserProvidedMove(UserProvidedMove&&){};
+};
+struct UserProvidedCopy {
+    UserProvidedCopy(const UserProvidedCopy&) {};
+};
+struct UserProvidedMoveAssign {
+    UserProvidedMoveAssign& operator=(const UserProvidedMoveAssign&){return *this;};
+};
+
+struct Empty{};
+static_assert(__builtin_is_replaceable(Empty));
+struct S1 memberwise_replaceable{};
+static_assert(__builtin_is_replaceable(S1));
+
+static_assert(__builtin_is_replaceable(DefaultedMove));
+static_assert(__builtin_is_replaceable(DefaultedCopy));
+static_assert(__builtin_is_replaceable(DefaultedMoveAssign));
+
+static_assert(!__builtin_is_replaceable(DeletedMove));
+static_assert(!__builtin_is_replaceable(DeletedCopy));
+static_assert(!__builtin_is_replaceable(DeletedMoveAssign));
+
+static_assert(!__builtin_is_replaceable(UserProvidedMove));
+static_assert(!__builtin_is_replaceable(UserProvidedCopy));
+static_assert(!__builtin_is_replaceable(UserProvidedMoveAssign));
+
+using NotReplaceable = DeletedMove;
+
+template <typename T>
+struct S {
+    T t;
+};
+
+template <typename T>
+struct WithBase : T{};
+
+template <typename T>
+struct WithVBase : virtual T{};
+
+struct WithVirtual {
+    virtual ~WithVirtual() = default;
+    WithVirtual(WithVirtual&&) = default;
+    WithVirtual& operator=(WithVirtual&&) = default;
+};
+
+static_assert(__builtin_is_replaceable(S<int>));
+static_assert(__builtin_is_replaceable(S<volatile int>));
+static_assert(!__builtin_is_replaceable(S<const int>));
+static_assert(!__builtin_is_replaceable(S<const int&>));
+static_assert(!__builtin_is_replaceable(S<int&>));
+static_assert(__builtin_is_replaceable(S<int[2]>));
+static_assert(!__builtin_is_replaceable(S<const int[2]>));
+static_assert(__builtin_is_replaceable(WithBase<S<int>>));
+static_assert(!__builtin_is_replaceable(WithBase<S<const int>>));
+static_assert(!__builtin_is_replaceable(WithBase<UserProvidedMove>));
+static_assert(__builtin_is_replaceable(WithVBase<S<int>>));
+static_assert(!__builtin_is_replaceable(WithVBase<S<const int>>));
+static_assert(!__builtin_is_replaceable(WithVBase<UserProvidedMove>));
+static_assert(__builtin_is_replaceable(WithVirtual));
+
+
+struct U1 memberwise_replaceable {
+    ~U1() = delete;
+    U1(U1&&) = default;
+    U1& operator=(U1&&) = default;
+
+};
+static_assert(__builtin_is_replaceable(U1));
+
+struct U2 memberwise_replaceable {
+// expected-error@-1 {{invalid 'memberwise_replaceable' specifier on non memberwise replaceable class 'U2'}}
+// expected-note@-2 {{because it has a deleted move constructor or assignment operator}}
+    U2(const U2&) = delete;
+};
+static_assert(!__builtin_is_replaceable(U2));
+
+
+}

@@ -35,6 +35,12 @@ struct is_trivially_relocatable : integral_constant<bool, __is_cpp_trivially_rel
 template <class _Tp>
 inline constexpr bool is_trivially_relocatable_v = __is_cpp_trivially_relocatable(_Tp);
 
+template <class _Tp>
+struct is_replaceable : integral_constant<bool, __builtin_is_replaceable(_Tp)> {};
+
+template <class _Tp>
+inline constexpr bool is_replaceable_v = __builtin_is_replaceable(_Tp);
+
 _LIBCPP_END_NAMESPACE_STD
 
 #endif // _LIBCPP___TYPE_TRAITS_IS_TRIVIALLY_RELOCATABLE_H

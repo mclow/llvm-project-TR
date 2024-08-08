@@ -2684,11 +2684,13 @@ def note_final_dtor_non_final_class_silence : Note<
 def err_trivially_relocatable_specifier_on_non_relocatable_class : Error<
   "invalid 'trivially_relocatable' specifier on non trivially-relocatable class %0">;
 
+def err_memberwise_replaceable_specifier_on_non_relocatable_class : Error<
+  "invalid 'memberwise_replaceable' specifier on non memberwise replaceable class %0">;
+
 def note_trivially_relocatable: Note<
-  "because it %select{"
-    "has a virtual base class|"
-    "inherits from a non trivially-relocatable class|"
-    "has a non trivially-relocatable member}0 %1">;
+  "because it %select{inherits from a non trivially-relocatable class %1|"
+  "has a virtual base class %1|"
+  "has a deleted move constructor or assignment operator}0">;
 
 // C++11 attributes
 def err_repeat_attribute : Error<"%0 attribute cannot be repeated">;

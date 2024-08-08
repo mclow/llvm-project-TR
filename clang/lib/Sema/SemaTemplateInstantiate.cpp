@@ -3530,7 +3530,8 @@ Sema::InstantiateClass(SourceLocation PointOfInstantiation,
       *this, Pattern->getTriviallyRelocatableSpecifier(), TemplateArgs);
   Instantiation->setTriviallyRelocatableSpecifier(TRS);
 
-  Instantiation->setMemberwiseReplaceableSpecifier(Pattern->getMemberwiseReplaceableSpecifier());
+  Instantiation->setMemberwiseReplaceableSpecifier(
+      Pattern->getMemberwiseReplaceableSpecifier());
 
   // The instantiation is visible here, even if it was first declared in an
   // unimported module.

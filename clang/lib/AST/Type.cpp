@@ -2830,8 +2830,8 @@ bool QualType::isCppTriviallyRelocatableType(const ASTContext &Context) const {
   return false;
 }
 
-bool QualType::isMemberwiseReplaceableType(const ASTContext &Context) const {
-  if(isConstQualified())
+bool QualType::isReplaceableType(const ASTContext &Context) const {
+  if (isConstQualified())
     return false;
   QualType BaseElementType = Context.getBaseElementType(getUnqualifiedType());
   if (BaseElementType->isIncompleteType())
@@ -2839,10 +2839,9 @@ bool QualType::isMemberwiseReplaceableType(const ASTContext &Context) const {
   if (BaseElementType->isScalarType())
     return true;
   if (const auto *RD = BaseElementType->getAsCXXRecordDecl())
-    return RD->isTriviallyRelocatable();
+    return RD->isReplaceable();
   return false;
 }
-
 
 bool QualType::isNonWeakInMRRWithObjCWeak(const ASTContext &Context) const {
   return !Context.getLangOpts().ObjCAutoRefCount &&

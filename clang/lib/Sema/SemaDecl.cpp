@@ -18027,12 +18027,14 @@ bool Sema::ActOnDuplicateDefinition(Decl *Prev, SkipBodyInfo &SkipBody) {
   return true;
 }
 
-TriviallyRelocatableSpecifier Sema::ActOnTriviallyRelocatableSpecifier(SourceLocation Loc) {
-    return {Loc};
+TriviallyRelocatableSpecifier
+Sema::ActOnTriviallyRelocatableSpecifier(SourceLocation Loc) {
+  return {Loc};
 }
 
-MemberwiseReplaceableSpecifier Sema::ActOnMemberwiseReplaceableSpecifier(SourceLocation Loc) {
-    return {Loc};
+MemberwiseReplaceableSpecifier
+Sema::ActOnMemberwiseReplaceableSpecifier(SourceLocation Loc) {
+  return {Loc};
 }
 
 void Sema::ActOnStartCXXMemberDeclarations(

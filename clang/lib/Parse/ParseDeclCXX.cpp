@@ -2713,7 +2713,8 @@ bool Parser::isCXX2CTriviallyRelocatableKeyword() const {
   return isCXX2CTriviallyRelocatableKeyword(Tok);
 }
 
-void Parser::ParseOptionalCXX2CTriviallyRelocatableSpecifier(TriviallyRelocatableSpecifier &TRS) {
+void Parser::ParseOptionalCXX2CTriviallyRelocatableSpecifier(
+    TriviallyRelocatableSpecifier &TRS) {
   assert(isCXX2CTriviallyRelocatableKeyword() &&
          "expected a trivially_relocatable specifier");
   TRS = Actions.ActOnTriviallyRelocatableSpecifier(ConsumeToken());
@@ -2739,7 +2740,8 @@ bool Parser::isCXX2CMemberwiseReplaceableKeyword(Token Tok) const {
 bool Parser::isCXX2CMemberwiseReplaceableKeyword() const {
   return isCXX2CMemberwiseReplaceableKeyword(Tok);
 }
-void Parser::ParseOptionalCXX2CMemberwiseReplaceableSpecifier(MemberwiseReplaceableSpecifier &MRS) {
+void Parser::ParseOptionalCXX2CMemberwiseReplaceableSpecifier(
+    MemberwiseReplaceableSpecifier &MRS) {
   assert(isCXX2CMemberwiseReplaceableKeyword() &&
          "expected a memberwise_replacable specifier");
   MRS = Actions.ActOnMemberwiseReplaceableSpecifier(ConsumeToken());
@@ -2754,7 +2756,8 @@ bool Parser::SkipCXX2CMemberwiseReplaceableSpecifier() {
 /// isClassCompatibleKeyword - Determine whether the next token is a C++11
 /// 'final' or Microsoft 'sealed' or 'abstract' contextual keywords.
 bool Parser::isClassCompatibleKeyword(Token Tok) const {
-  if (isCXX2CTriviallyRelocatableKeyword(Tok) || isCXX2CMemberwiseReplaceableKeyword(Tok))
+  if (isCXX2CTriviallyRelocatableKeyword(Tok) ||
+      isCXX2CMemberwiseReplaceableKeyword(Tok))
     return true;
   VirtSpecifiers::Specifier Specifier = isCXX11VirtSpecifier(Tok);
   return Specifier == VirtSpecifiers::VS_Final ||
@@ -3888,22 +3891,20 @@ void Parser::ParseCXXMemberSpecification(SourceLocation RecordLoc,
             SkipCXX2CTriviallyRelocatableSpecifier();
             Diag(Skipped, diag::err_duplicate_class_memberwise_specifier)
                 << 0 << TriviallyRelocatable.getLocation();
-          }
-          else {
+          } else {
             ParseOptionalCXX2CTriviallyRelocatableSpecifier(
-              TriviallyRelocatable);
+                TriviallyRelocatable);
           }
           continue;
-        }
-        else if (isCXX2CMemberwiseReplaceableKeyword(Tok)) {
+        } else if (isCXX2CMemberwiseReplaceableKeyword(Tok)) {
           if (MemberwiseReplacable.isSet()) {
             auto Skipped = Tok;
             SkipCXX2CMemberwiseReplaceableSpecifier();
             Diag(Skipped, diag::err_duplicate_class_memberwise_specifier)
                 << 1 << MemberwiseReplacable.getLocation();
-          }
-          else {
-          ParseOptionalCXX2CMemberwiseReplaceableSpecifier(MemberwiseReplacable);
+          } else {
+            ParseOptionalCXX2CMemberwiseReplaceableSpecifier(
+                MemberwiseReplacable);
           }
           continue;
         } else {

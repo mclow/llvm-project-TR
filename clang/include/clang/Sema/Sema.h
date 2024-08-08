@@ -3988,9 +3988,11 @@ public:
   /// Invoked when we enter a tag definition that we're skipping.
   SkippedDefinitionContext ActOnTagStartSkippedDefinition(Scope *S, Decl *TD);
 
-  TriviallyRelocatableSpecifier ActOnTriviallyRelocatableSpecifier(SourceLocation Loc);
+  TriviallyRelocatableSpecifier
+  ActOnTriviallyRelocatableSpecifier(SourceLocation Loc);
 
-  MemberwiseReplaceableSpecifier ActOnMemberwiseReplaceableSpecifier(SourceLocation Loc);
+  MemberwiseReplaceableSpecifier
+  ActOnMemberwiseReplaceableSpecifier(SourceLocation Loc);
 
   /// ActOnStartCXXMemberDeclarations - Invoked when we have parsed a
   /// C++ record definition's base-specifiers clause and are starting its

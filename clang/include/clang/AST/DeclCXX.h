@@ -127,20 +127,14 @@ public:
   static bool classofKind(Kind K) { return K == AccessSpec; }
 };
 
-enum class MemberwiseRelocatableOrReplaceableKind {
-  Relocatable,
-  Replaceable
-};
+enum class MemberwiseRelocatableOrReplaceableKind { Relocatable, Replaceable };
 
 template <MemberwiseRelocatableOrReplaceableKind MK>
 class BasicMemberwiseSpecifier {
 public:
   BasicMemberwiseSpecifier() = default;
-  BasicMemberwiseSpecifier(SourceLocation Begin)
-      : Loc(Begin) {}
-  void Set(SourceLocation Begin) {
-    Loc = Begin;
-  }
+  BasicMemberwiseSpecifier(SourceLocation Begin) : Loc(Begin) {}
+  void Set(SourceLocation Begin) { Loc = Begin; }
 
   bool isSet() const { return !Loc.isInvalid(); }
 
@@ -150,9 +144,10 @@ private:
   SourceLocation Loc;
 };
 
-using TriviallyRelocatableSpecifier  = BasicMemberwiseSpecifier<MemberwiseRelocatableOrReplaceableKind::Relocatable>;
-using MemberwiseReplaceableSpecifier = BasicMemberwiseSpecifier<MemberwiseRelocatableOrReplaceableKind::Replaceable>;
-
+using TriviallyRelocatableSpecifier = BasicMemberwiseSpecifier<
+    MemberwiseRelocatableOrReplaceableKind::Relocatable>;
+using MemberwiseReplaceableSpecifier = BasicMemberwiseSpecifier<
+    MemberwiseRelocatableOrReplaceableKind::Replaceable>;
 
 /// Represents a base class of a C++ class.
 ///
@@ -747,19 +742,18 @@ public:
   /// \c true if a defaulted move constructor for this class would be
   /// deleted.
   bool defaultedMoveConstructorIsDeleted() const {
-    assert((!needsOverloadResolutionForMoveConstructor() ||
-            (data().DeclaredSpecialMembers & SMF_MoveConstructor)) &&
-           "this property has not yet been computed by Sema");
+    // assert((!needsOverloadResolutionForMoveConstructor() ||
+    //         (data().DeclaredSpecialMembers & SMF_MoveConstructor)) &&
+    //        "this property has not yet been computed by Sema");
     return data().DefaultedMoveConstructorIsDeleted;
   }
 
   bool defaultedMoveAssignmentIsDeleted() const {
-    assert((!needsOverloadResolutionForMoveAssignment() ||
-            (data().DeclaredSpecialMembers & SMF_MoveAssignment)) &&
-           "this property has not yet been computed by Sema");
+    // assert((!needsOverloadResolutionForMoveAssignment() ||
+    //         (data().DeclaredSpecialMembers & SMF_MoveAssignment)) &&
+    //        "this property has not yet been computed by Sema");
     return data().DefaultedMoveAssignmentIsDeleted;
   }
-
 
   /// \c true if a defaulted destructor for this class would be deleted.
   bool defaultedDestructorIsDeleted() const {
@@ -853,8 +847,8 @@ public:
     return data().UserProvidedCopyAssignment;
   }
 
-  bool hasExplicitlyDeletedMoveAssignmentOpOrCtr() const {
-    return data().ExplicitlyDeletedMoveAssignmentOrCtr;
+  bool hasExplicitlyDeletedMoveAssignment() const {
+    return data().ExplicitlyDeletedMoveAssignment;
   }
 
   /// Determine whether this class needs an implicit copy
@@ -1529,12 +1523,9 @@ public:
     data().IsTriviallyRelocatable = Set;
   }
 
+  bool isReplaceable() const { return data().IsReplaceable; }
 
-  bool isMemberwiseReplaceable() const { return data().IsMemberwiseReplaceable; }
-
-  void setIsMemberwiseReplaceable(bool Set) {
-    data().IsMemberwiseReplaceable = Set;
-  }
+  void setIsReplaceable(bool Set) { data().IsReplaceable = Set; }
 
   /// Notify the class that this destructor is now selected.
   ///

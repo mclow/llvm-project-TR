@@ -5215,6 +5215,14 @@ recurse:
       Diags.Report(DiagID);
       return;
     }
+    case UETT_ValueRepresentationBegin: {
+      DiagnosticsEngine &Diags = Context.getDiags();
+      unsigned DiagID = Diags.getCustomDiagID(
+          DiagnosticsEngine::Error,
+          "cannot yet mangle __value_representation_begin expression");
+      Diags.Report(DiagID);
+      return;
+    }
     case UETT_PtrAuthTypeDiscriminator: {
       DiagnosticsEngine &Diags = Context.getDiags();
       unsigned DiagID = Diags.getCustomDiagID(

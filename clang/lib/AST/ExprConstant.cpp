@@ -14289,6 +14289,17 @@ bool IntExprEvaluator::VisitUnaryExprOrTypeTraitExpr(
     }
     return Success(Sizeof, E);
   }
+  case UETT_ValueRepresentationBegin: {
+    QualType SrcTy = E->getTypeOfArgument();
+    if (const ReferenceType *Ref = SrcTy->getAs<ReferenceType>())
+      SrcTy = Ref->getPointeeType();
+    if (SrcTy->isDependentType() || SrcTy->isIncompleteType()) {
+      Info.FFDiag(E->getBeginLoc());
+      return false;
+    }
+    return Success(Info.Ctx.getStartOfValueRepresentation(SrcTy), E);
+  }
+
   case UETT_OpenMPRequiredSimdAlign:
     assert(E->isArgumentType());
     return Success(

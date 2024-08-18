@@ -3355,8 +3355,9 @@ Value *
 ScalarExprEmitter::VisitUnaryExprOrTypeTraitExpr(
                               const UnaryExprOrTypeTraitExpr *E) {
   QualType TypeToSize = E->getTypeOfArgument();
-  if (auto Kind = E->getKind();
-      Kind == UETT_SizeOf || Kind == UETT_DataSizeOf) {
+  if (auto Kind = E->getKind(); Kind == UETT_SizeOf ||
+                                Kind == UETT_DataSizeOf ||
+                                Kind == clang::UETT_ValueRepresentationBegin) {
     if (const VariableArrayType *VAT =
             CGF.getContext().getAsVariableArrayType(TypeToSize)) {
       if (E->isArgumentType()) {

@@ -1526,6 +1526,7 @@ ExprResult Parser::ParseCastExpression(CastParseKind ParseKind,
   // unary-expression: '__datasizeof' unary-expression
   // unary-expression: '__datasizeof' '(' type-name ')'
   case tok::kw___datasizeof:
+  case tok::kw___value_representation_begin:
   case tok::kw_vec_step:   // unary-expression: OpenCL 'vec_step' expression
   // unary-expression: '__builtin_omp_required_simd_align' '(' type-name ')'
   case tok::kw___builtin_omp_required_simd_align:
@@ -2437,8 +2438,9 @@ Parser::ParseExprAfterUnaryExprOrTypeTrait(const Token &OpTok,
                                            SourceRange &CastRange) {
 
   assert(OpTok.isOneOf(tok::kw_typeof, tok::kw_typeof_unqual, tok::kw_sizeof,
-                       tok::kw___datasizeof, tok::kw___alignof, tok::kw_alignof,
-                       tok::kw__Alignof, tok::kw_vec_step,
+                       tok::kw___datasizeof,
+                       tok::kw___value_representation_begin, tok::kw___alignof,
+                       tok::kw_alignof, tok::kw__Alignof, tok::kw_vec_step,
                        tok::kw___builtin_omp_required_simd_align,
                        tok::kw___builtin_vectorelements) &&
          "Not a typeof/sizeof/alignof/vec_step expression!");
@@ -2449,7 +2451,8 @@ Parser::ParseExprAfterUnaryExprOrTypeTrait(const Token &OpTok,
   if (Tok.isNot(tok::l_paren)) {
     // If construct allows a form without parenthesis, user may forget to put
     // pathenthesis around type name.
-    if (OpTok.isOneOf(tok::kw_sizeof, tok::kw___datasizeof, tok::kw___alignof,
+    if (OpTok.isOneOf(tok::kw_sizeof, tok::kw___datasizeof,
+                      tok::kw___value_representation_begin, tok::kw___alignof,
                       tok::kw_alignof, tok::kw__Alignof)) {
       if (isTypeIdUnambiguously()) {
         DeclSpec DS(AttrFactory);
@@ -2486,7 +2489,8 @@ Parser::ParseExprAfterUnaryExprOrTypeTrait(const Token &OpTok,
     // followed by a non-parenthesized expression, BalancedDelimiterTracker
     // is not going to help when the nesting is too deep. In this corner case
     // we continue to parse with sufficient stack space to avoid crashing.
-    if (OpTok.isOneOf(tok::kw_sizeof, tok::kw___datasizeof, tok::kw___alignof,
+    if (OpTok.isOneOf(tok::kw_sizeof, tok::kw___datasizeof,
+                      tok::kw___value_representation_begin, tok::kw___alignof,
                       tok::kw_alignof, tok::kw__Alignof) &&
         Tok.isOneOf(tok::kw_sizeof, tok::kw___datasizeof, tok::kw___alignof,
                     tok::kw_alignof, tok::kw__Alignof))
@@ -2573,7 +2577,8 @@ ExprResult Parser::ParseSYCLUniqueStableNameExpression() {
 /// [C++11] 'alignof' '(' type-id ')'
 /// \endverbatim
 ExprResult Parser::ParseUnaryExprOrTypeTraitExpression() {
-  assert(Tok.isOneOf(tok::kw_sizeof, tok::kw___datasizeof, tok::kw___alignof,
+  assert(Tok.isOneOf(tok::kw_sizeof, tok::kw___datasizeof,
+                     tok::kw___value_representation_begin, tok::kw___alignof,
                      tok::kw_alignof, tok::kw__Alignof, tok::kw_vec_step,
                      tok::kw___builtin_omp_required_simd_align,
                      tok::kw___builtin_vectorelements) &&
@@ -2663,6 +2668,9 @@ ExprResult Parser::ParseUnaryExprOrTypeTraitExpression() {
     break;
   case tok::kw___datasizeof:
     ExprKind = UETT_DataSizeOf;
+    break;
+  case tok::kw___value_representation_begin:
+    ExprKind = UETT_ValueRepresentationBegin;
     break;
   case tok::kw___builtin_vectorelements:
     ExprKind = UETT_VectorElements;

@@ -9,7 +9,6 @@
 #ifndef _LIBCPP___UTILITY_SWAP_H
 #define _LIBCPP___UTILITY_SWAP_H
 
-#include <__assert>
 #include <__config>
 #include <__type_traits/enable_if.h>
 #include <__type_traits/is_assignable.h>
@@ -21,7 +20,6 @@
 #include <__type_traits/is_swappable.h>
 #include <__type_traits/is_trivially_relocatable.h>
 #include <__utility/declval.h>
-#include <__utility/is_pointer_in_range.h>
 #include <__utility/move.h>
 #include <cstddef>
 #include <typeinfo>
@@ -47,18 +45,21 @@ using __swap_result_t = void;
 template <class _Tp>
   requires std::is_trivially_relocatable_v<_Tp> && std::is_replaceable_v<_Tp>
 void swap_value_representations(_Tp& __a, _Tp& __b) {
-  char* __aptr = reinterpret_cast<char*>(&__a);
-  char* __bptr = reinterpret_cast<char*>(&__b);
+  // For now we assume the value representation correspond to the memory
+  // between the start of the first subobject and the end of the last subobject
+  // which holds for both itanium and MSVC.
+  constexpr size_t __value_size = __datasizeof(_Tp) - __value_representation_begin(_Tp);
+  if constexpr (__value_size == 0)
+    return;
 
-  // If T is a polymorphic type, then T is the most derived type for the objects a and b.
-  _LIBCPP_ASSERT_ARGUMENT_WITHIN_DOMAIN(typeid(__a) == typeid(_Tp), "the dynamic type of a is not that of T");
-  _LIBCPP_ASSERT_ARGUMENT_WITHIN_DOMAIN(typeid(__b) == typeid(_Tp), "the dynamic type of b is not that of T");
+  char* __aptr = reinterpret_cast<char*>(&__a) + __value_representation_begin(_Tp);
+  char* __bptr = reinterpret_cast<char*>(&__b) + __value_representation_begin(_Tp);
 
+  constexpr size_t __size  = __value_size < 512 ? __datasizeof(_Tp) : 512;
+  constexpr size_t __chunk = __value_size / __size;
+  constexpr size_t __rem   = __value_size % __size;
 
   // TODO: research better memswap algorithms
-  constexpr size_t __size  = __datasizeof(_Tp) < 256 ? __datasizeof(_Tp) : 256;
-  constexpr size_t __chunk = __datasizeof(_Tp) / __size;
-  constexpr size_t __rem   = __datasizeof(_Tp) % __size;
   char __buffer[__size];
   if constexpr (__chunk) {
     for (std::size_t n = 0; n < __chunk; n++, __aptr += __size, __bptr += __size) {
@@ -80,17 +81,10 @@ inline _LIBCPP_HIDE_FROM_ABI __swap_result_t<_Tp> _LIBCPP_CONSTEXPR_SINCE_CXX20 
     _NOEXCEPT_(is_nothrow_move_constructible<_Tp>::value&& is_nothrow_move_assignable<_Tp>::value) {
 #if _LIBCPP_STD_VER >= 26
   if !consteval {
-    if constexpr (!(std::is_trivially_move_assignable_v<_Tp> && std::is_trivially_move_constructible_v<_Tp>)
-                 && std::is_trivially_relocatable_v<_Tp> && std::is_replaceable_v<_Tp>) {
-      bool __is_eligible = true;
-      if constexpr (__is_polymorphic(_Tp)) {
-        if (typeid(__x) != typeid(_Tp) || typeid(__y) != typeid(_Tp))
-          __is_eligible = false;
-      }
-      if (__is_eligible) [[likely]] {
-        swap_value_representations(__x, __y);
-        return;
-      }
+    if constexpr (!(std::is_trivially_move_assignable_v<_Tp> && std::is_trivially_move_constructible_v<_Tp>) &&
+                  std::is_trivially_relocatable_v<_Tp> && std::is_replaceable_v<_Tp>) {
+      swap_value_representations(__x, __y);
+      return;
     }
   }
 #endif

@@ -2491,6 +2491,8 @@ public:
   TypeInfoChars getTypeInfoInChars(const Type *T) const;
   TypeInfoChars getTypeInfoInChars(QualType T) const;
 
+  CharUnits getStartOfValueRepresentation(QualType T) const;
+
   /// Determine if the alignment the type has was required using an
   /// alignment attribute.
   bool isAlignmentRequired(const Type *T) const;

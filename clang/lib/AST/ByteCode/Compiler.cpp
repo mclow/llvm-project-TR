@@ -1780,7 +1780,8 @@ bool Compiler<Emitter>::VisitUnaryExprOrTypeTraitExpr(
   UnaryExprOrTypeTrait Kind = E->getKind();
   const ASTContext &ASTCtx = Ctx.getASTContext();
 
-  if (Kind == UETT_SizeOf || Kind == UETT_DataSizeOf) {
+  if (Kind == UETT_SizeOf || Kind == UETT_DataSizeOf ||
+      Kind == UETT_ValueRepresentationBegin) {
     QualType ArgType = E->getTypeOfArgument();
 
     // C++ [expr.sizeof]p2: "When applied to a reference or a reference type,
@@ -1797,8 +1798,10 @@ bool Compiler<Emitter>::VisitUnaryExprOrTypeTraitExpr(
 
       if (Kind == UETT_SizeOf)
         Size = ASTCtx.getTypeSizeInChars(ArgType);
-      else
+      else if (Kind == UETT_DataSizeOf)
         Size = ASTCtx.getTypeInfoDataSizeInChars(ArgType).Width;
+      else
+        Size = ASTCtx.getStartOfValueRepresentation(ArgType);
     }
 
     if (DiscardResult)

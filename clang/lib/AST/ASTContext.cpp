@@ -1796,6 +1796,19 @@ TypeInfoChars ASTContext::getTypeInfoDataSizeInChars(QualType T) const {
   return Info;
 }
 
+CharUnits ASTContext::getStartOfValueRepresentation(QualType T) const {
+  if (getLangOpts().CPlusPlus) {
+    if (const auto *RT = T->getAs<RecordType>();
+        RT && !RT->getDecl()->isInvalidDecl()) {
+      const ASTRecordLayout &layout = getASTRecordLayout(RT->getDecl());
+      if (layout.getFieldCount())
+        return toCharUnitsFromBits(layout.getFieldOffset(0));
+      return layout.getDataSize();
+    }
+  }
+  return CharUnits::Zero();
+}
+
 /// getConstantArrayInfoInChars - Performing the computation in CharUnits
 /// instead of in bits prevents overflowing the uint64_t for some large arrays.
 TypeInfoChars

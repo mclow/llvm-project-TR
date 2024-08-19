@@ -7334,11 +7334,11 @@ void Sema::CheckMemberwiseReplaceable(CXXRecordDecl *D) {
     const auto *BaseDecl = B.getType()->getAsCXXRecordDecl();
     if (!BaseDecl)
       continue;
-    if (!BaseDecl->isDependentType() && !BaseDecl->isReplaceable()) {
+    if ((!BaseDecl->isDependentType() && !BaseDecl->isReplaceable()) || B.isVirtual()) {
       if (MarkedMemberwiseReplaceable) {
         if (DiagnosticInvalidExplicitSpecifier())
           Diag(B.getBeginLoc(), diag::note_trivially_relocatable)
-              << 0 << BaseDecl << B.getSourceRange();
+              << (B.isVirtual()? 1 : 0) << BaseDecl << B.getSourceRange();
       }
       IsReplaceable = false;
     }

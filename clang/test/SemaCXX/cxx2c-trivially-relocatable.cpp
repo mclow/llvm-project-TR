@@ -206,7 +206,7 @@ static_assert(!__builtin_is_replaceable(S<const int[2]>));
 static_assert(__builtin_is_replaceable(WithBase<S<int>>));
 static_assert(!__builtin_is_replaceable(WithBase<S<const int>>));
 static_assert(!__builtin_is_replaceable(WithBase<UserProvidedMove>));
-static_assert(__builtin_is_replaceable(WithVBase<S<int>>));
+static_assert(!__builtin_is_replaceable(WithVBase<S<int>>));
 static_assert(!__builtin_is_replaceable(WithVBase<S<const int>>));
 static_assert(!__builtin_is_replaceable(WithVBase<UserProvidedMove>));
 static_assert(__builtin_is_replaceable(WithVirtual));
@@ -227,5 +227,12 @@ struct U2 memberwise_replaceable {
 };
 static_assert(!__builtin_is_replaceable(U2));
 
+
+template <typename T>
+struct WithVBaseExplicit memberwise_replaceable : virtual T{};
+// expected-error@-1 {{invalid 'memberwise_replaceable' specifier on non memberwise replaceable class 'WithVBaseExplicit<replaceable::S<int>>'}} \
+// expected-note@-1 {{because it has a virtual base class 'S<int>'}}
+static_assert(__builtin_is_replaceable(WithVBaseExplicit<S<int>>)); // expected-error {{failed}} \
+                                                                    // expected-note {{requested here}}
 
 }

@@ -7205,9 +7205,7 @@ static bool hasDeletedMoveConstructor(CXXRecordDecl *D) {
       return CD->isDeleted();
     }
   }
-  return false;
-  // return !D->needsImplicitMoveConstructor() ||
-  // D->defaultedMoveConstructorIsDeleted();
+  return !D->needsImplicitMoveConstructor();
 }
 
 static bool hasDeletedMoveAssignment(CXXRecordDecl *D) {
@@ -7221,9 +7219,7 @@ static bool hasDeletedMoveAssignment(CXXRecordDecl *D) {
       continue;
     return MD->isDeleted();
   }
-  return false;
-  // return !D->needsImplicitMoveAssignment() ||
-  // D->defaultedMoveAssignmentIsDeleted();
+  return !D->needsImplicitMoveAssignment();
 }
 
 void Sema::CheckCXX2CTriviallyRelocatable(CXXRecordDecl *D) {

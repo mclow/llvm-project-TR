@@ -235,4 +235,14 @@ struct WithVBaseExplicit memberwise_replaceable : virtual T{};
 static_assert(__builtin_is_replaceable(WithVBaseExplicit<S<int>>)); // expected-error {{failed}} \
                                                                     // expected-note {{requested here}}
 
+struct S42 memberwise_trivially_relocatable memberwise_replaceable {
+    S42(S42&&);
+    S42& operator=(S42&&) = default;
+};
+struct S43 memberwise_trivially_relocatable memberwise_replaceable {
+    S43(S43&&) = default;
+    S43& operator=(S43&&);
+};
+
+
 }

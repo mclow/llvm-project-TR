@@ -7200,12 +7200,11 @@ void Sema::CheckCompletedCXXClass(Scope *S, CXXRecordDecl *Record) {
 static bool hasDeletedMoveConstructor(CXXRecordDecl *D) {
   assert(D->hasDefinition() && !D->isInvalidDecl());
   for (const CXXConstructorDecl *CD : D->ctors()) {
-    if (CD->isMoveConstructor() && CD->isDefaulted() &&
-        !CD->isIneligibleOrNotSelected()) {
+    if (CD->isMoveConstructor() && !CD->isIneligibleOrNotSelected()) {
       return CD->isDeleted();
     }
   }
-  return !D->needsImplicitMoveConstructor();
+  return !D->needsImplicitMoveConstructor() || D->defaultedMoveConstructorIsDeleted();
 }
 
 static bool hasDeletedMoveAssignment(CXXRecordDecl *D) {
@@ -7219,7 +7218,7 @@ static bool hasDeletedMoveAssignment(CXXRecordDecl *D) {
       continue;
     return MD->isDeleted();
   }
-  return !D->needsImplicitMoveAssignment();
+  return !D->needsImplicitMoveAssignment() || D->defaultedMoveAssignmentIsDeleted();
 }
 
 void Sema::CheckCXX2CTriviallyRelocatable(CXXRecordDecl *D) {

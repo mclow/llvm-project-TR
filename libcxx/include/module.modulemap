@@ -1504,6 +1504,7 @@ module std_private_memory_allocator_destructor            [system] { header "__m
 module std_private_memory_allocator_traits                [system] { header "__memory/allocator_traits.h" }
 module std_private_memory_assume_aligned                  [system] { header "__memory/assume_aligned.h" }
 module std_private_memory_auto_ptr                        [system] { header "__memory/auto_ptr.h" }
+module std_private_memory_relocate                        [system] { header "__memory/relocate.h" }
 module std_private_memory_builtin_new_allocator           [system] {
   header "__memory/builtin_new_allocator.h"
   export *
@@ -2102,6 +2103,9 @@ module std_private_utility_small_buffer            [system] { header "__utility/
 module std_private_utility_swap                    [system] {
   header "__utility/swap.h"
   export std_private_type_traits_is_swappable
+  export std_private_type_traits_is_assignable
+  export std_private_type_traits_is_constructible
+  export std_private_concepts_movable
 }
 module std_private_utility_to_underlying           [system] { header "__utility/to_underlying.h" }
 module std_private_utility_unreachable             [system] { header "__utility/unreachable.h" }

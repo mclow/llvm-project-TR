@@ -17,14 +17,11 @@
 #include "clang/APINotes/APINotesManager.h"
 #include "clang/AST/ASTFwd.h"
 #include "clang/AST/Attr.h"
-<<<<<<< HEAD
 #include "clang/AST/AttrIterator.h"
 #include "clang/AST/CharUnits.h"
 #include "clang/AST/DeclBase.h"
-=======
 #include "clang/AST/Availability.h"
 #include "clang/AST/ComparisonCategories.h"
->>>>>>> dec76e3b17fb (rough draft of memberwise_trivially_relocatable/memberwise_repleceable)
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/DeclarationName.h"

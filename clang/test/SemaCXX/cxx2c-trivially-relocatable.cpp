@@ -245,4 +245,22 @@ struct S43 memberwise_trivially_relocatable memberwise_replaceable {
 };
 
 
+struct Copyable1Explicit memberwise_replaceable {
+   Copyable1Explicit(Copyable1Explicit const &) = default;
+};
+
+struct Copyable1 {
+   Copyable1(Copyable1 const &) = default;
+};
+
+
+struct CopyAssign1Explicit memberwise_replaceable {
+   CopyAssign1Explicit & operator=(const CopyAssign1Explicit&) = default;
+};
+
+struct CopyAssign1 {
+   CopyAssign1 & operator=(CopyAssign1 const &) = default;
+};
+
+
 }

@@ -7197,28 +7197,76 @@ void Sema::CheckCompletedCXXClass(Scope *S, CXXRecordDecl *Record) {
   }
 }
 
-static bool hasDeletedMoveConstructor(CXXRecordDecl *D) {
-  assert(D->hasDefinition() && !D->isInvalidDecl());
-  for (const CXXConstructorDecl *CD : D->ctors()) {
-    if (CD->isMoveConstructor() && !CD->isIneligibleOrNotSelected()) {
-      return CD->isDeleted();
+static bool hasSuitableConstructorForReplaceability(CXXRecordDecl *D, bool Implicit) {
+    assert(D->hasDefinition() && !D->isInvalidDecl());
+
+    bool HasDeletedMoveConstructor   = false;
+    bool HasDeletedCopyConstructor   = false;
+    bool HasMoveConstructor          = D->needsImplicitMoveConstructor();
+    bool HasDefaultedMoveConstructor = D->needsImplicitMoveConstructor();
+    bool HasDefaultedCopyConstructor = D->needsImplicitMoveConstructor();
+
+    for (const Decl *D : D->decls()) {
+      auto *MD = dyn_cast<CXXConstructorDecl>(D);
+      if (!MD || MD->isIneligibleOrNotSelected())
+        continue;
+
+      if(MD->isMoveConstructor()) {
+          HasMoveConstructor = true;
+          if(MD->isDefaulted())
+              HasDefaultedMoveConstructor = true;
+          if(MD->isDeleted())
+              HasDeletedMoveConstructor = true;
+      }
+      if(MD->isCopyConstructor()) {
+          if(MD->isDefaulted())
+              HasDefaultedCopyConstructor = true;
+          if(MD->isDeleted())
+              HasDeletedCopyConstructor = true;
+      }
     }
-  }
-  return !D->needsImplicitMoveConstructor() || D->defaultedMoveConstructorIsDeleted();
+
+    if(HasMoveConstructor)
+        return !HasDeletedMoveConstructor && (Implicit ? HasDefaultedMoveConstructor : true);
+    return !HasDeletedCopyConstructor && (Implicit ? HasDefaultedCopyConstructor : true);;
 }
 
-static bool hasDeletedMoveAssignment(CXXRecordDecl *D) {
-  assert(D->hasDefinition() && !D->isInvalidDecl());
-  if (D->hasExplicitlyDeletedMoveAssignment())
-    return true;
-  for (const Decl *D : D->decls()) {
-    auto *MD = dyn_cast<CXXMethodDecl>(D);
-    if (!MD || !MD->isMoveAssignmentOperator() ||
-        MD->isIneligibleOrNotSelected())
-      continue;
-    return MD->isDeleted();
-  }
-  return !D->needsImplicitMoveAssignment() || D->defaultedMoveAssignmentIsDeleted();
+
+static bool hasSuitableMoveAssignmentOperatorForReplaceability(CXXRecordDecl *D, bool Implicit) {
+    assert(D->hasDefinition() && !D->isInvalidDecl());
+
+    if (D->hasExplicitlyDeletedMoveAssignment())
+      return false;
+
+    bool HasDeletedMoveAssignment   = false;
+    bool HasDeletedCopyAssignment   = false;
+    bool HasMoveAssignment          = D->needsImplicitMoveAssignment();
+    bool HasDefaultedMoveAssignment = D->needsImplicitMoveAssignment();
+    bool HasDefaultedCopyAssignment = D->needsImplicitCopyAssignment();
+
+    for (const Decl *D : D->decls()) {
+      auto *MD = dyn_cast<CXXMethodDecl>(D);
+      if (!MD || MD->isIneligibleOrNotSelected())
+        continue;
+
+      if(MD->isMoveAssignmentOperator()) {
+          HasMoveAssignment = true;
+          if(MD->isDefaulted())
+              HasDefaultedMoveAssignment = true;
+          if(MD->isDeleted())
+              HasDeletedMoveAssignment = true;
+      }
+      if(MD->isCopyAssignmentOperator()) {
+          if(MD->isDefaulted())
+              HasDefaultedCopyAssignment = true;
+          if(MD->isDeleted())
+              HasDeletedCopyAssignment = true;
+      }
+    }
+
+    if(HasMoveAssignment)
+        return !HasDeletedMoveAssignment && (Implicit ? HasDefaultedMoveAssignment : true);
+    return !HasDeletedCopyAssignment && (Implicit ? HasDefaultedCopyAssignment : true);
 }
 
 void Sema::CheckCXX2CTriviallyRelocatable(CXXRecordDecl *D) {
@@ -7343,51 +7391,14 @@ void Sema::CheckMemberwiseReplaceable(CXXRecordDecl *D) {
     }
   }
 
-  if (hasDeletedMoveAssignment(D) || hasDeletedMoveConstructor(D)) {
-    IsReplaceable = false;
-    if (MarkedMemberwiseReplaceable) {
-      if (DiagnosticInvalidExplicitSpecifier())
-        Diag(D->getBeginLoc(), diag::note_trivially_relocatable)
-            << 2 << D->getSourceRange();
-    }
-  }
-
-  if (IsReplaceable && !D->isDependentType() && !MarkedMemberwiseReplaceable) {
-    bool HasSuitableMoveCtr = D->needsImplicitMoveConstructor() &&
-                              !D->defaultedMoveConstructorIsDeleted();
-    bool HasSuitableCopyCtr = false;
-    if (IsReplaceable && !HasSuitableMoveCtr) {
-      for (const CXXConstructorDecl *CD : D->ctors()) {
-        if (CD->isMoveConstructor() && CD->isDefaulted() &&
-            !CD->isIneligibleOrNotSelected()) {
-          HasSuitableMoveCtr = true;
-          break;
-        }
-      }
-    }
-    if (!HasSuitableMoveCtr && !D->hasMoveConstructor()) {
-      HasSuitableCopyCtr = D->needsImplicitCopyConstructor() &&
-                           !D->defaultedCopyConstructorIsDeleted();
-      if (!HasSuitableCopyCtr) {
-        for (const CXXConstructorDecl *CD : D->ctors()) {
-          if (CD->isCopyConstructor() && CD->isDefaulted() &&
-              !CD->isIneligibleOrNotSelected()) {
-            HasSuitableCopyCtr = true;
-            break;
-          }
-        }
-      }
-    }
-    if (!HasSuitableMoveCtr && !HasSuitableCopyCtr) {
+  if(!hasSuitableConstructorForReplaceability(D, !MarkedMemberwiseReplaceable)
+          || !hasSuitableMoveAssignmentOperatorForReplaceability(D, !MarkedMemberwiseReplaceable)) {
       IsReplaceable = false;
-    }
-
-    if (IsReplaceable &&
-        ((!D->needsImplicitMoveAssignment() &&
-          D->hasUserProvidedMoveAssignment()) ||
-         (!D->hasMoveAssignment() && D->hasUserProvidedCopyAssignment()))) {
-      IsReplaceable = false;
-    }
+      if (MarkedMemberwiseReplaceable) {
+        if (DiagnosticInvalidExplicitSpecifier())
+          Diag(D->getBeginLoc(), diag::note_trivially_relocatable)
+              << 2 << D->getSourceRange();
+      }
   }
 
   if (IsReplaceable) {

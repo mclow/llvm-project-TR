@@ -122,6 +122,11 @@ static_assert(!__is_cpp_trivially_relocatable(DeletedMove));
 static_assert(!__is_cpp_trivially_relocatable(DeletedCopy));
 static_assert(!__is_cpp_trivially_relocatable(DeletedMoveAssign));
 
+union U {
+    G g;
+};
+static_assert(!__is_trivially_copyable(U));
+static_assert(__is_cpp_trivially_relocatable(U));
 
 
 namespace replaceable {

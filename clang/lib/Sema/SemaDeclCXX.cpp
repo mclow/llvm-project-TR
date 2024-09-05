@@ -7344,10 +7344,18 @@ void Sema::CheckCXX2CTriviallyRelocatable(CXXRecordDecl *D) {
         }
       }
     }
-    if (!HasSuitableMoveCtr && !HasSuitableCopyCtr)
+
+    if(D->isUnion() && !D->hasUserDeclaredCopyConstructor()
+            && !D->hasUserDeclaredCopyAssignment()
+            && !D->hasUserDeclaredMoveOperation()
+            && !D->hasUserDeclaredDestructor()) {
+        // Do nothing
+    }
+
+    else if (!HasSuitableMoveCtr && !HasSuitableCopyCtr)
       IsTriviallyRelocatable = false;
 
-    if (IsTriviallyRelocatable &&
+    else if (IsTriviallyRelocatable &&
         ((!D->needsImplicitMoveAssignment() &&
           (D->hasUserProvidedMoveAssignment() ||
            D->hasExplicitlyDeletedMoveAssignment())) ||
@@ -7355,6 +7363,7 @@ void Sema::CheckCXX2CTriviallyRelocatable(CXXRecordDecl *D) {
       IsTriviallyRelocatable = false;
     }
   }
+
   D->setIsTriviallyRelocatable(IsTriviallyRelocatable);
 }
 

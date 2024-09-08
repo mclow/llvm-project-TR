@@ -1879,6 +1879,9 @@ static ExprResult BuiltinIsWithinLifetime(Sema &S, CallExpr *TheCall) {
         << 0;
     return ExprError();
   }
+  return TheCall;
+}
+
 static ExprResult BuiltinTriviallyRelocate(Sema &S, CallExpr *TheCall) {
   if (S.checkArgCount(TheCall, 3))
     return ExprError();

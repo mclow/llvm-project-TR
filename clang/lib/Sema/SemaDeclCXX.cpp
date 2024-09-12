@@ -7280,7 +7280,7 @@ void Sema::CheckCXX2CTriviallyRelocatable(CXXRecordDecl *D) {
     if (NotedError)
       return;
     Diag(Loc,
-         diag::err_trivially_relocatable_specifier_on_non_relocatable_class)
+         diag::warn_trivially_relocatable_specifier_on_non_relocatable_class)
         << D;
     NotedError = true;
   };
@@ -7378,7 +7378,7 @@ void Sema::CheckMemberwiseReplaceable(CXXRecordDecl *D) {
     if (NotedError)
       return false;
     Diag(Loc,
-         diag::err_memberwise_replaceable_specifier_on_non_relocatable_class)
+         diag::warn_memberwise_replaceable_specifier_on_non_relocatable_class)
         << D;
     bool Old = NotedError;
     NotedError = true;

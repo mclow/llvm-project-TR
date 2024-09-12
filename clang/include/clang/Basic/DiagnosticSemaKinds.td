@@ -2681,11 +2681,15 @@ def warn_final_dtor_non_final_class : Warning<
 def note_final_dtor_non_final_class_silence : Note<
   "mark %0 as '%select{final|sealed}1' to silence this warning">;
 
-def err_trivially_relocatable_specifier_on_non_relocatable_class : Error<
-  "invalid 'trivially_relocatable' specifier on non trivially-relocatable class %0">;
+def warn_trivially_relocatable_specifier_on_non_relocatable_class : Warning<
+  "invalid 'trivially_relocatable' specifier on non trivially-relocatable class %0">,
+   InGroup<DiagGroup<"never-relocatatable">>,
+   DefaultError;
 
-def err_memberwise_replaceable_specifier_on_non_relocatable_class : Error<
-  "invalid 'memberwise_replaceable' specifier on non memberwise replaceable class %0">;
+def warn_memberwise_replaceable_specifier_on_non_relocatable_class : Warning<
+  "invalid 'memberwise_replaceable' specifier on non memberwise replaceable class %0">,
+  InGroup<DiagGroup<"never-replaceable">>,
+  DefaultError;
 
 def note_trivially_relocatable: Note<
   "because it %select{inherits from a non trivially-relocatable class %1|"

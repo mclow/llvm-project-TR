@@ -46,32 +46,32 @@ T* relocate(T* __begin, T* __end, T* __new_location)
 		//	At run time, when there is no overlap, we can, using other Standard
 		//	Library algorithms, do all moves at once followed by all destructions.
 		if (less{}(__end,__new_location) || less{}(__new_location + (__end-__begin), __begin)) {
-			T* result = uninitialized_move(__begin, __end, __new_location);
+			T* __result = uninitialized_move(__begin, __end, __new_location);
 			std::destroy(__begin,__end);
-			return result;
+			return __result;
 			}
 		}
 
 		if (less{}(__new_location,__begin) || less{}(__end,__new_location)) {
 	//	Any move to a lower address in memory or any nonoverlapping move can be
 	//	done by iterating forward through the range.
-			T* next = __begin;
-			T* dest = __new_location;
-			while (next != __end) {
-				::new(dest) T(std::move(*next));
-				next->~T();
-				++next; ++dest;
+			T* __next = __begin;
+			T* __dest = __new_location;
+			while (__next != __end) {
+				::new(__dest) T(std::move(*__next));
+				__next->~T();
+				++__next; ++__dest;
 			}
 		}
 		else {
 		//	When moving to a higher address that overlaps, we must go backward through
 		//	the range.
-			T* next = __end;
-			T* dest = __new_location + (__end-__begin);
-			while (next != __begin) {
-				--next;  --dest;
-				::new(dest) T(std::move(*next));
-				next->~T();
+			T* __next = __end;
+			T* __dest = __new_location + (__end - __begin);
+			while (__next != __begin) {
+				--__next;  --__dest;
+				::new(__dest) T(std::move(*__next));
+				__next->~T();
 			}
 		}
 	return __new_location + (__end - __begin);

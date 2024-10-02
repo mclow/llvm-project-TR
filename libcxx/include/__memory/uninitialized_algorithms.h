@@ -539,6 +539,71 @@ private:
   _Iter& __last_;
 };
 
+#if _LIBCPP_STD_VER >= 20
+
+template <class _Tp>
+constexpr
+_Tp* relocate(_Tp* __begin, _Tp* __end, _Tp* __new_location)
+{
+    static_assert(is_trivially_relocatable_v<_Tp> || is_nothrow_move_constructible_v<_Tp>);
+//	When relocating to the same location, do nothing.
+	if (__begin == __new_location || __begin == __end)
+      return __new_location + (__end - __begin);
+
+//	Then, if we are not evaluating at compile time and the type supports
+//	trivial relocation, delegate to `trivially_relocate`.
+	if ! consteval {
+		if constexpr (is_trivially_relocatable_v<_Tp>)
+			return std::trivially_relocate(__begin, __end, __new_location);
+	}
+
+	if constexpr (is_move_constructible_v<_Tp>) {
+	//	For nontrivial relocatable types or any time during constant
+	//	evaluation, we must detect overlapping ranges and act accordingly,
+	//	which can be done only if the type is movable.
+		if ! consteval {
+		//	At run time, when there is no overlap, we can, using other Standard
+		//	Library algorithms, do all moves at once followed by all destructions.
+		if (less{}(__end,__new_location) || less{}(__new_location + (__end-__begin), __begin)) {
+			_Tp* __result = uninitialized_move(__begin, __end, __new_location);
+			std::destroy(__begin,__end);
+			return __result;
+			}
+		}
+
+		if (less{}(__new_location,__begin) || less{}(__end,__new_location)) {
+	//	Any move to a lower address in memory or any nonoverlapping move can be
+	//	done by iterating forward through the range.
+			_Tp* __next = __begin;
+			_Tp* __dest = __new_location;
+			while (__next != __end) {
+				::new(__dest) _Tp(std::move(*__next));
+				__next->~_Tp();
+				++__next; ++__dest;
+			}
+		}
+		else {
+		//	When moving to a higher address that overlaps, we must go backward through
+		//	the range.
+			_Tp* __next = __end;
+			_Tp* __dest = __new_location + (__end - __begin);
+			while (__next != __begin) {
+				--__next;  --__dest;
+				::new(__dest) _Tp(std::move(*__next));
+				__next->~_Tp();
+			}
+		}
+	return __new_location + (__end - __begin);
+	}
+
+//	The only way to reach this point is during constant evaluation where type `T`
+//	is trivially relocatable but not move constructible. Such cases are not supported
+//	so we mark this branch as unreachable.
+	unreachable();
+}
+
+#endif
+
 // Copy-construct [__first1, __last1) in [__first2, __first2 + N), where N is distance(__first1, __last1).
 //
 // The caller has to ensure that __first2 can hold at least N uninitialized elements. If an exception is thrown the
@@ -627,8 +692,8 @@ __uninitialized_allocator_relocate(_Alloc& __alloc, _Tp* __first, _Tp* __last, _
 
 #if _LIBCPP_STD_VER >= 20
   if (!__libcpp_is_constant_evaluated()) {
-    if constexpr (is_trivially_relocatable_v<_Tp>) {
-      (void) trivially_relocate(__first, __last, const_cast<__remove_const_t<_Tp>*>(__result));
+    if constexpr (is_trivially_relocatable_v<_Tp> || is_nothrow_move_constructible_v<_Tp>) {
+      (void) relocate(__first, __last, const_cast<__remove_const_t<_Tp>*>(__result));
       return ;
      }
   }

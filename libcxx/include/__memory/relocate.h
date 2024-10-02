@@ -22,67 +22,6 @@ _LIBCPP_EXPORTED_FROM_ABI _Tp* trivially_relocate(_Tp* __begin, _Tp* __end, _Tp*
 	return __new_location + (__end - __begin);
 }
 
-template <class T>
-constexpr
-T* relocate(T* __begin, T* __end, T* __new_location)
-{
-    static_assert(is_trivially_relocatable_v<T> || is_nothrow_move_constructible_v<T>);
-//	When relocating to the same location, do nothing.
-	if (__begin == __new_location || __begin == __end)
-      return __new_location + (__end - __begin);
-
-//	Then, if we are not evaluating at compile time and the type supports
-//	trivial relocation, delegate to `trivially_relocate`.
-	if ! consteval {
-		if constexpr (is_trivially_relocatable_v<T>)
-			return std::trivially_relocate(__begin, __end, __new_location);
-	}
-
-	if constexpr (is_move_constructible_v<T>) {
-	//	For nontrivial relocatable types or any time during constant
-	//	evaluation, we must detect overlapping ranges and act accordingly,
-	//	which can be done only if the type is movable.
-		if ! consteval {
-		//	At run time, when there is no overlap, we can, using other Standard
-		//	Library algorithms, do all moves at once followed by all destructions.
-		if (less{}(__end,__new_location) || less{}(__new_location + (__end-__begin), __begin)) {
-			T* __result = uninitialized_move(__begin, __end, __new_location);
-			std::destroy(__begin,__end);
-			return __result;
-			}
-		}
-
-		if (less{}(__new_location,__begin) || less{}(__end,__new_location)) {
-	//	Any move to a lower address in memory or any nonoverlapping move can be
-	//	done by iterating forward through the range.
-			T* __next = __begin;
-			T* __dest = __new_location;
-			while (__next != __end) {
-				::new(__dest) T(std::move(*__next));
-				__next->~T();
-				++__next; ++__dest;
-			}
-		}
-		else {
-		//	When moving to a higher address that overlaps, we must go backward through
-		//	the range.
-			T* __next = __end;
-			T* __dest = __new_location + (__end - __begin);
-			while (__next != __begin) {
-				--__next;  --__dest;
-				::new(__dest) T(std::move(*__next));
-				__next->~T();
-			}
-		}
-	return __new_location + (__end - __begin);
-	}
-
-//	The only way to reach this point is during constant evaluation where type `T`
-//	is trivially relocatable but not move constructible. Such cases are not supported
-//	so we mark this branch as unreachable.
-	unreachable();
-}
-
 #endif
 
 _LIBCPP_END_NAMESPACE_STD

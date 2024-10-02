@@ -1577,7 +1577,7 @@ vector<_Tp, _Allocator>::erase(const_iterator __position) {
   difference_type __ps = __position - cbegin();
   pointer __p          = this->__begin_ + __ps;
 #if _LIBCPP_STD_VER >= 20
-  if constexpr (is_trivially_relocatable_v<T> || is_nothrow_move_constructible_v<T>) {
+  if constexpr (is_trivially_relocatable_v<_Tp> || is_nothrow_move_constructible_v<_Tp>) {
     size_type __old_size = size();
     // destroy the element at __p
     __alloc_traits::destroy(__alloc(), std::__to_address(__p));
@@ -1600,7 +1600,7 @@ vector<_Tp, _Allocator>::erase(const_iterator __first, const_iterator __last) {
   pointer __p = this->__begin_ + (__first - begin());
   if (__first != __last) {
 #if _LIBCPP_STD_VER >= 20
-  if constexpr (is_trivially_relocatable_v<T> || is_nothrow_move_constructible_v<T>) {
+  if constexpr (is_trivially_relocatable_v<_Tp> || is_nothrow_move_constructible_v<_Tp>) {
     size_type __old_size = size();
     size_type __count = __last - __first;
     pointer __p0 = __p + __count;
@@ -1644,7 +1644,7 @@ vector<_Tp, _Allocator>::insert(const_iterator __position, const_reference __x) 
       __construct_one_at_end(__x);
     } else {
 #if _LIBCPP_STD_VER >= 20
-      if constexpr (is_trivially_relocatable_v<T> || is_nothrow_move_constructible_v<T>) {
+      if constexpr (is_trivially_relocatable_v<_Tp> || is_nothrow_move_constructible_v<_Tp>) {
         // Make space by trivially relocating everything
         _ConstructTransaction __tx(*this, 1);
         (void) relocate(std::__to_address(__p), std::__to_address(this->__end_), __p + 1);
@@ -1684,7 +1684,7 @@ vector<_Tp, _Allocator>::insert(const_iterator __position, value_type&& __x) {
       __construct_one_at_end(std::move(__x));
     } else {
 #if _LIBCPP_STD_VER >= 20
-    if constexpr (is_trivially_relocatable_v<T> || is_nothrow_move_constructible_v<T>) {
+    if constexpr (is_trivially_relocatable_v<_Tp> || is_nothrow_move_constructible_v<_Tp>) {
       // Make space by trivially relocating everything
       _ConstructTransaction __tx(*this, 1);
       (void) relocate(std::__to_address(__p), std::__to_address(this->__end_), __p + 1);
@@ -1719,7 +1719,7 @@ vector<_Tp, _Allocator>::emplace(const_iterator __position, _Args&&... __args) {
       __construct_one_at_end(std::forward<_Args>(__args)...);
     } else {
 #if _LIBCPP_STD_VER >= 20
-    if constexpr (is_trivially_relocatable_v<T> || is_nothrow_move_constructible_v<T>) {
+    if constexpr (is_trivially_relocatable_v<_Tp> || is_nothrow_move_constructible_v<_Tp>) {
       // Make space by trivially relocating everything
       _ConstructTransaction __tx(*this, 1);
       (void) relocate(std::__to_address(__p), std::__to_address(this->__end_), __p + 1);

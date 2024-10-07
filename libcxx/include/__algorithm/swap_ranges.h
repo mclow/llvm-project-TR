@@ -46,7 +46,8 @@ __swap_ranges(_ForwardIterator1 __first1, _Sentinel1 __last1, _ForwardIterator2 
     using _V2Type = iterator_traits<_ForwardIterator2>::value_type;
     if constexpr(__libcpp_is_contiguous_iterator<_ForwardIterator1>::value &&
                  __libcpp_is_contiguous_iterator<_ForwardIterator2>::value &&
-                 is_same_v<_V1Type, _V2Type> && is_replaceable_v<_V1Type>) {
+                 is_same_v<_V1Type, _V2Type> &&
+                 is_trivially_relocatable_v<_V1Type> && is_replaceable_v<_V1Type>) {
       size_t __distance = distance(__first1, __last1);
       if (__distance == 1) {
         using std::swap;

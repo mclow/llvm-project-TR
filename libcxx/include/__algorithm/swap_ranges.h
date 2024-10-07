@@ -49,10 +49,8 @@ __swap_ranges(_ForwardIterator1 __first1, _Sentinel1 __last1, _ForwardIterator2 
                  is_same_v<_V1Type, _V2Type> &&
                  is_trivially_relocatable_v<_V1Type> && is_replaceable_v<_V1Type>) {
       size_t __distance = distance(__first1, __last1);
-      if (__distance == 1) {
-        using std::swap;
-        swap(*__first1, *__first2);
-        }
+      if (__distance == 1)
+        iter_swap(__first1, __first2);
       else if (__distance > 0) {
         size_t __numBytes = __distance * sizeof(_V1Type);
         byte *__aptr = reinterpret_cast<byte *> (addressof(*__first1));

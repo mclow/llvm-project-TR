@@ -60,7 +60,7 @@ __swap_ranges(_ForwardIterator1 __first1, _Sentinel1 __last1, _ForwardIterator2 
         size_t __chunk = __numBytes / __size;
         size_t __rem   = __numBytes % __size;
 
-        char __buffer[__size];
+        char __buffer[512];
         if (__chunk > 0) {
           for (std::size_t __n = 0; __n < __chunk; __n++, __aptr += __size, __bptr += __size) {
             __builtin_memcpy(__buffer, __aptr,   __size);

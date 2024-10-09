@@ -1629,10 +1629,11 @@ vector<_Tp, _Allocator>::__move_range(pointer __from_s, pointer __from_e, pointe
 #if _LIBCPP_STD_VER >= 26
   if ! consteval {
     if constexpr (is_trivially_relocatable_v<_Tp> || is_nothrow_move_constructible_v<_Tp>) {
-       _ConstructTransaction __tx(*this, __to - __from_s);
-       (void) relocate(std::__to_address(__from_s), std::__to_address(__from_e), std::__to_address(__to));
-       __tx.__pos_ += __to - __from_s;
-       return;
+      const size_t __numSpaces = __to - __from_s;
+      _ConstructTransaction __tx(*this, __numSpaces);
+      (void) relocate(std::__to_address(__from_s), std::__to_address(__from_e), std::__to_address(__to));
+      __tx.__pos_ += __numSpaces;
+      return;
      }
    }
 #endif

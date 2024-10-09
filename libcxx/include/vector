@@ -1582,7 +1582,7 @@ vector<_Tp, _Allocator>::erase(const_iterator __position) {
     // destroy the element at __p
     __alloc_traits::destroy(__alloc(), std::__to_address(__p));
     // move the rest down
-    (void) relocate(__p + 1, this->__end_, __p);
+    (void) relocate(std::__to_address(__p + 1), std::__to_address(this->__end_), std::__to_address(__p));
     // update the end
     this->__end_--;
     __annotate_shrink(__old_size);
@@ -1647,7 +1647,7 @@ vector<_Tp, _Allocator>::insert(const_iterator __position, const_reference __x) 
       if constexpr (is_trivially_relocatable_v<_Tp> || is_nothrow_move_constructible_v<_Tp>) {
         // Make space by trivially relocating everything
         _ConstructTransaction __tx(*this, 1);
-        (void) relocate(std::__to_address(__p), std::__to_address(this->__end_), __p + 1);
+        (void) relocate(std::__to_address(__p), std::__to_address(this->__end_), std::__to_address(__p + 1));
         // construct the new element (not assign!)
         const_pointer __xr = pointer_traits<const_pointer>::pointer_to(__x);
         if (std::__is_pointer_in_range(std::__to_address(__p), std::__to_address(__end_), std::addressof(__x)))
@@ -1687,7 +1687,7 @@ vector<_Tp, _Allocator>::insert(const_iterator __position, value_type&& __x) {
     if constexpr (is_trivially_relocatable_v<_Tp> || is_nothrow_move_constructible_v<_Tp>) {
       // Make space by trivially relocating everything
       _ConstructTransaction __tx(*this, 1);
-      (void) relocate(std::__to_address(__p), std::__to_address(this->__end_), __p + 1);
+      (void) relocate(std::__to_address(__p), std::__to_address(this->__end_), std::__to_address(__p + 1));
       // construct the new element (not assign!)
       __alloc_traits::construct(this->__alloc(), std::__to_address(__p), std::forward<value_type>(__x));
       ++__tx.__pos_;
@@ -1722,7 +1722,7 @@ vector<_Tp, _Allocator>::emplace(const_iterator __position, _Args&&... __args) {
     if constexpr (is_trivially_relocatable_v<_Tp> || is_nothrow_move_constructible_v<_Tp>) {
       // Make space by trivially relocating everything
       _ConstructTransaction __tx(*this, 1);
-      (void) relocate(std::__to_address(__p), std::__to_address(this->__end_), __p + 1);
+      (void) relocate(std::__to_address(__p), std::__to_address(this->__end_), std::__to_address(__p + 1));
       // construct the new element
       __alloc_traits::construct(this->__alloc(), std::__to_address(__p), std::forward<_Args>(__args)...);
       ++__tx.__pos_;

@@ -751,7 +751,7 @@ struct __init_with_sentinel_tag {};
 
 template <class _CharT, class _Traits, class _Allocator>
 class basic_string memberwise_trivially_relocatable
-      memberwise_replaceable {
+                   memberwise_replaceable {
 
 private:
   using __default_allocator_type = allocator<_CharT>;
@@ -3449,7 +3449,7 @@ inline _LIBCPP_CONSTEXPR_SINCE_CXX20 void basic_string<_CharT, _Traits, _Allocat
 {
 
 #if _LIBCPP_STD_VER >= 26
-  if constexpr(__alloc_traits::is_always_equal::value) {
+  if constexpr(std::is_same_v<allocator_type, allocator<_CharT>>) {
     std::swap_value_representations(*this, __str);
     return;
   }
